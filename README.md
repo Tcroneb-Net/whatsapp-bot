@@ -1,33 +1,91 @@
-# whatsapp-bot
+# WA Bot Hub
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+A multi-user WhatsApp bot platform with a web dashboard. Users pair their number
+with an 8-digit pairing code, receive a generated password in their WhatsApp DM,
+then log into the dashboard to control their own bot.
 
-## Built with v0
+> **Heads up:** WhatsApp bots built on Baileys are unofficial and against WhatsApp's
+> Terms of Service. Numbers can be banned, especially with auto-reactions and
+> auto-follow enabled. Use at your own risk.
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+## Architecture
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_XTbYlD6eOcqRmGGtNGHGi40FVCBD)
+This repo has **two deployable parts** that share one MongoDB database:
 
-## Getting Started
+| Part | Folder | Runtime | Where it runs |
+| --- | --- | --- | --- |
+| **Dashboard** | `/` (Next.js app) | Serverless | Vercel / v0 |
+| **Bot engine** | `/engine` | Long-running Node process | Railway / Render / Fly |
 
-First, run the development server:
+The dashboard **cannot** run the bot itself — WhatsApp needs a persistent
+websocket per user, which serverless functions can't hold open. The engine is a
+standalone Node service that keeps every paired user connected, stores sessions
+in MongoDB (so it auto-restores on crash/restart), and exposes a small HTTP API
+that the dashboard calls.
 
+```
+Browser ──> Next.js dashboard (Vercel) ──> MongoDB Atlas <── Bot engine (Railway) ──> WhatsApp
+                         └──────────── HTTP (ENGINE_URL + ENGINE_API_KEY) ───────────┘
+```
+
+## Features
+
+- **Pairing code login** — enter your number, get an 8-digit code to link in
+  WhatsApp > Linked Devices. No QR scan needed.
+- **Generated password** — on first pair, the bot DMs you a password. Log in with
+  number + password.
+- **Per-user isolation** — each user controls only their own bot.
+- **Settings dashboard**: custom bot name, auto status view on/off, anti
+  view-once (save to same chat or your private DM), alive check, ping check.
+- **Force-follow channel + auto-react** — every paired bot follows your channel
+  and reacts to new channel posts automatically.
+- **MongoDB session store** — sessions persist; the engine auto-restores all bots
+  on restart. Users can delete their session from the dashboard.
+
+## Environment variables
+
+### Dashboard (set in Vercel / v0 Project Settings → Vars)
+
+| Var | Description |
+| --- | --- |
+| `MONGODB_URI` | MongoDB Atlas connection string |
+| `MONGODB_DB` | Database name (e.g. `whatsapp_bot`) |
+| `SESSION_SECRET` | Long random string for signing login cookies |
+| `ENGINE_URL` | Public URL of your deployed engine |
+| `ENGINE_API_KEY` | Shared secret; must match the engine |
+
+### Engine (`engine/.env`, see `engine/.env.example`)
+
+| Var | Description |
+| --- | --- |
+| `MONGODB_URI` / `MONGODB_DB` | Same database as the dashboard |
+| `API_KEY` | Must equal the dashboard's `ENGINE_API_KEY` |
+| `PORT` | HTTP port (default `8080`) |
+| `CHANNEL_JID` | Your channel's newsletter JID for force-follow/auto-react |
+| `REACT_EMOJI` | Emoji used for channel auto-reactions (default ❤️) |
+
+## Running locally
+
+**Dashboard**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Engine**
+```bash
+cd engine
+cp .env.example .env   # fill in values
+pnpm install
+pnpm dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploying the engine
 
-## Learn More
+The engine ships with a `Dockerfile`. On Railway/Render/Fly, point the service at
+the `engine/` folder, set the env vars above, and expose the `PORT`. Then put that
+service's public URL into the dashboard's `ENGINE_URL`.
 
-To learn more, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+Built with [v0](https://v0.app). [Continue on v0 →](https://v0.app/chat/projects/prj_XTbYlD6eOcqRmGGtNGHGi40FVCBD)
