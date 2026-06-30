@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getBots } from "@/lib/mongodb"
 import { getSession } from "@/lib/auth"
+import { refreshBotSettings } from "@/lib/engine"
 import { DEFAULT_SETTINGS, EDITABLE_SETTING_KEYS, type BotSettings } from "@/lib/types"
 
 export async function GET() {
@@ -72,6 +73,10 @@ export async function PATCH(req: Request) {
   if (!result) {
     return NextResponse.json({ error: "Bot not found" }, { status: 404 })
   }
+
+  // Best-effort: tell the live bot to reload settings. Never block the
+  // dashboard response if the engine is unreachable.
+  refreshBotSettings(session.number).catch(() => {})
 
   return NextResponse.json({
     settings: { ...DEFAULT_SETTINGS, ...result.settings },

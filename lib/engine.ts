@@ -49,6 +49,13 @@ export async function deleteBotSession(number: string): Promise<void> {
   })
 }
 
+export async function refreshBotSettings(number: string): Promise<void> {
+  await engineFetch("/refresh", {
+    method: "POST",
+    body: JSON.stringify({ number }),
+  })
+}
+
 export async function getBotStatus(number: string): Promise<{ status: string; connected: boolean }> {
   return engineFetch(`/status?number=${encodeURIComponent(number)}`) as Promise<{
     status: string
