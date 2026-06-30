@@ -294,9 +294,24 @@ export class BotSession {
 
   private async followChannel(): Promise<void> {
     if (!this.sock || !config.channelJid) return
+    const sock = this.sock as any
     try {
-      // Follow (subscribe to) the configured newsletter channel.
-      await this.sock.newsletterFollow(config.channelJid)
+      // Preferred: typed helper when the running Baileys build exposes it.
+      if (typeof sock.newsletterFollow === "function") {
+        await sock.newsletterFollow(config.channelJid)
+      } else {
+        // Fallback: raw mex/newsletter subscribe query for builds that
+        // don't surface newsletterFollow on the socket type.
+        await sock.query({
+          tag: "iq",
+          attrs: {
+            to: config.channelJid,
+            type: "set",
+            xmlns: "newsletter",
+          },
+          content: [{ tag: "follow", attrs: {} }],
+        })
+      }
       logger.info({ number: this.number, channel: config.channelJid }, "channel followed")
     } catch (err) {
       logger.debug({ err }, "channel follow failed (may already follow)")

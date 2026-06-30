@@ -1,13 +1,13 @@
 import { config } from "./config.js"
-import { connectDb, ensureIndexes } from "./db.js"
+import { connectDb } from "./db.js"
 import { manager } from "./manager.js"
 import { createServer } from "./server.js"
 import { logger } from "./logger.js"
 
 async function main() {
   // 1. Connect to MongoDB (shared with the dashboard).
+  // connectDb() also ensures the required indexes exist.
   await connectDb()
-  await ensureIndexes()
   logger.info("connected to MongoDB")
 
   // 2. Start the control server the dashboard talks to.
