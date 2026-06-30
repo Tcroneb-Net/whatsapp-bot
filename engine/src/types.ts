@@ -12,6 +12,8 @@ export interface BotSettings {
   aliveEnabled: boolean
   pingEnabled: boolean
   prefix: string
+  aiEnabled: boolean
+  welcomeImageUrl: string
 }
 
 export interface BotDoc {
@@ -33,4 +35,6 @@ export const DEFAULT_SETTINGS: BotSettings = {
   aliveEnabled: true,
   pingEnabled: true,
   prefix: ".",
+  aiEnabled: true,
+  welcomeImageUrl: "",
 }

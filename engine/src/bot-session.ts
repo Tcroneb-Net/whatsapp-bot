@@ -30,6 +30,8 @@ import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
+import { hostify, safeHostify } from "./hostify.js"
+import { welcomeMessage, menuMessage, pairInfoMessage } from "./messages.js"
 
 const RECONNECT_DELAY_MS = 3000
 
@@ -41,9 +43,17 @@ export class BotSession {
   private startTime = Date.now()
   private stopped = false
   private pendingPairingResolve: ((code: string) => void) | null = null
+  // Plaintext password held in memory only, to DM once on first connect.
+  private pendingWelcomePassword: string | null = null
+  private welcomeSent = false
 
   constructor(number: string) {
     this.number = number
+  }
+
+  setPendingWelcomePassword(password: string): void {
+    this.pendingWelcomePassword = password
+    this.welcomeSent = false
   }
 
   async loadSettings(): Promise<void> {
@@ -171,6 +181,8 @@ export class BotSession {
         logger.info({ number: this.number }, "connection open")
         // Follow the configured channel after connecting.
         void this.followChannel()
+        // Send the rich welcome (with password) once, after pairing.
+        void this.sendWelcome()
       }
 
       if (connection === "close") {
@@ -214,6 +226,63 @@ export class BotSession {
       { number: this.number },
       { $set: { status, lastSeen: new Date(), updatedAt: new Date() } },
     )
+  }
+
+  // The bot's own JID (for DMing the owner).
+  private ownJid(): string | null {
+    const id = this.sock?.user?.id
+    if (!id) return null
+    // Normalize "12345:6@s.whatsapp.net" -> "12345@s.whatsapp.net".
+    return id.includes(":") ? id.split(":")[0] + "@s.whatsapp.net" : id
+  }
+
+  // Fetch an image URL into a buffer; returns null on any failure so callers
+  // can gracefully fall back to a text-only message.
+  private async fetchImage(url: string): Promise<Buffer | null> {
+    if (!url) return null
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      const arr = await res.arrayBuffer()
+      return Buffer.from(arr)
+    } catch {
+      return null
+    }
+  }
+
+  // Send a branded message with an optional banner image + caption.
+  private async sendBranded(jid: string, caption: string, imageUrl?: string): Promise<void> {
+    if (!this.sock) return
+    const url = imageUrl || this.settings.welcomeImageUrl || config.defaultImageUrl
+    const image = await this.fetchImage(url)
+    if (image) {
+      await this.sock.sendMessage(jid, { image, caption })
+    } else {
+      await this.sock.sendMessage(jid, { text: caption })
+    }
+  }
+
+  // DM the owner a rich welcome (with image + password) once after pairing.
+  private async sendWelcome(): Promise<void> {
+    if (this.welcomeSent) return
+    const jid = this.ownJid()
+    if (!jid) return
+    this.welcomeSent = true
+    try {
+      const caption = welcomeMessage({
+        botName: this.settings.botName,
+        number: this.number,
+        password: this.pendingWelcomePassword ?? undefined,
+        prefix: this.settings.prefix,
+        settings: this.settings,
+      })
+      await this.sendBranded(jid, caption)
+    } catch (err) {
+      logger.error({ number: this.number, err }, "welcome send failed")
+    } finally {
+      // Wipe the plaintext password from memory after the attempt.
+      this.pendingWelcomePassword = null
+    }
   }
 
   private async handleMessage(msg: WAMessage): Promise<void> {
@@ -336,33 +405,241 @@ export class BotSession {
     if (!this.sock) return
     const text = this.extractText(msg).trim()
     const prefix = this.settings.prefix
-    if (!text.startsWith(prefix)) return
+    if (!prefix || !text.startsWith(prefix)) return
 
-    const command = text.slice(prefix.length).trim().split(/\s+/)[0]?.toLowerCase()
+    const withoutPrefix = text.slice(prefix.length).trim()
+    const command = withoutPrefix.split(/\s+/)[0]?.toLowerCase() ?? ""
+    const args = withoutPrefix.slice(command.length).trim()
+    const reply = (body: string) => this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
 
-    if (command === "alive" && this.settings.aliveEnabled) {
-      const uptime = this.formatUptime(Date.now() - this.startTime)
-      await this.sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            `*${this.settings.botName}* is alive and running.\n\n` +
-            `Uptime: ${uptime}\n` +
-            `Status: connected`,
-        },
-        { quoted: msg },
-      )
-    } else if (command === "ping" && this.settings.pingEnabled) {
-      const start = Date.now()
-      const sent = await this.sock.sendMessage(remoteJid, { text: "Pinging..." }, { quoted: msg })
-      const latency = Date.now() - start
-      if (sent?.key) {
-        await this.sock.sendMessage(remoteJid, {
-          text: `Pong! ${latency}ms`,
-          edit: sent.key,
-        })
+    try {
+      switch (command) {
+        case "alive":
+          if (this.settings.aliveEnabled) await this.cmdAlive(remoteJid, msg)
+          break
+        case "ping":
+          if (this.settings.pingEnabled) await this.cmdPing(remoteJid, msg)
+          break
+        case "menu":
+        case "help":
+          await this.sendBranded(remoteJid, menuMessage(this.settings.botName, prefix))
+          break
+        case "pair":
+          await this.sendBranded(remoteJid, pairInfoMessage())
+          break
+        case "pairwhats": {
+          const jid = this.ownJid()
+          if (jid) await this.sendBranded(jid, pairInfoMessage())
+          await reply("I've sent the pairing details to your DM.")
+          break
+        }
+        case "ai":
+        case "gpt":
+          await this.cmdAi(args, reply)
+          break
+        case "translate":
+        case "tr":
+          await this.cmdTranslate(args, reply)
+          break
+        case "lyrics":
+          await this.cmdLyrics(args, reply)
+          break
+        case "yts":
+        case "ytsearch":
+          await this.cmdYouTubeSearch(args, reply)
+          break
+        case "pinterest":
+        case "pin":
+          await this.cmdPinterest(args, remoteJid, reply)
+          break
+        case "play":
+          await this.cmdPlay(args, remoteJid, reply)
+          break
+        case "song":
+        case "ytmp3":
+          await this.cmdYtMp3(args, remoteJid, reply)
+          break
+        case "video":
+        case "ytmp4":
+          await this.cmdYouTubeVideo(args, remoteJid, reply)
+          break
+        case "dub":
+          await this.cmdDub(args, remoteJid, reply)
+          break
+        default:
+          // Unknown command — stay silent to avoid noise.
+          break
+      }
+    } catch (err) {
+      logger.error({ number: this.number, command, err }, "command failed")
+      await reply("Something went wrong while running that command. Please try again.").catch(() => {})
+    }
+  }
+
+  private async cmdAlive(remoteJid: string, msg: WAMessage): Promise<void> {
+    const uptime = this.formatUptime(Date.now() - this.startTime)
+    await this.sock!.sendMessage(
+      remoteJid,
+      {
+        text:
+          `*${this.settings.botName}* is alive and running.\n\n` +
+          `Uptime: ${uptime}\n` +
+          `Status: connected`,
+      },
+      { quoted: msg },
+    )
+  }
+
+  private async cmdPing(remoteJid: string, msg: WAMessage): Promise<void> {
+    const start = Date.now()
+    const sent = await this.sock!.sendMessage(remoteJid, { text: "Pinging..." }, { quoted: msg })
+    const latency = Date.now() - start
+    if (sent?.key) {
+      await this.sock!.sendMessage(remoteJid, { text: `Pong! ${latency}ms`, edit: sent.key })
+    }
+  }
+
+  private aiGuard(reply: (b: string) => Promise<unknown>): boolean {
+    if (!this.settings.aiEnabled) {
+      void reply("AI & tools are turned off. Enable them from your dashboard to use this command.")
+      return false
+    }
+    return true
+  }
+
+  private async cmdAi(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: ai <your question>")
+    const answer = await safeHostify(() => hostify.ai(args))
+    await reply(answer ? answer : "The AI is unavailable right now. Please try again shortly.")
+  }
+
+  private async cmdTranslate(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    // Format: "<lang> | <text>" or "<lang> <text>".
+    let lang = "english"
+    let text = args
+    if (args.includes("|")) {
+      const [l, ...rest] = args.split("|")
+      lang = l.trim() || lang
+      text = rest.join("|").trim()
+    } else {
+      const parts = args.split(/\s+/)
+      if (parts.length > 1) {
+        lang = parts[0]
+        text = parts.slice(1).join(" ")
       }
     }
+    if (!text) return void reply("Usage: translate <language> | <text>")
+    const out = await safeHostify(() => hostify.translate(text, lang))
+    await reply(out ? `*Translation (${lang})*\n\n${out}` : "Translation failed. Please try again.")
+  }
+
+  private async cmdLyrics(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: lyrics <song name>")
+    const res = await safeHostify(() => hostify.lyrics(args))
+    if (!res || !res.lyrics) return void reply("No lyrics found for that search.")
+    const head = res.title ? `*${res.title}*\n\n` : ""
+    await reply((head + res.lyrics).slice(0, 4000))
+  }
+
+  private async cmdYouTubeSearch(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: yts <search query>")
+    const list = await safeHostify(() => hostify.youtubeSearch(args))
+    if (!list || list.length === 0) return void reply("No results found.")
+    const top = list.slice(0, 6)
+    const body = top
+      .map((v: any, i: number) => {
+        const title = v?.title || v?.name || "Untitled"
+        const url = v?.url || v?.link || ""
+        const dur = v?.duration || v?.timestamp || ""
+        return `${i + 1}. *${title}*${dur ? ` (${dur})` : ""}\n${url}`
+      })
+      .join("\n\n")
+    await reply(`*YouTube results for "${args}"*\n\n${body}`)
+  }
+
+  private async cmdPinterest(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: pinterest <search query>")
+    const urls = await safeHostify(() => hostify.pinterest(args))
+    if (!urls || urls.length === 0) return void reply("No images found.")
+    await reply(`Sending top images for "${args}"...`)
+    for (const url of urls.slice(0, 5)) {
+      const img = await this.fetchImage(url)
+      if (img) await this.sock!.sendMessage(remoteJid, { image: img }).catch(() => {})
+    }
+  }
+
+  private async cmdPlay(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: play <song name>")
+    await reply(`Searching SoundCloud for "${args}"...`)
+    const res = await safeHostify(() => hostify.soundcloud(args))
+    if (!res?.url) return void reply("Could not find that track.")
+    await this.sock!.sendMessage(remoteJid, {
+      audio: { url: res.url },
+      mimetype: "audio/mpeg",
+      fileName: `${res.title || args}.mp3`,
+    })
+  }
+
+  private async cmdYtMp3(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: song <youtube url>")
+    await reply("Downloading audio, please wait...")
+    const res = await safeHostify(() => hostify.ytmp3(args))
+    if (!res?.url) return void reply("Download failed. Check the URL and try again.")
+    await this.sock!.sendMessage(remoteJid, {
+      audio: { url: res.url },
+      mimetype: "audio/mpeg",
+      fileName: `${res.title || "audio"}.mp3`,
+    })
+  }
+
+  private async cmdYouTubeVideo(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    if (!args) return void reply("Usage: video <youtube url>")
+    await reply("Downloading video, please wait...")
+    const res = await safeHostify(() => hostify.youtube(args))
+    if (!res?.url) return void reply("Download failed. Check the URL and try again.")
+    await this.sock!.sendMessage(remoteJid, {
+      video: { url: res.url },
+      caption: res.title || "",
+    })
+  }
+
+  private async cmdDub(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.aiGuard(reply)) return
+    // Format: "<url> | <prompt>" — defaults voice to en-US.
+    const [url, prompt = ""] = args.split("|").map((s) => s.trim())
+    if (!url) return void reply("Usage: dub <video url> | <optional prompt>")
+    await reply("Dubbing your video, this can take a moment...")
+    const res = await safeHostify(() => hostify.dubbing(url, "en-US", prompt))
+    if (!res?.url) return void reply("Dubbing failed. Please try again later.")
+    await this.sock!.sendMessage(remoteJid, { video: { url: res.url }, caption: "Dubbed video" })
   }
 
   private async followChannel(): Promise<void> {

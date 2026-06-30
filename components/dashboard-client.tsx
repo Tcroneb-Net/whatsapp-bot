@@ -15,6 +15,9 @@ import {
   Loader2,
   Save,
   Circle,
+  Sparkles,
+  Heart,
+  ImageIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -184,6 +187,22 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                     <code className="font-mono">{settings.prefix}alive</code>
                   </p>
                 </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="welcomeImageUrl" className="flex items-center gap-2">
+                    <ImageIcon className="size-4 text-primary" />
+                    Welcome / menu image URL
+                  </Label>
+                  <Input
+                    id="welcomeImageUrl"
+                    inputMode="url"
+                    placeholder="https://example.com/banner.jpg"
+                    value={settings.welcomeImageUrl}
+                    onChange={(e) => update("welcomeImageUrl", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shown on the welcome message and the menu. Leave blank to use the default banner.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -206,9 +225,9 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                 />
                 <Separator />
                 <ToggleRow
-                  icon={Eye}
-                  label="Auto status react"
-                  desc="React to status updates with an emoji automatically."
+                  icon={Heart}
+                  label="Auto status like"
+                  desc="Automatically like (react to) contacts' status updates."
                   checked={settings.autoStatusReact}
                   onChange={(v) => update("autoStatusReact", v)}
                 />
@@ -287,6 +306,28 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   desc={`Responds to ${settings.prefix}ping with response latency.`}
                   checked={settings.pingEnabled}
                   onChange={(v) => update("pingEnabled", v)}
+                />
+              </CardContent>
+            </Card>
+
+            {/* AI & tools */}
+            <Card className="border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Sparkles className="size-5 text-primary" />
+                  AI &amp; tools
+                </CardTitle>
+                <CardDescription>
+                  Power user commands: AI chat, translation, search, music and downloads.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                <ToggleRow
+                  icon={Sparkles}
+                  label="Enable AI & tools"
+                  desc={`Allows ${settings.prefix}ai, ${settings.prefix}translate, ${settings.prefix}play, ${settings.prefix}song and more.`}
+                  checked={settings.aiEnabled}
+                  onChange={(v) => update("aiEnabled", v)}
                 />
               </CardContent>
             </Card>

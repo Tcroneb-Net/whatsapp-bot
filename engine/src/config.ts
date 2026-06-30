@@ -19,4 +19,15 @@ export const config = {
   channelJid: process.env.CHANNEL_JID || "",
   // Emoji used for channel auto-reactions and status reactions.
   reactEmoji: process.env.REACT_EMOJI || "❤️",
+  // Public site where users pair their number for free.
+  pairUrl: process.env.PAIR_URL || "whatsbot.hostify.co.zw",
+  // Branding shown on welcome / menu messages.
+  teamName: process.env.TEAM_NAME || "World of Technology Team",
+  sponsor: process.env.SPONSOR || "Hostify Zw Company",
+  // Base URL for the Hostify API powering AI / search / download commands.
+  hostifyApi: process.env.HOSTIFY_API || "https://api.hostify.co.zw",
+  // Fallback image used on welcome / menu when the user hasn't set their own.
+  defaultImageUrl:
+    process.env.DEFAULT_IMAGE_URL ||
+    "https://api.hostify.co.zw/file/whatsbot-banner.jpg",
 }

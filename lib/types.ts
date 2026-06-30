@@ -19,6 +19,10 @@ export interface BotSettings {
   pingEnabled: boolean
   // Command prefix (e.g. "." or "!").
   prefix: string
+  // Enable AI / download / search commands (powered by Hostify API).
+  aiEnabled: boolean
+  // Custom image shown on the welcome message and .menu (URL).
+  welcomeImageUrl: string
 }
 
 export interface BotDoc {
@@ -43,6 +47,8 @@ export const DEFAULT_SETTINGS: BotSettings = {
   aliveEnabled: true,
   pingEnabled: true,
   prefix: ".",
+  aiEnabled: true,
+  welcomeImageUrl: "",
 }
 
 // Settings the dashboard is allowed to update.
@@ -55,4 +61,6 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "aliveEnabled",
   "pingEnabled",
   "prefix",
+  "aiEnabled",
+  "welcomeImageUrl",
 ]

@@ -12,12 +12,14 @@ export function PairForm() {
   const [number, setNumber] = useState("")
   const [loading, setLoading] = useState(false)
   const [code, setCode] = useState<string | null>(null)
+  const [password, setPassword] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setCode(null)
+    setPassword(null)
     try {
       const res = await fetch("/api/pair", {
         method: "POST",
@@ -27,6 +29,7 @@ export function PairForm() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to request code")
       setCode(data.code)
+      if (data.password) setPassword(data.password)
       toast.success("Pairing code generated. Enter it in WhatsApp now.")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong")
@@ -84,11 +87,22 @@ export function PairForm() {
             <li>Tap “Link with phone number instead” and enter this code.</li>
           </ol>
           <p className="mt-3 text-xs text-muted-foreground">
-            Once linked, the bot will DM you a password. Then{" "}
+            Once linked, the bot will also DM you this password. Then{" "}
             <Link href="/login" className="font-medium text-primary underline-offset-2 hover:underline">
               log in here
             </Link>{" "}
             to control your bot.
+          </p>
+        </div>
+      )}
+
+      {password && (
+        <div className="rounded-lg border border-border bg-muted/40 p-4">
+          <p className="text-sm font-medium text-foreground">Your dashboard password</p>
+          <p className="mt-2 font-mono text-lg font-bold tracking-wider text-foreground">{password}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Save this now. Use your number and this password to log in. The bot will also DM it to you
+            after linking.
           </p>
         </div>
       )}

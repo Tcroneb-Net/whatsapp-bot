@@ -35,10 +35,15 @@ async function engineFetch(path: string, init?: RequestInit) {
   return data
 }
 
-export async function requestPairingCode(number: string): Promise<{ code: string }> {
+export async function requestPairingCode(
+  number: string,
+  password?: string,
+): Promise<{ code: string }> {
   return engineFetch("/pair", {
     method: "POST",
-    body: JSON.stringify({ number }),
+    // The plaintext password is passed so the engine can DM it once on a
+    // successful connection. It is never persisted by the engine.
+    body: JSON.stringify({ number, password }),
   }) as Promise<{ code: string }>
 }
 
