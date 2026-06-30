@@ -1,11 +1,24 @@
-import makeWASocket, {
-  DisconnectReason,
-  downloadMediaMessage,
-  type WASocket,
-  type WAMessage,
-  type proto,
+import { createRequire } from "module"
+import type {
+  WASocket,
+  WAMessage,
+  proto,
 } from "@whiskeysockets/baileys"
 import { Boom } from "@hapi/boom"
+
+// Baileys ships as CommonJS. Under Node's ESM interop, `import makeWASocket from
+// "@whiskeysockets/baileys"` resolves to `module.exports` (the namespace object,
+// not the factory function), which throws "makeWASocket is not a function" at
+// runtime. Loading via createRequire gives us the real callable exports across
+// Baileys versions.
+const require = createRequire(import.meta.url)
+const baileys = require("@whiskeysockets/baileys")
+const makeWASocket: (...args: any[]) => WASocket =
+  baileys.makeWASocket ?? baileys.default
+const DisconnectReason: typeof import("@whiskeysockets/baileys").DisconnectReason =
+  baileys.DisconnectReason
+const downloadMediaMessage: typeof import("@whiskeysockets/baileys").downloadMediaMessage =
+  baileys.downloadMediaMessage
 import { config } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
