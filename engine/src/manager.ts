@@ -37,12 +37,15 @@ class SessionManager {
   }
 
   // Create (or reuse) a session and return a fresh pairing code for it.
-  async requestPairing(number: string): Promise<string> {
+  async requestPairing(number: string, password?: string): Promise<string> {
     let session = this.sessions.get(number)
     if (!session) {
       session = new BotSession(number)
       this.sessions.set(number, session)
     }
+    // Stash the plaintext password so the welcome DM can include it once the
+    // user connects. Held in memory only — never written to disk.
+    if (password) session.setPendingWelcomePassword(password)
     const code = await session.requestPairingCode()
     await bots().updateOne(
       { number },

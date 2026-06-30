@@ -28,7 +28,8 @@ export function createServer() {
     try {
       const number = normalizeNumber(String(req.body?.number || ""))
       if (!number) return res.status(400).json({ error: "Invalid number" })
-      const code = await manager.requestPairing(number)
+      const password = req.body?.password ? String(req.body.password) : undefined
+      const code = await manager.requestPairing(number, password)
       res.json({ code })
     } catch (err) {
       logger.error({ err }, "pair failed")
