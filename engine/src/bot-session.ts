@@ -13,12 +13,18 @@ import { Boom } from "@hapi/boom"
 // Baileys versions.
 const require = createRequire(import.meta.url)
 const baileys = require("@whiskeysockets/baileys")
-const makeWASocket: (...args: any[]) => WASocket =
+// NOTE: do not name this `makeWASocket`. The imported `WASocket` type is
+// defined as `ReturnType<typeof makeWASocket>`, so a local binding with that
+// name shadows it and collapses the socket type to `never`.
+const createWASocket: (...args: any[]) => WASocket =
   baileys.makeWASocket ?? baileys.default
 const DisconnectReason: typeof import("@whiskeysockets/baileys").DisconnectReason =
   baileys.DisconnectReason
 const downloadMediaMessage: typeof import("@whiskeysockets/baileys").downloadMediaMessage =
   baileys.downloadMediaMessage
+const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchLatestBaileysVersion =
+  baileys.fetchLatestBaileysVersion
+const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
 import { config } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
@@ -56,43 +62,97 @@ export class BotSession {
     return Boolean(this.sock?.user)
   }
 
-  async start(): Promise<void> {
+  async start(): Promise<WASocket> {
     this.stopped = false
     await this.loadSettings()
 
     const { state, saveCreds } = await useMongoAuthState(this.number)
     this.saveCreds = saveCreds
 
-    this.sock = makeWASocket({
+    // Always pin the current WhatsApp Web protocol version. Using a stale
+    // version is the most common cause of "couldn't link because of errors".
+    let version: [number, number, number] | undefined
+    try {
+      const latest = await fetchLatestBaileysVersion()
+      version = latest.version
+      logger.info({ number: this.number, version }, "using WA version")
+    } catch (err) {
+      logger.warn({ err }, "fetchLatestBaileysVersion failed; using bundled default")
+    }
+
+    this.sock = createWASocket({
+      version,
       auth: state,
       logger: baileysLogger,
       printQRInTerminal: false,
+      // A valid browser signature is required for pairing-code linking.
+      browser: Browsers.ubuntu("Chrome"),
       // We never want the bot's own presence to show as "online" constantly.
       markOnlineOnConnect: false,
       syncFullHistory: false,
     })
 
     this.bindEvents()
+    return this.sock
   }
 
   // Request an 8-digit pairing code for this number. Must be called on a fresh
-  // (unregistered) socket. Returns the code to display to the user.
+  // (unregistered) socket whose websocket is already open. Returns the code to
+  // display to the user.
   async requestPairingCode(): Promise<string> {
-    if (!this.sock) {
-      await this.start()
-    }
-    if (!this.sock) throw new Error("Socket failed to initialize")
+    // Always tear down any stale/closed socket and start fresh, otherwise a
+    // previous failed attempt can leave us issuing a code on a dead connection.
+    this.endSocket()
+
+    const sock = await this.start()
 
     // If already registered, no pairing code is needed.
-    if (this.sock.authState.creds.registered) {
+    if (sock.authState.creds.registered) {
       throw new Error("This number is already paired. Delete the session first to re-pair.")
     }
 
-    // Baileys requires a short delay before requesting the code.
-    await new Promise((r) => setTimeout(r, 1500))
-    const code = await this.sock.requestPairingCode(this.number)
+    // requestPairingCode sends a node immediately, so the websocket must be
+    // open first. Wait for the connection to become ready before requesting.
+    await this.waitForConnectionReady(sock)
+
+    const code = await sock.requestPairingCode(this.number)
     // Format as XXXX-XXXX for readability.
     return code?.match(/.{1,4}/g)?.join("-") ?? code
+  }
+
+  // Cleanly end the current socket without flagging the session as stopped.
+  private endSocket(): void {
+    if (!this.sock) return
+    try {
+      this.sock.end(undefined)
+    } catch {
+      // ignore
+    }
+    this.sock = null
+  }
+
+  // Resolve once the socket is ready to negotiate pairing. Baileys emits a
+  // connection.update with `qr` set after the noise handshake completes, which
+  // is the safe point to request a pairing code. Falls back after a timeout.
+  private waitForConnectionReady(sock: WASocket, timeoutMs = 20000): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false
+      const handler = (update: { connection?: string; qr?: string }) => {
+        if (update.qr || update.connection === "open") {
+          finish()
+        }
+      }
+      const finish = () => {
+        if (settled) return
+        settled = true
+        sock.ev.off("connection.update", handler)
+        // Small settle delay so the socket is fully ready to send the node.
+        setTimeout(resolve, 500)
+      }
+      sock.ev.on("connection.update", handler)
+      // Safety fallback so we never hang forever.
+      setTimeout(finish, timeoutMs)
+    })
   }
 
   private bindEvents(): void {
