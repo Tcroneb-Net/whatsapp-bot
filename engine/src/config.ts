@@ -17,8 +17,11 @@ export const config = {
   // The WhatsApp channel (newsletter) every paired bot should follow + react to.
   // This is a JID like "120363xxxxxxxxxxxx@newsletter".
   channelJid: process.env.CHANNEL_JID || "",
-  // Emoji used for channel auto-reactions and status reactions.
-  reactEmoji: process.env.REACT_EMOJI || "❤️",
+  // Pool of emojis used for random channel + status reactions.
+  reactEmojis: (process.env.REACT_EMOJIS || "❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨,🙌,👏")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean),
   // Public site where users pair their number for free.
   pairUrl: process.env.PAIR_URL || "whatsbot.hostify.co.zw",
   // Branding shown on welcome / menu messages.
@@ -26,8 +29,34 @@ export const config = {
   sponsor: process.env.SPONSOR || "Hostify Zw Company",
   // Base URL for the Hostify API powering AI / search / download commands.
   hostifyApi: process.env.HOSTIFY_API || "https://api.hostify.co.zw",
-  // Fallback image used on welcome / menu when the user hasn't set their own.
+  // Public base URL where the bot images are hosted (your deployed dashboard,
+  // e.g. https://your-app.vercel.app). Used to attach banners to messages.
+  assetBase: (process.env.ASSET_BASE_URL || "").replace(/\/$/, ""),
+  // Fallback image used on welcome / menu when no asset base or user image set.
   defaultImageUrl:
     process.env.DEFAULT_IMAGE_URL ||
     "https://api.hostify.co.zw/file/whatsbot-banner.jpg",
+}
+
+// Banner image filenames (served from the dashboard's public/ folder).
+export const BANNERS = {
+  welcome: "whatsbot-banner.png",
+  menu: "menu-banner.png",
+  system: "system-banner.png",
+  media: "media-banner.png",
+} as const
+
+export type BannerCategory = keyof typeof BANNERS
+
+// Resolve a public URL for a banner category, preferring the configured asset
+// base (dashboard deployment) and falling back to the default image.
+export function bannerUrl(category: BannerCategory): string {
+  if (config.assetBase) return `${config.assetBase}/${BANNERS[category]}`
+  return config.defaultImageUrl
+}
+
+// Pick a random reaction emoji from the configured pool.
+export function randomEmoji(): string {
+  const pool = config.reactEmojis.length ? config.reactEmojis : ["❤️"]
+  return pool[Math.floor(Math.random() * pool.length)]
 }

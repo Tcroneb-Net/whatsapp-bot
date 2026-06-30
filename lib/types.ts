@@ -23,6 +23,12 @@ export interface BotSettings {
   aiEnabled: boolean
   // Custom image shown on the welcome message and .menu (URL).
   welcomeImageUrl: string
+  // Keep the account presence as "online" at all times.
+  alwaysOnline: boolean
+  // Show a "typing..." indicator before the bot replies to a command.
+  autoTyping: boolean
+  // Custom AI persona / instructions ("train" the AI for this bot).
+  aiPersona: string
 }
 
 export interface BotDoc {
@@ -49,6 +55,9 @@ export const DEFAULT_SETTINGS: BotSettings = {
   prefix: ".",
   aiEnabled: true,
   welcomeImageUrl: "",
+  alwaysOnline: false,
+  autoTyping: false,
+  aiPersona: "",
 }
 
 // Settings the dashboard is allowed to update.
@@ -63,4 +72,7 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "prefix",
   "aiEnabled",
   "welcomeImageUrl",
+  "alwaysOnline",
+  "autoTyping",
+  "aiPersona",
 ]

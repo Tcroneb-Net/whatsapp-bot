@@ -14,6 +14,9 @@ export interface BotSettings {
   prefix: string
   aiEnabled: boolean
   welcomeImageUrl: string
+  alwaysOnline: boolean
+  autoTyping: boolean
+  aiPersona: string
 }
 
 export interface BotDoc {
@@ -37,4 +40,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   prefix: ".",
   aiEnabled: true,
   welcomeImageUrl: "",
+  alwaysOnline: false,
+  autoTyping: false,
+  aiPersona: "",
 }
