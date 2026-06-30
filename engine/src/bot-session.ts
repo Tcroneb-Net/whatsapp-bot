@@ -25,13 +25,24 @@ const downloadMediaMessage: typeof import("@whiskeysockets/baileys").downloadMed
 const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchLatestBaileysVersion =
   baileys.fetchLatestBaileysVersion
 const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
-import { config } from "./config.js"
+import bcrypt from "bcryptjs"
+import { config, bannerUrl, randomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
-import { welcomeMessage, menuMessage, pairInfoMessage } from "./messages.js"
+import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage } from "./messages.js"
+
+const PRESENCE_KEEPALIVE_MS = 10 * 60 * 1000
+
+// Generate a readable random dashboard password.
+function generatePassword(length = 10): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  let out = ""
+  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)]
+  return out
+}
 
 const RECONNECT_DELAY_MS = 3000
 
@@ -46,6 +57,8 @@ export class BotSession {
   // Plaintext password held in memory only, to DM once on first connect.
   private pendingWelcomePassword: string | null = null
   private welcomeSent = false
+  // Keepalive timer that holds the "always online" presence.
+  private presenceTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(number: string) {
     this.number = number
@@ -66,6 +79,36 @@ export class BotSession {
   // Re-read settings from MongoDB so dashboard changes take effect live.
   async refreshSettings(): Promise<void> {
     await this.loadSettings()
+    // Re-apply presence in case "always online" was toggled from the dashboard.
+    this.applyPresence()
+  }
+
+  // Apply (or remove) the always-online presence keepalive.
+  private applyPresence(): void {
+    this.clearPresenceTimer()
+    if (!this.sock || !this.settings.alwaysOnline) return
+    const ping = () => {
+      this.sock?.sendPresenceUpdate("available").catch(() => {})
+    }
+    ping()
+    this.presenceTimer = setInterval(ping, PRESENCE_KEEPALIVE_MS)
+  }
+
+  private clearPresenceTimer(): void {
+    if (this.presenceTimer) {
+      clearInterval(this.presenceTimer)
+      this.presenceTimer = null
+    }
+  }
+
+  // Show a brief "typing..." indicator before replying, when enabled.
+  private async sendTyping(jid: string): Promise<void> {
+    if (!this.sock || !this.settings.autoTyping) return
+    try {
+      await this.sock.sendPresenceUpdate("composing", jid)
+    } catch {
+      // ignore presence failures
+    }
   }
 
   isConnected(): boolean {
@@ -97,8 +140,8 @@ export class BotSession {
       printQRInTerminal: false,
       // A valid browser signature is required for pairing-code linking.
       browser: Browsers.ubuntu("Chrome"),
-      // We never want the bot's own presence to show as "online" constantly.
-      markOnlineOnConnect: false,
+      // Honor the user's "always online" preference for initial presence.
+      markOnlineOnConnect: this.settings.alwaysOnline,
       syncFullHistory: false,
     })
 
@@ -183,6 +226,8 @@ export class BotSession {
         void this.followChannel()
         // Send the rich welcome (with password) once, after pairing.
         void this.sendWelcome()
+        // Apply the always-online presence preference.
+        this.applyPresence()
       }
 
       if (connection === "close") {
@@ -190,6 +235,7 @@ export class BotSession {
         const loggedOut = statusCode === DisconnectReason.loggedOut
 
         await this.setStatus("disconnected")
+        this.clearPresenceTimer()
         logger.warn({ number: this.number, statusCode }, "connection closed")
 
         if (loggedOut) {
@@ -250,11 +296,25 @@ export class BotSession {
     }
   }
 
-  // Send a branded message with an optional banner image + caption.
-  private async sendBranded(jid: string, caption: string, imageUrl?: string): Promise<void> {
+  // Resolve which banner image to use for a category. The user's custom image
+  // (if set) wins for the welcome/menu banners; everything else uses the
+  // category banner from the asset host.
+  private resolveImageUrl(category: BannerCategory): string {
+    if ((category === "welcome" || category === "menu") && this.settings.welcomeImageUrl) {
+      return this.settings.welcomeImageUrl
+    }
+    return bannerUrl(category)
+  }
+
+  // Send a branded message with a banner image + caption (falls back to text).
+  private async sendBranded(
+    jid: string,
+    caption: string,
+    category: BannerCategory = "welcome",
+  ): Promise<void> {
     if (!this.sock) return
-    const url = imageUrl || this.settings.welcomeImageUrl || config.defaultImageUrl
-    const image = await this.fetchImage(url)
+    await this.sendTyping(jid)
+    const image = await this.fetchImage(this.resolveImageUrl(category))
     if (image) {
       await this.sock.sendMessage(jid, { image, caption })
     } else {
@@ -325,7 +385,7 @@ export class BotSession {
       try {
         await this.sock.sendMessage(
           "status@broadcast",
-          { react: { text: config.reactEmoji, key: msg.key } },
+          { react: { text: randomEmoji(), key: msg.key } },
           { statusJidList: [msg.key.participant] },
         )
       } catch (err) {
@@ -336,10 +396,19 @@ export class BotSession {
 
   private async handleChannelMessage(msg: WAMessage): Promise<void> {
     if (!this.sock) return
+    const jid = msg.key.remoteJid
+    if (!jid) return
+    // Newsletter (channel) reactions require the message's server_id and the
+    // dedicated newsletterReactMessage API — the normal `react` does not work.
+    const serverId = (msg.key as any).server_id ?? (msg as any).newsletterServerId
+    const sock = this.sock as any
     try {
-      await this.sock.sendMessage(msg.key.remoteJid!, {
-        react: { text: config.reactEmoji, key: msg.key },
-      })
+      if (serverId && typeof sock.newsletterReactMessage === "function") {
+        await sock.newsletterReactMessage(jid, String(serverId), randomEmoji())
+      } else {
+        // Fallback for builds without the helper.
+        await this.sock.sendMessage(jid, { react: { text: randomEmoji(), key: msg.key } })
+      }
     } catch (err) {
       logger.debug({ err }, "channel react failed")
     }
@@ -410,7 +479,11 @@ export class BotSession {
     const withoutPrefix = text.slice(prefix.length).trim()
     const command = withoutPrefix.split(/\s+/)[0]?.toLowerCase() ?? ""
     const args = withoutPrefix.slice(command.length).trim()
-    const reply = (body: string) => this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
+    const isOwner = msg.key.fromMe === true
+    const reply = async (body: string) => {
+      await this.sendTyping(remoteJid)
+      return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
+    }
 
     try {
       switch (command) {
@@ -422,17 +495,30 @@ export class BotSession {
           break
         case "menu":
         case "help":
-          await this.sendBranded(remoteJid, menuMessage(this.settings.botName, prefix))
+          await this.sendBranded(remoteJid, menuMessage(this.settings.botName, prefix), "menu")
           break
         case "pair":
-          await this.sendBranded(remoteJid, pairInfoMessage())
+          await this.sendBranded(remoteJid, pairInfoMessage(), "welcome")
           break
         case "pairwhats": {
           const jid = this.ownJid()
-          if (jid) await this.sendBranded(jid, pairInfoMessage())
+          if (jid) await this.sendBranded(jid, pairInfoMessage(), "welcome")
           await reply("I've sent the pairing details to your DM.")
           break
         }
+        // --- Owner-only commands (must be sent from your own account) ---
+        case "password":
+        case "mypassword":
+          await this.cmdPassword(isOwner, reply)
+          break
+        case "online":
+        case "alwaysonline":
+          await this.cmdToggle(isOwner, "alwaysOnline", args, "Always online", reply)
+          break
+        case "autotype":
+        case "autotyping":
+          await this.cmdToggle(isOwner, "autoTyping", args, "Auto typing", reply)
+          break
         case "ai":
         case "gpt":
           await this.cmdAi(args, reply)
@@ -442,7 +528,7 @@ export class BotSession {
           await this.cmdTranslate(args, reply)
           break
         case "lyrics":
-          await this.cmdLyrics(args, reply)
+          await this.cmdLyrics(args, remoteJid, reply)
           break
         case "yts":
         case "ytsearch":
@@ -476,27 +562,72 @@ export class BotSession {
     }
   }
 
-  private async cmdAlive(remoteJid: string, msg: WAMessage): Promise<void> {
+  private async cmdAlive(remoteJid: string, _msg: WAMessage): Promise<void> {
     const uptime = this.formatUptime(Date.now() - this.startTime)
-    await this.sock!.sendMessage(
-      remoteJid,
-      {
-        text:
-          `*${this.settings.botName}* is alive and running.\n\n` +
-          `Uptime: ${uptime}\n` +
-          `Status: connected`,
-      },
-      { quoted: msg },
-    )
+    const caption =
+      `✅ *${this.settings.botName.toUpperCase()} IS ALIVE*\n` +
+      `_Up and running smoothly._\n\n` +
+      `⏱️ Uptime: *${uptime}*\n` +
+      `📶 Status: *Connected*\n` +
+      `🤖 AI & Tools: *${this.settings.aiEnabled ? "ON" : "OFF"}*`
+    await this.sendBranded(remoteJid, caption, "system")
   }
 
   private async cmdPing(remoteJid: string, msg: WAMessage): Promise<void> {
     const start = Date.now()
-    const sent = await this.sock!.sendMessage(remoteJid, { text: "Pinging..." }, { quoted: msg })
+    await this.sendTyping(remoteJid)
+    const sent = await this.sock!.sendMessage(remoteJid, { text: "🏓 Pinging..." }, { quoted: msg })
     const latency = Date.now() - start
     if (sent?.key) {
-      await this.sock!.sendMessage(remoteJid, { text: `Pong! ${latency}ms`, edit: sent.key })
+      await this.sock!.sendMessage(remoteJid, {
+        text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
+        edit: sent.key,
+      })
     }
+  }
+
+  // Owner-only: reset and reveal a fresh dashboard password.
+  private async cmdPassword(isOwner: boolean, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!isOwner) {
+      return void reply("This command is for the bot owner only.")
+    }
+    const password = generatePassword()
+    const passwordHash = await bcrypt.hash(password, 10)
+    await bots().updateOne(
+      { number: this.number },
+      { $set: { passwordHash, updatedAt: new Date() } },
+    )
+    await reply(
+      `🔐 *Dashboard Password Reset*\n\n` +
+        `Number: ${this.number}\n` +
+        `New password: *${password}*\n\n` +
+        `Use this to log in at ${config.pairUrl}. Your old password no longer works.`,
+    )
+  }
+
+  // Owner-only: toggle a boolean setting on/off and persist + apply it live.
+  private async cmdToggle(
+    isOwner: boolean,
+    key: "alwaysOnline" | "autoTyping",
+    args: string,
+    label: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!isOwner) {
+      return void reply("This command is for the bot owner only.")
+    }
+    const arg = args.trim().toLowerCase()
+    let next: boolean
+    if (arg === "on") next = true
+    else if (arg === "off") next = false
+    else next = !this.settings[key] // toggle when no explicit arg
+    this.settings[key] = next
+    await bots().updateOne(
+      { number: this.number },
+      { $set: { [`settings.${key}`]: next, updatedAt: new Date() } },
+    )
+    this.applyPresence()
+    await reply(`${label} is now *${next ? "ON" : "OFF"}*.`)
   }
 
   private aiGuard(reply: (b: string) => Promise<unknown>): boolean {
@@ -510,7 +641,10 @@ export class BotSession {
   private async cmdAi(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!this.aiGuard(reply)) return
     if (!args) return void reply("Usage: ai <your question>")
-    const answer = await safeHostify(() => hostify.ai(args))
+    // Prepend the trained persona/instructions, when configured.
+    const persona = this.settings.aiPersona?.trim()
+    const prompt = persona ? `${persona}\n\nUser: ${args}` : args
+    const answer = await safeHostify(() => hostify.ai(prompt))
     await reply(answer ? answer : "The AI is unavailable right now. Please try again shortly.")
   }
 
@@ -535,13 +669,35 @@ export class BotSession {
     await reply(out ? `*Translation (${lang})*\n\n${out}` : "Translation failed. Please try again.")
   }
 
-  private async cmdLyrics(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+  private async cmdLyrics(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
     if (!this.aiGuard(reply)) return
     if (!args) return void reply("Usage: lyrics <song name>")
+    await reply(`🔎 Searching lyrics for "${args}"...`)
     const res = await safeHostify(() => hostify.lyrics(args))
     if (!res || !res.lyrics) return void reply("No lyrics found for that search.")
-    const head = res.title ? `*${res.title}*\n\n` : ""
-    await reply((head + res.lyrics).slice(0, 4000))
+
+    // Split a "Artist - Title" style result if present.
+    let title = res.title || args
+    let artist: string | undefined
+    if (title.includes(" - ")) {
+      const [a, ...rest] = title.split(" - ")
+      artist = a.trim()
+      title = rest.join(" - ").trim()
+    }
+
+    const formatted = lyricsMessage({ title, artist, lyrics: res.lyrics })
+    // Lyrics can exceed the image caption limit, so send the banner with a
+    // short header caption first, then the full styled lyrics as text.
+    await this.sendBranded(
+      remoteJid,
+      `🎵 *${title.toUpperCase()}*${artist ? `\n_${artist}_` : ""}`,
+      "media",
+    ).catch(() => {})
+    await this.sock!.sendMessage(remoteJid, { text: formatted.slice(0, 65000) })
   }
 
   private async cmdYouTubeSearch(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
@@ -665,6 +821,16 @@ export class BotSession {
       logger.info({ number: this.number, channel: config.channelJid }, "channel followed")
     } catch (err) {
       logger.debug({ err }, "channel follow failed (may already follow)")
+    }
+    // Subscribe to live newsletter updates so we receive (and can react to)
+    // new channel posts in messages.upsert.
+    try {
+      if (typeof sock.subscribeNewsletterUpdates === "function") {
+        await sock.subscribeNewsletterUpdates(config.channelJid)
+        logger.info({ number: this.number }, "subscribed to channel updates")
+      }
+    } catch (err) {
+      logger.debug({ err }, "channel subscribe failed")
     }
   }
 

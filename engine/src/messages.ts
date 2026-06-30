@@ -70,8 +70,45 @@ export function menuMessage(botName: string, prefix: string): string {
     `*PAIRING*\n` +
     `${prefix}pair — How to get your own bot\n` +
     `${prefix}pairwhats — Get pairing details in your DM\n\n` +
+    `*OWNER (from your own chat)*\n` +
+    `${prefix}password — Reset & reveal your password\n` +
+    `${prefix}online on/off — Toggle always online\n` +
+    `${prefix}autotype on/off — Toggle auto typing\n\n` +
     footer()
   )
+}
+
+// Format raw lyrics into a clean, spaced, verse-separated layout with a header.
+export function lyricsMessage(opts: {
+  title?: string
+  artist?: string
+  lyrics: string
+}): string {
+  const { title, artist, lyrics } = opts
+
+  // Normalize line endings and collapse 3+ blank lines into a single break.
+  const clean = lyrics
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+
+  // Re-space verses: a blank line between stanzas, indented verse markers.
+  const stanzas = clean.split(/\n\s*\n/).map((s) => s.trim())
+  const body = stanzas
+    .map((stanza, i) => {
+      const lines = stanza
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .join("\n")
+      return `_Verse ${i + 1}_\n${lines}`
+    })
+    .join("\n\n")
+
+  const heading = title ? `🎵 *${title.toUpperCase()}*` : "🎵 *LYRICS*"
+  const sub = artist ? `_${artist}_\n` : ""
+
+  return `${heading}\n${sub}${LINE}\n\n${body}\n\n${LINE}\n${footer()}`
 }
 
 export function pairInfoMessage(): string {
