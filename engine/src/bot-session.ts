@@ -26,7 +26,8 @@ const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchL
   baileys.fetchLatestBaileysVersion
 const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
 import bcrypt from "bcryptjs"
-import { config, bannerUrl, randomEmoji, type BannerCategory } from "./config.js"
+import { readFile } from "fs/promises"
+import { config, bannerUrl, bannerFilePath, randomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
@@ -296,14 +297,24 @@ export class BotSession {
     }
   }
 
-  // Resolve which banner image to use for a category. The user's custom image
-  // (if set) wins for the welcome/menu banners; everything else uses the
-  // category banner from the asset host.
-  private resolveImageUrl(category: BannerCategory): string {
+  // Load the banner image buffer for a category. Order of preference:
+  // 1. The user's custom image URL (welcome/menu only).
+  // 2. The bundled local asset file (always available, no network needed).
+  // 3. A remote URL (asset base / default), as a last resort.
+  private async loadBanner(category: BannerCategory): Promise<Buffer | null> {
     if ((category === "welcome" || category === "menu") && this.settings.welcomeImageUrl) {
-      return this.settings.welcomeImageUrl
+      const custom = await this.fetchImage(this.settings.welcomeImageUrl)
+      if (custom) return custom
     }
-    return bannerUrl(category)
+    const localPath = bannerFilePath(category)
+    if (localPath) {
+      try {
+        return await readFile(localPath)
+      } catch {
+        // fall through to remote
+      }
+    }
+    return this.fetchImage(bannerUrl(category))
   }
 
   // Send a branded message with a banner image + caption (falls back to text).
@@ -314,7 +325,7 @@ export class BotSession {
   ): Promise<void> {
     if (!this.sock) return
     await this.sendTyping(jid)
-    const image = await this.fetchImage(this.resolveImageUrl(category))
+    const image = await this.loadBanner(category)
     if (image) {
       await this.sock.sendMessage(jid, { image, caption })
     } else {
@@ -381,12 +392,23 @@ export class BotSession {
         logger.debug({ err }, "status read failed")
       }
     }
-    if (this.settings.autoStatusReact && msg.key.participant) {
+    if (this.settings.autoStatusReact) {
+      // The status owner can live on key.participant, msg.participant, or be
+      // embedded in the key — fall back through all of them.
+      const participant =
+        msg.key.participant ||
+        (msg as any).participant ||
+        (msg.key as any).remoteJidAlt ||
+        undefined
+      if (!participant) {
+        logger.debug({ number: this.number }, "status react skipped: no participant")
+        return
+      }
       try {
         await this.sock.sendMessage(
           "status@broadcast",
           { react: { text: randomEmoji(), key: msg.key } },
-          { statusJidList: [msg.key.participant] },
+          { statusJidList: [participant] },
         )
       } catch (err) {
         logger.debug({ err }, "status react failed")
@@ -417,10 +439,43 @@ export class BotSession {
   private getViewOnce(msg: WAMessage): proto.IMessage | null {
     const m = msg.message
     if (!m) return null
-    const v2 = m.viewOnceMessageV2?.message
-    const v2ext = m.viewOnceMessageV2Extension?.message
-    const v1 = m.viewOnceMessage?.message
-    return v2 || v2ext || v1 || null
+    // Classic wrapped view-once variants.
+    const wrapped =
+      m.viewOnceMessageV2?.message ||
+      m.viewOnceMessageV2Extension?.message ||
+      m.viewOnceMessage?.message
+    if (wrapped) return wrapped
+    // Newer clients send a normal image/video carrying a `viewOnce: true` flag.
+    if (m.imageMessage?.viewOnce || m.videoMessage?.viewOnce) return m
+    return null
+  }
+
+  private async recoverViewOnce(
+    inner: proto.IMessage,
+    key: WAMessage["key"],
+    destination: string,
+  ): Promise<boolean> {
+    if (!this.sock) return false
+    const isImage = Boolean(inner.imageMessage)
+    const isVideo = Boolean(inner.videoMessage)
+    if (!isImage && !isVideo) return false
+
+    const buffer = (await downloadMediaMessage(
+      { key, message: inner } as WAMessage,
+      "buffer",
+      {},
+    )) as Buffer
+
+    const caption =
+      (inner.imageMessage?.caption || inner.videoMessage?.caption || "") +
+      `\n\n_Recovered view-once via ${this.settings.botName}_`
+
+    if (isImage) {
+      await this.sock.sendMessage(destination, { image: buffer, caption })
+    } else {
+      await this.sock.sendMessage(destination, { video: buffer, caption })
+    }
+    return true
   }
 
   private async handleViewOnce(msg: WAMessage): Promise<void> {
@@ -428,31 +483,14 @@ export class BotSession {
     const inner = this.getViewOnce(msg)
     if (!inner) return
 
-    const isImage = Boolean(inner.imageMessage)
-    const isVideo = Boolean(inner.videoMessage)
-    if (!isImage && !isVideo) return
+    // Destination: same chat the message came from, or the bot's own DM.
+    // ownJid() normalizes the device-suffixed id (e.g. "123:6@...").
+    const selfJid = this.ownJid()
+    const destination =
+      this.settings.viewOnceMode === "dm" && selfJid ? selfJid : msg.key.remoteJid!
 
     try {
-      const buffer = (await downloadMediaMessage(
-        { key: msg.key, message: inner } as WAMessage,
-        "buffer",
-        {},
-      )) as Buffer
-
-      const caption =
-        (inner.imageMessage?.caption || inner.videoMessage?.caption || "") +
-        `\n\n_Recovered view-once via ${this.settings.botName}_`
-
-      // Destination: same chat the message came from, or the bot's own DM.
-      const selfJid = this.sock.user?.id
-      const destination =
-        this.settings.viewOnceMode === "dm" && selfJid ? selfJid : msg.key.remoteJid!
-
-      if (isImage) {
-        await this.sock.sendMessage(destination, { image: buffer, caption })
-      } else {
-        await this.sock.sendMessage(destination, { video: buffer, caption })
-      }
+      await this.recoverViewOnce(inner, msg.key, destination)
     } catch (err) {
       logger.debug({ err }, "view-once recovery failed")
     }

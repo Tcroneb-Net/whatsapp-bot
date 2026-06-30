@@ -44,13 +44,16 @@ export function findUrl(obj: any, hint?: RegExp): string | null {
 export const hostify = {
   async ai(message: string): Promise<string> {
     const data = await postJson("/api/ai/letmegpt", { message })
+    // The API nests the reply under `result` (e.g. { result: { answer } }).
     return (
-      data?.result ||
-      data?.response ||
+      data?.result?.answer ||
+      data?.result?.response ||
+      data?.result?.text ||
+      (typeof data?.result === "string" ? data.result : "") ||
       data?.answer ||
+      data?.response ||
       data?.message ||
-      data?.data ||
-      (typeof data === "string" ? data : JSON.stringify(data))
+      (typeof data === "string" ? data : "")
     )
   },
 
@@ -60,20 +63,24 @@ export const hostify = {
       module: "TRANSLATE",
       to,
     })
+    // The API returns { result: { output } }.
     return (
-      data?.result ||
+      data?.result?.output ||
+      data?.result?.translated ||
+      data?.result?.text ||
+      (typeof data?.result === "string" ? data.result : "") ||
       data?.translated ||
       data?.translation ||
-      data?.data ||
-      (typeof data === "string" ? data : JSON.stringify(data))
+      (typeof data === "string" ? data : "")
     )
   },
 
   async lyrics(q: string): Promise<{ title?: string; lyrics: string }> {
     const data = await getJson(`/api/search/lyrics?q=${encodeURIComponent(q)}`)
+    const r = data?.result ?? data
     const lyrics =
-      data?.lyrics || data?.result?.lyrics || data?.result || data?.data || ""
-    const title = data?.title || data?.result?.title
+      r?.lyrics || r?.lyric || (typeof r === "string" ? r : "") || data?.lyrics || ""
+    const title = r?.title || data?.title
     return { title, lyrics: typeof lyrics === "string" ? lyrics : JSON.stringify(lyrics) }
   },
 
