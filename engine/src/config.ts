@@ -38,7 +38,7 @@ export const config = {
   // Fallback image used on welcome / menu when no asset base or user image set.
   defaultImageUrl:
     process.env.DEFAULT_IMAGE_URL ||
-    "https://api.hostify.co.zw/file/whatsbot-banner.jpg",
+    "https://i.ibb.co/Qj9Jp24v/file-000000003e2872469bf30fd1921de06c-2.png",
 }
 
 // Banner image filenames (served from the dashboard's public/ folder).

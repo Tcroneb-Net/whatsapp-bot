@@ -42,8 +42,8 @@ const features = [
   },
   {
     icon: Radio,
-    title: "Channel auto-follow",
-    desc: "Every paired bot follows the official channel and auto-reacts to keep it active.",
+    title: "Follow our channel",
+    desc: "Every paired bot follows the official channel for latest updates.",
   },
 ]
 
@@ -57,7 +57,7 @@ export default function HomePage() {
             <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Bot className="size-5" />
             </div>
-            <span className="text-lg font-semibold tracking-tight">WA Bot Hub</span>
+            <span className="text-lg font-semibold tracking-tight">MY BOT / WHATS BOT</span>
           </div>
           <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
             <LogIn className="size-4" />
