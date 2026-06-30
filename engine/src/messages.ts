@@ -46,36 +46,68 @@ export function welcomeMessage(opts: {
   )
 }
 
-export function menuMessage(botName: string, prefix: string): string {
-  return (
-    `*${botName.toUpperCase()} — COMMAND MENU*\n` +
-    `_Premium WhatsApp automation & tools._\n\n` +
-    `${LINE}\n` +
-    `*GENERAL*\n` +
-    `${prefix}menu — Show this menu\n` +
-    `${prefix}alive — Check if the bot is online\n` +
-    `${prefix}ping — Check response speed\n\n` +
-    `*AI & LANGUAGE*\n` +
-    `${prefix}ai <text> — Ask the AI anything\n` +
-    `${prefix}translate <lang> | <text> — Translate text\n\n` +
-    `*SEARCH*\n` +
-    `${prefix}yts <query> — Search YouTube\n` +
-    `${prefix}pinterest <query> — Search Pinterest images\n` +
-    `${prefix}lyrics <song> — Find song lyrics\n\n` +
-    `*MUSIC & DOWNLOADS*\n` +
-    `${prefix}play <song> — Play from SoundCloud\n` +
-    `${prefix}song <youtube url> — Download audio (MP3)\n` +
-    `${prefix}video <youtube url> — Download video\n` +
-    `${prefix}dub <video url> — AI dub a video\n\n` +
-    `*PAIRING*\n` +
-    `${prefix}pair — How to get your own bot\n` +
-    `${prefix}pairwhats — Get pairing details in your DM\n\n` +
-    `*OWNER (from your own chat)*\n` +
-    `${prefix}password — Reset & reveal your password\n` +
-    `${prefix}online on/off — Toggle always online\n` +
-    `${prefix}autotype on/off — Toggle auto typing\n\n` +
-    footer()
-  )
+export function menuMessage(
+  botName: string,
+  prefix: string,
+  meta?: { uptime?: string; ram?: string; mode?: string },
+): string {
+  const uptime = meta?.uptime || "0s"
+  const ram = meta?.ram || "—"
+  const mode = meta?.mode || "PUBLIC"
+
+  const header =
+    `╭━〔 ☬ PREMIUM BOT ☬ 〕━⬣\n` +
+    `┃ ${botName.toUpperCase()}\n` +
+    `┃ ⚙️ Prefix : [ ${prefix} ]\n` +
+    `┃ 🌐 Mode   : ${mode}\n` +
+    `┃ ⏱️ Uptime : ${uptime}\n` +
+    `┃ 💾 RAM    : ${ram}\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━⬣`
+
+  const section = (title: string, items: string[]) =>
+    `╭━━〔 ${title} 〕━━⬣\n` +
+    items.map((i) => `┃➤ ${i}`).join("\n") +
+    `\n╰━━━━━━━━━━━━━━━━━━━━⬣`
+
+  const general = section("⚙️ GENERAL", [
+    `${prefix}menu`,
+    `${prefix}ping`,
+    `${prefix}alive`,
+    `${prefix}pair`,
+    `${prefix}pairwhats`,
+  ])
+  const downloads = section("📥 DOWNLOADS", [
+    `${prefix}play <song> — SoundCloud`,
+    `${prefix}video <url> — YouTube video`,
+    `${prefix}song <url> — YouTube MP3`,
+    `${prefix}dub <url> — AI dub a video`,
+  ])
+  const search = section("🔎 SEARCH", [
+    `${prefix}lyrics <song> — Song lyrics`,
+    `${prefix}pinterest <query> — Images`,
+    `${prefix}yts <query> — YouTube search`,
+  ])
+  const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text>`])
+  const ai = section("🤖 AI", [`${prefix}ai <text> — Ask the AI`])
+  const tools = section("🛡️ TOOLS", [`${prefix}vv — Unlock a view-once media`])
+  const owner = section("👑 OWNER", [
+    `${prefix}online on/off — Always online`,
+    `${prefix}autotype on/off — Auto typing`,
+    `${prefix}password — Reset password`,
+    `${prefix}private — Owner-only mode`,
+    `${prefix}public — Everyone can use`,
+  ])
+
+  const credits =
+    `╭━━━━━━━━━━━━━━━━━━━━⬣\n` +
+    `┃   Fast • Smooth • Powerful\n` +
+    `> By ${config.teamName}\n` +
+    `> Sponsored by ${config.sponsor}\n` +
+    `> Pair free at ${config.pairUrl}\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
+    `> ☬ *${botName.toUpperCase()}* ☬`
+
+  return [header, general, downloads, search, translate, ai, tools, owner, credits].join("\n\n")
 }
 
 // Format raw lyrics into a clean, spaced, verse-separated layout with a header.

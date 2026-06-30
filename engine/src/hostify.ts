@@ -43,7 +43,8 @@ export function findUrl(obj: any, hint?: RegExp): string | null {
 
 export const hostify = {
   async ai(message: string): Promise<string> {
-    const data = await postJson("/api/ai/letmegpt", { message })
+    // letmegpt is unreliable upstream; gemini returns { result: { answer } }.
+    const data = await postJson("/api/ai/gemini", { message })
     // The API nests the reply under `result` (e.g. { result: { answer } }).
     return (
       data?.result?.answer ||
