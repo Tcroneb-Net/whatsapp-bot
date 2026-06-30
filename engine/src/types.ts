@@ -17,6 +17,7 @@ export interface BotSettings {
   alwaysOnline: boolean
   autoTyping: boolean
   aiPersona: string
+  publicMode: boolean
 }
 
 export interface BotDoc {
@@ -43,4 +44,5 @@ export const DEFAULT_SETTINGS: BotSettings = {
   alwaysOnline: false,
   autoTyping: false,
   aiPersona: "",
+  publicMode: true,
 }

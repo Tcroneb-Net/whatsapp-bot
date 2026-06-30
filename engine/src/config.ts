@@ -1,4 +1,7 @@
 import "dotenv/config"
+import { fileURLToPath } from "url"
+import { dirname, join } from "path"
+import { existsSync } from "fs"
 
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback
@@ -53,6 +56,23 @@ export type BannerCategory = keyof typeof BANNERS
 export function bannerUrl(category: BannerCategory): string {
   if (config.assetBase) return `${config.assetBase}/${BANNERS[category]}`
   return config.defaultImageUrl
+}
+
+// Resolve the local bundled banner file path (engine/assets) if it exists.
+// This is the primary source so images always work without any remote host.
+export function bannerFilePath(category: BannerCategory): string | null {
+  // Compiled file lives at engine/dist/config.js, so assets are one level up.
+  const here = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    join(here, "..", "assets", BANNERS[category]), // dist -> engine/assets
+    join(here, "assets", BANNERS[category]),
+    join(process.cwd(), "assets", BANNERS[category]),
+    join(process.cwd(), "engine", "assets", BANNERS[category]),
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  return null
 }
 
 // Pick a random reaction emoji from the configured pool.

@@ -12,6 +12,7 @@ RUN pnpm install --prod=false
 # Copy source and build
 COPY tsconfig.json ./
 COPY src ./src
+COPY assets ./assets
 RUN pnpm build
 
 ENV NODE_ENV=production

@@ -26,7 +26,9 @@ const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchL
   baileys.fetchLatestBaileysVersion
 const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
 import bcrypt from "bcryptjs"
-import { config, bannerUrl, randomEmoji, type BannerCategory } from "./config.js"
+import os from "os"
+import { readFile } from "fs/promises"
+import { config, bannerUrl, bannerFilePath, randomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
@@ -296,14 +298,24 @@ export class BotSession {
     }
   }
 
-  // Resolve which banner image to use for a category. The user's custom image
-  // (if set) wins for the welcome/menu banners; everything else uses the
-  // category banner from the asset host.
-  private resolveImageUrl(category: BannerCategory): string {
+  // Load the banner image buffer for a category. Order of preference:
+  // 1. The user's custom image URL (welcome/menu only).
+  // 2. The bundled local asset file (always available, no network needed).
+  // 3. A remote URL (asset base / default), as a last resort.
+  private async loadBanner(category: BannerCategory): Promise<Buffer | null> {
     if ((category === "welcome" || category === "menu") && this.settings.welcomeImageUrl) {
-      return this.settings.welcomeImageUrl
+      const custom = await this.fetchImage(this.settings.welcomeImageUrl)
+      if (custom) return custom
     }
-    return bannerUrl(category)
+    const localPath = bannerFilePath(category)
+    if (localPath) {
+      try {
+        return await readFile(localPath)
+      } catch {
+        // fall through to remote
+      }
+    }
+    return this.fetchImage(bannerUrl(category))
   }
 
   // Send a branded message with a banner image + caption (falls back to text).
@@ -314,7 +326,7 @@ export class BotSession {
   ): Promise<void> {
     if (!this.sock) return
     await this.sendTyping(jid)
-    const image = await this.fetchImage(this.resolveImageUrl(category))
+    const image = await this.loadBanner(category)
     if (image) {
       await this.sock.sendMessage(jid, { image, caption })
     } else {
@@ -381,12 +393,23 @@ export class BotSession {
         logger.debug({ err }, "status read failed")
       }
     }
-    if (this.settings.autoStatusReact && msg.key.participant) {
+    if (this.settings.autoStatusReact) {
+      // The status owner can live on key.participant, msg.participant, or be
+      // embedded in the key — fall back through all of them.
+      const participant =
+        msg.key.participant ||
+        (msg as any).participant ||
+        (msg.key as any).remoteJidAlt ||
+        undefined
+      if (!participant) {
+        logger.debug({ number: this.number }, "status react skipped: no participant")
+        return
+      }
       try {
         await this.sock.sendMessage(
           "status@broadcast",
           { react: { text: randomEmoji(), key: msg.key } },
-          { statusJidList: [msg.key.participant] },
+          { statusJidList: [participant] },
         )
       } catch (err) {
         logger.debug({ err }, "status react failed")
@@ -417,10 +440,43 @@ export class BotSession {
   private getViewOnce(msg: WAMessage): proto.IMessage | null {
     const m = msg.message
     if (!m) return null
-    const v2 = m.viewOnceMessageV2?.message
-    const v2ext = m.viewOnceMessageV2Extension?.message
-    const v1 = m.viewOnceMessage?.message
-    return v2 || v2ext || v1 || null
+    // Classic wrapped view-once variants.
+    const wrapped =
+      m.viewOnceMessageV2?.message ||
+      m.viewOnceMessageV2Extension?.message ||
+      m.viewOnceMessage?.message
+    if (wrapped) return wrapped
+    // Newer clients send a normal image/video carrying a `viewOnce: true` flag.
+    if (m.imageMessage?.viewOnce || m.videoMessage?.viewOnce) return m
+    return null
+  }
+
+  private async recoverViewOnce(
+    inner: proto.IMessage,
+    key: WAMessage["key"],
+    destination: string,
+  ): Promise<boolean> {
+    if (!this.sock) return false
+    const isImage = Boolean(inner.imageMessage)
+    const isVideo = Boolean(inner.videoMessage)
+    if (!isImage && !isVideo) return false
+
+    const buffer = (await downloadMediaMessage(
+      { key, message: inner } as WAMessage,
+      "buffer",
+      {},
+    )) as Buffer
+
+    const caption =
+      (inner.imageMessage?.caption || inner.videoMessage?.caption || "") +
+      `\n\n_Recovered view-once via ${this.settings.botName}_`
+
+    if (isImage) {
+      await this.sock.sendMessage(destination, { image: buffer, caption })
+    } else {
+      await this.sock.sendMessage(destination, { video: buffer, caption })
+    }
+    return true
   }
 
   private async handleViewOnce(msg: WAMessage): Promise<void> {
@@ -428,31 +484,14 @@ export class BotSession {
     const inner = this.getViewOnce(msg)
     if (!inner) return
 
-    const isImage = Boolean(inner.imageMessage)
-    const isVideo = Boolean(inner.videoMessage)
-    if (!isImage && !isVideo) return
+    // Destination: same chat the message came from, or the bot's own DM.
+    // ownJid() normalizes the device-suffixed id (e.g. "123:6@...").
+    const selfJid = this.ownJid()
+    const destination =
+      this.settings.viewOnceMode === "dm" && selfJid ? selfJid : msg.key.remoteJid!
 
     try {
-      const buffer = (await downloadMediaMessage(
-        { key: msg.key, message: inner } as WAMessage,
-        "buffer",
-        {},
-      )) as Buffer
-
-      const caption =
-        (inner.imageMessage?.caption || inner.videoMessage?.caption || "") +
-        `\n\n_Recovered view-once via ${this.settings.botName}_`
-
-      // Destination: same chat the message came from, or the bot's own DM.
-      const selfJid = this.sock.user?.id
-      const destination =
-        this.settings.viewOnceMode === "dm" && selfJid ? selfJid : msg.key.remoteJid!
-
-      if (isImage) {
-        await this.sock.sendMessage(destination, { image: buffer, caption })
-      } else {
-        await this.sock.sendMessage(destination, { video: buffer, caption })
-      }
+      await this.recoverViewOnce(inner, msg.key, destination)
     } catch (err) {
       logger.debug({ err }, "view-once recovery failed")
     }
@@ -485,6 +524,10 @@ export class BotSession {
       return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
     }
 
+    // In private mode, only the owner can use any command (silently ignore
+    // others so the bot stays quiet in groups it doesn't control).
+    if (!this.settings.publicMode && !isOwner) return
+
     try {
       switch (command) {
         case "alive":
@@ -495,7 +538,15 @@ export class BotSession {
           break
         case "menu":
         case "help":
-          await this.sendBranded(remoteJid, menuMessage(this.settings.botName, prefix), "menu")
+          await this.sendBranded(
+            remoteJid,
+            menuMessage(this.settings.botName, prefix, {
+              uptime: this.formatUptime(Date.now() - this.startTime),
+              ram: this.formatRam(),
+              mode: this.settings.publicMode ? "PUBLIC" : "PRIVATE",
+            }),
+            "menu",
+          )
           break
         case "pair":
           await this.sendBranded(remoteJid, pairInfoMessage(), "welcome")
@@ -518,6 +569,16 @@ export class BotSession {
         case "autotype":
         case "autotyping":
           await this.cmdToggle(isOwner, "autoTyping", args, "Auto typing", reply)
+          break
+        case "public":
+          await this.cmdSetPublic(isOwner, true, reply)
+          break
+        case "private":
+          await this.cmdSetPublic(isOwner, false, reply)
+          break
+        case "vv":
+        case "viewonce":
+          await this.cmdVv(msg, remoteJid, reply)
           break
         case "ai":
         case "gpt":
@@ -630,6 +691,64 @@ export class BotSession {
     await reply(`${label} is now *${next ? "ON" : "OFF"}*.`)
   }
 
+  // Owner-only: switch between public (anyone) and private (owner-only) mode.
+  private async cmdSetPublic(
+    isOwner: boolean,
+    pub: boolean,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!isOwner) {
+      return void reply("This command is for the bot owner only.")
+    }
+    this.settings.publicMode = pub
+    await bots().updateOne(
+      { number: this.number },
+      { $set: { "settings.publicMode": pub, updatedAt: new Date() } },
+    )
+    await reply(
+      pub
+        ? "🌐 Bot is now *PUBLIC*. Anyone can use commands."
+        : "🔒 Bot is now *PRIVATE*. Only you can use commands.",
+    )
+  }
+
+  // Recover a view-once message that was replied to with .vv (on demand).
+  private async cmdVv(
+    msg: WAMessage,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    const ctx = msg.message?.extendedTextMessage?.contextInfo
+    const quoted = ctx?.quotedMessage
+    if (!quoted) {
+      return void reply("Reply to a view-once photo or video with .vv to unlock it.")
+    }
+    // Unwrap a quoted view-once payload.
+    const inner =
+      (quoted as any).viewOnceMessageV2?.message ||
+      (quoted as any).viewOnceMessageV2Extension?.message ||
+      (quoted as any).viewOnceMessage?.message ||
+      ((quoted as any).imageMessage?.viewOnce || (quoted as any).videoMessage?.viewOnce
+        ? quoted
+        : null)
+    if (!inner) {
+      return void reply("That message is not a view-once photo or video.")
+    }
+    const key = {
+      remoteJid,
+      id: ctx?.stanzaId || msg.key.id,
+      fromMe: false,
+      participant: ctx?.participant,
+    } as WAMessage["key"]
+    try {
+      const ok = await this.recoverViewOnce(inner as proto.IMessage, key, remoteJid)
+      if (!ok) await reply("Could not unlock that media.")
+    } catch (err) {
+      logger.debug({ err }, "vv recovery failed")
+      await reply("Failed to unlock that media. It may have expired.")
+    }
+  }
+
   private aiGuard(reply: (b: string) => Promise<unknown>): boolean {
     if (!this.settings.aiEnabled) {
       void reply("AI & tools are turned off. Enable them from your dashboard to use this command.")
@@ -641,9 +760,14 @@ export class BotSession {
   private async cmdAi(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!this.aiGuard(reply)) return
     if (!args) return void reply("Usage: ai <your question>")
-    // Prepend the trained persona/instructions, when configured.
+    // The upstream model defaults to Indonesian, so steer it to reply in the
+    // same language as the user (English by default). Custom persona, if set,
+    // takes priority and is prepended before the question.
     const persona = this.settings.aiPersona?.trim()
-    const prompt = persona ? `${persona}\n\nUser: ${args}` : args
+    const system = persona
+      ? persona
+      : "You are a helpful WhatsApp assistant. Always reply in clear English unless the user writes in another language. Keep answers concise."
+    const prompt = `${system}\n\nUser: ${args}`
     const answer = await safeHostify(() => hostify.ai(prompt))
     await reply(answer ? answer : "The AI is unavailable right now. Please try again shortly.")
   }
@@ -842,9 +966,16 @@ export class BotSession {
     const parts: string[] = []
     if (days) parts.push(`${days}d`)
     if (hr) parts.push(`${hr}h`)
-    if (min) parts.push(`${min}m`)
-    parts.push(`${sec}s`)
-    return parts.join(" ")
+  if (min) parts.push(`${min}m`)
+  parts.push(`${sec}s`)
+  return parts.join(" ")
+  }
+
+  private formatRam(): string {
+    const used = process.memoryUsage().rss
+    const total = (os.totalmem && os.totalmem()) || 0
+    const gb = (n: number) => (n / 1024 ** 3).toFixed(1) + "GB"
+    return total ? `${gb(used)} / ${gb(total)}` : gb(used)
   }
 
   async stop(): Promise<void> {

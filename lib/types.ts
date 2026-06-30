@@ -29,6 +29,8 @@ export interface BotSettings {
   autoTyping: boolean
   // Custom AI persona / instructions ("train" the AI for this bot).
   aiPersona: string
+  // When true, anyone can use commands. When false, only the owner (you) can.
+  publicMode: boolean
 }
 
 export interface BotDoc {
@@ -58,6 +60,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   alwaysOnline: false,
   autoTyping: false,
   aiPersona: "",
+  publicMode: true,
 }
 
 // Settings the dashboard is allowed to update.
@@ -75,4 +78,5 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "alwaysOnline",
   "autoTyping",
   "aiPersona",
+  "publicMode",
 ]
