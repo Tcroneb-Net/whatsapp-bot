@@ -1,12 +1,22 @@
-import {
-  initAuthCreds,
-  BufferJSON,
-  proto,
-  type AuthenticationCreds,
-  type AuthenticationState,
-  type SignalDataTypeMap,
+import { createRequire } from "module"
+import type {
+  AuthenticationCreds,
+  AuthenticationState,
+  SignalDataTypeMap,
 } from "@whiskeysockets/baileys"
 import { authState } from "./db.js"
+
+// Load Baileys' runtime values via createRequire instead of named ESM imports.
+// Across Baileys versions, `proto` (and friends) are CommonJS exports that are
+// not always exposed as statically-linkable ESM named exports — importing them
+// directly throws `does not provide an export named 'proto'` at startup. A
+// runtime require resolves the same values reliably regardless of the build.
+const require = createRequire(import.meta.url)
+const baileys = require("@whiskeysockets/baileys")
+const initAuthCreds: () => AuthenticationCreds = baileys.initAuthCreds
+const BufferJSON: { replacer: (k: string, v: unknown) => unknown; reviver: (k: string, v: unknown) => unknown } =
+  baileys.BufferJSON
+const proto: any = baileys.proto
 
 // A MongoDB-backed implementation of Baileys' auth state. Storing credentials in
 // MongoDB (instead of the local filesystem) is what lets a bot's session survive
