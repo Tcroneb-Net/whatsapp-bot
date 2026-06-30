@@ -18,12 +18,16 @@ import {
   Sparkles,
   Heart,
   ImageIcon,
+  Wifi,
+  Keyboard,
+  BrainCircuit,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
@@ -321,13 +325,59 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   Power user commands: AI chat, translation, search, music and downloads.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-1">
+              <CardContent className="flex flex-col gap-4">
                 <ToggleRow
                   icon={Sparkles}
                   label="Enable AI & tools"
                   desc={`Allows ${settings.prefix}ai, ${settings.prefix}translate, ${settings.prefix}play, ${settings.prefix}song and more.`}
                   checked={settings.aiEnabled}
                   onChange={(v) => update("aiEnabled", v)}
+                />
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="aiPersona" className="flex items-center gap-2">
+                    <BrainCircuit className="size-4 text-primary" />
+                    Train your AI (persona &amp; instructions)
+                  </Label>
+                  <Textarea
+                    id="aiPersona"
+                    rows={4}
+                    placeholder="e.g. You are a friendly assistant for my shop. Always reply in English, keep answers short, and never share prices."
+                    value={settings.aiPersona}
+                    onChange={(e) => update("aiPersona", e.target.value)}
+                    disabled={!settings.aiEnabled}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    These instructions are sent to the AI before every{" "}
+                    <code className="font-mono">{settings.prefix}ai</code> question, shaping how it
+                    responds.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Presence */}
+            <Card className="border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Wifi className="size-5 text-primary" />
+                  Presence &amp; behaviour
+                </CardTitle>
+                <CardDescription>Control how your bot appears and reacts in chats.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                <ToggleRow
+                  icon={Wifi}
+                  label="Always online"
+                  desc="Keeps your account presence set to online at all times."
+                  checked={settings.alwaysOnline}
+                  onChange={(v) => update("alwaysOnline", v)}
+                />
+                <ToggleRow
+                  icon={Keyboard}
+                  label="Auto typing"
+                  desc="Shows a typing indicator before the bot replies to commands."
+                  checked={settings.autoTyping}
+                  onChange={(v) => update("autoTyping", v)}
                 />
               </CardContent>
             </Card>
