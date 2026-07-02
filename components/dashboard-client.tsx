@@ -5,26 +5,31 @@ import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { format } from "date-fns"
 import {
-  Bot,
   Eye,
   EyeOff,
-  ShieldCheck,
-  Activity,
-  Radio,
-  LogOut,
-  Trash2,
-  Loader2,
-  Save,
-  Circle,
-  Sparkles,
   Heart,
-  ImageIcon,
-  Wifi,
+  ShieldCheck,
+  Circle,
   Keyboard,
+  Radio,
+  Activity,
+  LogOut,
+  Zap,
+  Settings,
+  Wifi,
   BrainCircuit,
   Clock,
   FileText,
+  Puzzle,
+  Plus,
+  Bot,
+  Loader2,
+  ImageIcon,
+  Sparkles,
+  Trash2,
+  Save,
 } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -34,7 +39,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { DEFAULT_SETTINGS, type BotSettings, type ViewOnceMode } from "@/lib/types"
+import { DEFAULT_SETTINGS, type BotSettings, type ViewOnceMode, type Plugin } from "@/lib/types"
 import { formatNumber } from "@/lib/phone"
 
 interface SettingsResponse {
@@ -58,6 +63,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   const { data: logsData } = useSWR("/api/logs?limit=20", fetcher, {
     refreshInterval: 30000,
   })
+  const { data: pluginsData, mutate: mutatePlugins } = useSWR("/api/plugins", fetcher, {
+    refreshInterval: 60000,
+  })
+  const [newPluginName, setNewPluginName] = useState("")
+  const [newPluginApiUrl, setNewPluginApiUrl] = useState("")
+  const [newPluginCommand, setNewPluginCommand] = useState("")
+  const [pluginLoading, setPluginLoading] = useState(false)
 
   const [draft, setDraft] = useState<BotSettings | null>(null)
   const [saving, setSaving] = useState(false)
@@ -134,10 +146,18 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
               <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            <LogOut className="size-4" />
-            Log out
-          </Button>
+          <div className="flex gap-2">
+            <Link href="/dashboard/plugins">
+              <Button variant="outline" size="sm">
+                <Puzzle className="size-4" />
+                Plugins
+              </Button>
+            </Link>
+            <Button variant="ghost" size="sm" onClick={logout}>
+              <LogOut className="size-4" />
+              Log out
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -243,35 +263,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                 />
                 <Separator />
                 <div className="py-3 flex flex-col gap-3">
-                  <div>
-                    <Label htmlFor="statusEmojis" className="text-sm font-medium">
-                      Status reaction emojis
-                    </Label>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Comma-separated emojis used when reacting to status updates
-                    </p>
-                    <Input
-                      id="statusEmojis"
-                      value={settings.statusReactEmojis}
-                      onChange={(e) => update("statusReactEmojis", e.target.value)}
-                      placeholder="❤️,🔥,😍,👍,🎉"
-                      disabled={!settings.autoStatusReact}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="channelEmojis" className="text-sm font-medium">
-                      Channel reaction emojis
-                    </Label>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Comma-separated emojis used when reacting to your channel messages
-                    </p>
-                    <Input
-                      id="channelEmojis"
-                      value={settings.channelReactEmojis}
-                      onChange={(e) => update("channelReactEmojis", e.target.value)}
-                      placeholder="❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨"
-                    />
-                  </div>
+
                 </div>
               </CardContent>
             </Card>

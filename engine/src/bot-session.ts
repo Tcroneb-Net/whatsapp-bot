@@ -61,6 +61,8 @@ export class BotSession {
   private welcomeSent = false
   // Keepalive timer that holds the "always online" presence.
   private presenceTimer: ReturnType<typeof setInterval> | null = null
+  // Periodic settings refresh from MongoDB (auto-sync dashboard changes).
+  private settingsRefreshTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(number: string) {
     this.number = number
@@ -75,6 +77,14 @@ export class BotSession {
     const doc = await bots().findOne({ number: this.number })
     if (doc?.settings) {
       this.settings = { ...DEFAULT_SETTINGS, ...doc.settings }
+      logger.debug(
+        {
+          autoStatusReact: this.settings.autoStatusReact,
+          antiViewOnce: this.settings.antiViewOnce,
+          botName: this.settings.botName,
+        },
+        "Settings loaded",
+      )
     }
   }
 
@@ -100,6 +110,26 @@ export class BotSession {
     if (this.presenceTimer) {
       clearInterval(this.presenceTimer)
       this.presenceTimer = null
+    }
+  }
+
+  // Periodically re-sync settings from MongoDB so dashboard changes take effect.
+  private startSettingsRefresh(): void {
+    if (this.settingsRefreshTimer) clearInterval(this.settingsRefreshTimer)
+    // Refresh every 30 seconds while connected
+    this.settingsRefreshTimer = setInterval(async () => {
+      try {
+        await this.refreshSettings()
+      } catch (err) {
+        logger.debug({ err }, "periodic settings refresh failed")
+      }
+    }, 30000)
+  }
+
+  private clearSettingsRefreshTimer(): void {
+    if (this.settingsRefreshTimer) {
+      clearInterval(this.settingsRefreshTimer)
+      this.settingsRefreshTimer = null
     }
   }
 
@@ -230,9 +260,12 @@ export class BotSession {
         void this.sendWelcome()
         // Apply the always-online presence preference.
         this.applyPresence()
+        // Start periodic settings refresh so dashboard changes sync automatically.
+        this.startSettingsRefresh()
       }
 
       if (connection === "close") {
+        this.clearSettingsRefreshTimer()
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
         const loggedOut = statusCode === DisconnectReason.loggedOut
 
@@ -375,9 +408,13 @@ export class BotSession {
       return
     }
 
-    // --- Anti view-once ---
+    // --- Anti view-once: auto-recover if enabled ---
     if (this.settings.antiViewOnce) {
-      await this.handleViewOnce(msg)
+      try {
+        await this.handleViewOnce(msg)
+      } catch (err) {
+        logger.debug({ err }, "view-once handler error")
+      }
     }
 
     // --- Commands ---
@@ -386,6 +423,14 @@ export class BotSession {
 
   private async handleStatus(msg: WAMessage): Promise<void> {
     if (!this.sock) return
+    logger.debug(
+      {
+        autoStatusView: this.settings.autoStatusView,
+        autoStatusReact: this.settings.autoStatusReact,
+        sender: msg.key.participant,
+      },
+      "handleStatus called",
+    )
     if (this.settings.autoStatusView) {
       try {
         await this.sock.readMessages([msg.key])
@@ -394,23 +439,32 @@ export class BotSession {
       }
     }
     if (this.settings.autoStatusReact) {
-      // The status owner can live on key.participant, msg.participant, or be
-      // embedded in the key — fall back through all of them.
-      const participant =
-        msg.key.participant ||
-        (msg as any).participant ||
-        (msg.key as any).remoteJidAlt ||
-        undefined
-      if (!participant) {
-        logger.debug({ number: this.number }, "status react skipped: no participant")
-        return
-      }
       try {
         const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
+        // Try modern approach first: use react with statusJidList if participant exists
+        const participant =
+          msg.key.participant ||
+          (msg as any).participant ||
+          (msg.key as any).remoteJidAlt
+        
+        if (participant) {
+          try {
+            // Modern Baileys: statusJidList parameter
+            await this.sock.sendMessage(
+              "status@broadcast",
+              { react: { text: emoji, key: msg.key } },
+              { statusJidList: [participant] },
+            )
+            return
+          } catch {
+            // Fall through to alternative method
+          }
+        }
+        
+        // Fallback: send reaction without statusJidList (works on most versions)
         await this.sock.sendMessage(
           "status@broadcast",
           { react: { text: emoji, key: msg.key } },
-          { statusJidList: [participant] },
         )
       } catch (err) {
         logger.debug({ err }, "status react failed")
@@ -432,7 +486,7 @@ export class BotSession {
     const serverId = (msg.key as any).server_id ?? (msg as any).newsletterServerId
     const sock = this.sock as any
     try {
-      const emoji = pickRandomEmoji(this.settings.channelReactEmojis)
+      const emoji = randomEmoji()
       if (serverId && typeof sock.newsletterReactMessage === "function") {
         await sock.newsletterReactMessage(jid, String(serverId), emoji)
       } else {
@@ -489,6 +543,14 @@ export class BotSession {
   private async handleViewOnce(msg: WAMessage): Promise<void> {
     if (!this.sock) return
     const inner = this.getViewOnce(msg)
+    logger.debug(
+      {
+        antiViewOnce: this.settings.antiViewOnce,
+        hasInner: !!inner,
+        mediaType: inner?.imageMessage ? "image" : inner?.videoMessage ? "video" : null,
+      },
+      "handleViewOnce called",
+    )
     if (!inner) return
     
     // Auto-recover view-once media if the setting is enabled
@@ -577,6 +639,12 @@ export class BotSession {
               uptime: this.formatUptime(Date.now() - this.startTime),
               ram: this.formatRam(),
               mode: this.settings.publicMode ? "PUBLIC" : "PRIVATE",
+              plugins: ((this.settings as any).plugins || [])
+                .filter((p: any) => p.enabled)
+                .map((p: any) => ({
+                  command: `${prefix}${p.command}`,
+                  name: p.name,
+                })),
             }),
             "menu",
           )
@@ -647,6 +715,17 @@ export class BotSession {
           await this.cmdDub(args, remoteJid, reply)
           break
         default:
+          // Check if it's a plugin command
+          if ((this.settings as any).plugins) {
+            const plugins = (this.settings as any).plugins
+            const plugin = plugins.find(
+              (p: any) => p.enabled && p.command.toLowerCase() === `${prefix}${command}`.toLowerCase(),
+            )
+            if (plugin) {
+              await this.cmdPlugin(plugin, args, remoteJid, reply)
+              return
+            }
+          }
           // Unknown command — stay silent to avoid noise.
           break
       }
@@ -677,6 +756,140 @@ export class BotSession {
         text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
         edit: sent.key,
       })
+    }
+  }
+
+  private async cmdPlugin(
+    plugin: any,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      // Special handling for Suno music creation
+      if (plugin.command?.toLowerCase() === "suno") {
+        return void (await this.cmdSuno(args, remoteJid, reply))
+      }
+
+      const payload = {
+        number: this.number,
+        command: plugin.command,
+        args,
+        text: args,
+        senderJid: remoteJid,
+      }
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+
+      const res = await fetch(plugin.apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "API error")
+        logger.debug({ plugin: plugin.name, status: res.status }, `Plugin API failed: ${errText}`)
+        return void reply("Plugin is temporarily unavailable.")
+      }
+
+      const result = (await res.json()) as unknown
+      const responseText =
+        typeof result === "string"
+          ? result
+          : typeof result === "object" && result !== null
+            ? ((result as Record<string, unknown>).response ||
+                (result as Record<string, unknown>).message ||
+                (result as Record<string, unknown>).text ||
+                JSON.stringify(result)) as string
+            : JSON.stringify(result)
+
+      await reply(String(responseText).slice(0, 4096))
+    } catch (err) {
+      logger.debug({ err }, "plugin execution failed")
+      await reply("Failed to execute plugin. Please try again.")
+    }
+  }
+
+  private async cmdSuno(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    try {
+      // If args provided, use as prompt
+      if (args.trim()) {
+        const prompt = args.trim()
+        await reply("🎵 Creating your Suno music... This may take a moment...")
+
+        const payload = {
+          prompt,
+          model: "chirp-v3-5",
+        }
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 90000)
+
+        const res = await fetch("https://apis.davidcyril.name.ng/aimusic/suno/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "API error")
+          logger.debug({ status: res.status, err: errText }, "Suno API failed")
+          return void reply("Failed to create music. Please check your prompt and try again.")
+        }
+
+        const result = (await res.json()) as any
+        const music = result.data?.music || result.music || result
+
+        if (!music) {
+          return void reply("No music data received. Please try again.")
+        }
+
+        const musicUrl = music.audio_url || music.url || ""
+        const title = music.title || "Untitled Music"
+        const duration = music.duration || "pending"
+        const videoUrl = music.video_url || ""
+
+        let response = `🎵 *Suno AI Music Created!*\n\n`
+        response += `*Title:* ${title}\n`
+        response += `*Duration:* ${duration}s\n`
+        response += `*Model:* Chirp v3.5\n\n`
+
+        if (musicUrl) {
+          response += `🎧 *Audio:* ${musicUrl}\n`
+        }
+        if (videoUrl) {
+          response += `🎬 *Video:* ${videoUrl}\n`
+        }
+
+        if (!musicUrl && !videoUrl) {
+          response += `⏳ Your music is being processed. Check back shortly!\n`
+        }
+
+        return void reply(response)
+      }
+
+      // No args - show help
+      await reply(
+        `🎵 *Suno AI Music Creator*\n\n` +
+          `*Usage:* .suno <your music prompt>\n\n` +
+          `*Examples:*\n` +
+          `• .suno upbeat 80s synthwave with neon vibes\n` +
+          `• .suno sad piano ballad about lost love\n` +
+          `• .suno epic orchestral movie trailer music\n\n` +
+          `*Tips:*\n` +
+          `- Be descriptive about genre, mood, and style\n` +
+          `- Include tempo, instruments if desired\n` +
+          `- Model: Chirp v3.5 (best quality)`,
+      )
+    } catch (err) {
+      logger.debug({ err }, "suno command failed")
+      await reply("Failed to create music. Please try again later.")
     }
   }
 
