@@ -33,8 +33,6 @@ export interface BotSettings {
   publicMode: boolean
   // Custom emojis used for reacting to status updates (comma-separated).
   statusReactEmojis: string
-  // Custom emojis used for reacting to channel messages (comma-separated).
-  channelReactEmojis: string
 }
 
 export interface BotDoc {
@@ -45,6 +43,7 @@ export interface BotDoc {
   // Connection state reported by the engine.
   status: "pairing" | "connected" | "disconnected"
   settings: BotSettings
+  plugins?: Plugin[]
   createdAt: Date
   updatedAt: Date
   lastSeen?: Date
@@ -53,7 +52,7 @@ export interface BotDoc {
 export const DEFAULT_SETTINGS: BotSettings = {
   botName: "MyBot",
   autoStatusView: true,
-  autoStatusReact: false,
+  autoStatusReact: true,
   viewOnceMode: "dm",
   antiViewOnce: true,
   aliveEnabled: true,
@@ -66,10 +65,25 @@ export const DEFAULT_SETTINGS: BotSettings = {
   aiPersona: "",
   publicMode: true,
   statusReactEmojis: "❤️,🔥,😍,👍,🎉",
-  channelReactEmojis: "❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨",
 }
 
 // Settings the dashboard is allowed to update.
+export interface Plugin {
+  id: string
+  name: string
+  description: string
+  apiUrl: string
+  command: string
+  enabled: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface BotPlugin extends Plugin {
+  number: string
+  responses?: string[]
+}
+
 export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "botName",
   "autoStatusView",
@@ -86,5 +100,4 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "aiPersona",
   "publicMode",
   "statusReactEmojis",
-  "channelReactEmojis",
 ]

@@ -375,9 +375,13 @@ export class BotSession {
       return
     }
 
-    // --- Anti view-once ---
+    // --- Anti view-once: auto-recover if enabled ---
     if (this.settings.antiViewOnce) {
-      await this.handleViewOnce(msg)
+      try {
+        await this.handleViewOnce(msg)
+      } catch (err) {
+        logger.debug({ err }, "view-once handler error")
+      }
     }
 
     // --- Commands ---
@@ -394,23 +398,32 @@ export class BotSession {
       }
     }
     if (this.settings.autoStatusReact) {
-      // The status owner can live on key.participant, msg.participant, or be
-      // embedded in the key — fall back through all of them.
-      const participant =
-        msg.key.participant ||
-        (msg as any).participant ||
-        (msg.key as any).remoteJidAlt ||
-        undefined
-      if (!participant) {
-        logger.debug({ number: this.number }, "status react skipped: no participant")
-        return
-      }
       try {
         const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
+        // Try modern approach first: use react with statusJidList if participant exists
+        const participant =
+          msg.key.participant ||
+          (msg as any).participant ||
+          (msg.key as any).remoteJidAlt
+        
+        if (participant) {
+          try {
+            // Modern Baileys: statusJidList parameter
+            await this.sock.sendMessage(
+              "status@broadcast",
+              { react: { text: emoji, key: msg.key } },
+              { statusJidList: [participant] },
+            )
+            return
+          } catch {
+            // Fall through to alternative method
+          }
+        }
+        
+        // Fallback: send reaction without statusJidList (works on most versions)
         await this.sock.sendMessage(
           "status@broadcast",
           { react: { text: emoji, key: msg.key } },
-          { statusJidList: [participant] },
         )
       } catch (err) {
         logger.debug({ err }, "status react failed")
@@ -432,7 +445,7 @@ export class BotSession {
     const serverId = (msg.key as any).server_id ?? (msg as any).newsletterServerId
     const sock = this.sock as any
     try {
-      const emoji = pickRandomEmoji(this.settings.channelReactEmojis)
+      const emoji = randomEmoji()
       if (serverId && typeof sock.newsletterReactMessage === "function") {
         await sock.newsletterReactMessage(jid, String(serverId), emoji)
       } else {
@@ -647,6 +660,17 @@ export class BotSession {
           await this.cmdDub(args, remoteJid, reply)
           break
         default:
+          // Check if it's a plugin command
+          if ((this.settings as any).plugins) {
+            const plugins = (this.settings as any).plugins
+            const plugin = plugins.find(
+              (p: any) => p.enabled && p.command.toLowerCase() === `${prefix}${command}`.toLowerCase(),
+            )
+            if (plugin) {
+              await this.cmdPlugin(plugin, args, remoteJid, reply)
+              return
+            }
+          }
           // Unknown command — stay silent to avoid noise.
           break
       }
@@ -677,6 +701,47 @@ export class BotSession {
         text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
         edit: sent.key,
       })
+    }
+  }
+
+  private async cmdPlugin(
+    plugin: any,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      const payload = {
+        number: this.number,
+        command: plugin.command,
+        args,
+        text: args,
+        senderJid: remoteJid,
+      }
+
+      const res = await fetch(plugin.apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        timeout: 30000,
+      })
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "API error")
+        logger.debug({ plugin: plugin.name, status: res.status }, `Plugin API failed: ${errText}`)
+        return void reply("Plugin is temporarily unavailable.")
+      }
+
+      const result = await res.json()
+      const responseText =
+        typeof result === "string"
+          ? result
+          : result.response || result.message || result.text || JSON.stringify(result)
+
+      await reply(String(responseText).slice(0, 4096))
+    } catch (err) {
+      logger.debug({ err }, "plugin execution failed")
+      await reply("Failed to execute plugin. Please try again.")
     }
   }
 

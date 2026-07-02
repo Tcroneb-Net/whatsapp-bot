@@ -19,7 +19,6 @@ export interface BotSettings {
   aiPersona: string
   publicMode: boolean
   statusReactEmojis: string
-  channelReactEmojis: string
 }
 
 export interface BotDoc {
@@ -35,7 +34,7 @@ export interface BotDoc {
 export const DEFAULT_SETTINGS: BotSettings = {
   botName: "MyBot",
   autoStatusView: true,
-  autoStatusReact: false,
+  autoStatusReact: true,
   viewOnceMode: "dm",
   antiViewOnce: true,
   aliveEnabled: true,
@@ -48,5 +47,4 @@ export const DEFAULT_SETTINGS: BotSettings = {
   aiPersona: "",
   publicMode: true,
   statusReactEmojis: "❤️,🔥,😍,👍,🎉",
-  channelReactEmojis: "❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨",
 }

@@ -52,7 +52,7 @@ export async function PATCH(req: Request) {
       update["settings.prefix"] = p
     } else if (key === "viewOnceMode") {
       if (value === "same" || value === "dm") update["settings.viewOnceMode"] = value
-    } else if (key === "statusReactEmojis" || key === "channelReactEmojis") {
+    } else if (key === "statusReactEmojis") {
       // Validate emoji list: comma-separated, non-empty
       if (typeof value !== "string") continue
       const emojis = value

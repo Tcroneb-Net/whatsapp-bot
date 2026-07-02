@@ -11,6 +11,18 @@ export interface ViewOnceLogDoc {
   recovered: boolean
 }
 
+export interface PluginDoc {
+  number: string
+  id: string
+  name: string
+  description: string
+  apiUrl: string
+  command: string
+  enabled: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
 const uri = process.env.MONGODB_URI
 const dbName = process.env.MONGODB_DB || "whatsapp_bot"
 
@@ -58,5 +70,13 @@ export async function getViewOnceLogs(): Promise<Collection<ViewOnceLogDoc>> {
   const db = await getDb()
   const collection = db.collection<ViewOnceLogDoc>("viewonce_logs")
   await collection.createIndex({ number: 1, timestamp: -1 })
+  return collection
+}
+
+export async function getPlugins(): Promise<Collection<PluginDoc>> {
+  const db = await getDb()
+  const collection = db.collection<PluginDoc>("plugins")
+  await collection.createIndex({ number: 1 })
+  await collection.createIndex({ number: 1, command: 1 }, { unique: true })
   return collection
 }
