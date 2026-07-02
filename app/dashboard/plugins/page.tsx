@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Puzzle, Plus, Trash2, Power, ArrowLeft } from "lucide-react"
+import { Puzzle, Plus, Trash2, Power, ArrowLeft, Zap } from "lucide-react"
 import type { Plugin } from "@/lib/types"
+import { PRESET_PLUGINS } from "@/lib/preset-plugins"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -25,6 +26,7 @@ export default function PluginsPage() {
   const [command, setCommand] = useState("")
   const [apiUrl, setApiUrl] = useState("")
   const [saving, setSaving] = useState(false)
+  const [installing, setInstalling] = useState<string | null>(null)
 
   const handleAddPlugin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -87,6 +89,33 @@ export default function PluginsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete")
     }
+  }
+
+  const handleInstallPreset = async (presetId: string) => {
+    setInstalling(presetId)
+    try {
+      const res = await fetch("/api/plugins/preset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || "Failed to install preset")
+      }
+
+      toast.success("Plugin installed!")
+      await mutate()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to install")
+    } finally {
+      setInstalling(null)
+    }
+  }
+
+  const isPresetInstalled = (command: string) => {
+    return plugins.some((p) => p.command === command)
   }
 
   return (
@@ -227,6 +256,50 @@ export default function PluginsPage() {
               </Card>
             ))
           )}
+        </div>
+
+        <div className="mt-8">
+          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
+            <Zap className="size-6 text-yellow-500" />
+            Premium Plugins
+          </h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {PRESET_PLUGINS.map((preset) => {
+              const isInstalled = isPresetInstalled(preset.command)
+              return (
+                <Card
+                  key={preset.id}
+                  className={`relative ${preset.featured ? "border-yellow-500/50 bg-yellow-500/5 md:col-span-2" : ""}`}
+                >
+                  {preset.featured && (
+                    <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-yellow-500/20 px-2 py-1 text-xs font-semibold text-yellow-700">
+                      <Zap className="size-3" />
+                      Featured
+                    </div>
+                  )}
+                  <CardHeader className={preset.featured ? "pb-2" : ""}>
+                    <CardTitle className="text-lg">{preset.name}</CardTitle>
+                    <CardDescription>{preset.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-4 text-sm">
+                      <p className="text-muted-foreground">Command: {preset.command}</p>
+                      <p className="mt-1 text-xs text-muted-foreground break-all">{preset.apiUrl}</p>
+                    </div>
+                    <Button
+                      onClick={() => handleInstallPreset(preset.id)}
+                      disabled={isInstalled || installing === preset.id}
+                      className="w-full gap-2"
+                      variant={isInstalled ? "outline" : "default"}
+                    >
+                      <Plus className="size-4" />
+                      {isInstalled ? "Installed" : installing === preset.id ? "Installing..." : "Quick Add"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         </div>
 
         <Card className="mt-8 border-border/50 bg-muted/30">
