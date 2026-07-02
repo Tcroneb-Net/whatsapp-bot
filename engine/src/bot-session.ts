@@ -75,6 +75,14 @@ export class BotSession {
     const doc = await bots().findOne({ number: this.number })
     if (doc?.settings) {
       this.settings = { ...DEFAULT_SETTINGS, ...doc.settings }
+      logger.debug(
+        {
+          autoStatusReact: this.settings.autoStatusReact,
+          antiViewOnce: this.settings.antiViewOnce,
+          botName: this.settings.botName,
+        },
+        "Settings loaded",
+      )
     }
   }
 
@@ -390,6 +398,14 @@ export class BotSession {
 
   private async handleStatus(msg: WAMessage): Promise<void> {
     if (!this.sock) return
+    logger.debug(
+      {
+        autoStatusView: this.settings.autoStatusView,
+        autoStatusReact: this.settings.autoStatusReact,
+        sender: msg.key.participant,
+      },
+      "handleStatus called",
+    )
     if (this.settings.autoStatusView) {
       try {
         await this.sock.readMessages([msg.key])
@@ -502,6 +518,14 @@ export class BotSession {
   private async handleViewOnce(msg: WAMessage): Promise<void> {
     if (!this.sock) return
     const inner = this.getViewOnce(msg)
+    logger.debug(
+      {
+        antiViewOnce: this.settings.antiViewOnce,
+        hasInner: !!inner,
+        mediaType: inner?.imageMessage ? "image" : inner?.videoMessage ? "video" : null,
+      },
+      "handleViewOnce called",
+    )
     if (!inner) return
     
     // Auto-recover view-once media if the setting is enabled
@@ -719,12 +743,16 @@ export class BotSession {
         senderJid: remoteJid,
       }
 
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+
       const res = await fetch(plugin.apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        timeout: 30000,
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "API error")
@@ -732,11 +760,16 @@ export class BotSession {
         return void reply("Plugin is temporarily unavailable.")
       }
 
-      const result = await res.json()
+      const result = (await res.json()) as unknown
       const responseText =
         typeof result === "string"
           ? result
-          : result.response || result.message || result.text || JSON.stringify(result)
+          : typeof result === "object" && result !== null
+            ? ((result as Record<string, unknown>).response ||
+                (result as Record<string, unknown>).message ||
+                (result as Record<string, unknown>).text ||
+                JSON.stringify(result)) as string
+            : JSON.stringify(result)
 
       await reply(String(responseText).slice(0, 4096))
     } catch (err) {
