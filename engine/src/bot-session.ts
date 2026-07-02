@@ -642,8 +642,9 @@ export class BotSession {
               plugins: ((this.settings as any).plugins || [])
                 .filter((p: any) => p.enabled)
                 .map((p: any) => ({
-                  command: `${prefix}${p.command}`,
+                  command: p.command,
                   name: p.name,
+                  category: p.category,
                 })),
             }),
             "menu",

@@ -75,6 +75,7 @@ export interface Plugin {
   apiUrl: string
   command: string
   enabled: boolean
+  category?: "downloader" | "music" | "social" | "ai" | "tools" | "other"
   createdAt: Date
   updatedAt: Date
 }
