@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
+import { format } from "date-fns"
 import {
   Bot,
   Eye,
@@ -21,6 +22,8 @@ import {
   Wifi,
   Keyboard,
   BrainCircuit,
+  Clock,
+  FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -51,6 +54,9 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   const router = useRouter()
   const { data, isLoading, mutate } = useSWR<SettingsResponse>("/api/settings", fetcher, {
     refreshInterval: 15000,
+  })
+  const { data: logsData } = useSWR("/api/logs?limit=20", fetcher, {
+    refreshInterval: 30000,
   })
 
   const [draft, setDraft] = useState<BotSettings | null>(null)
@@ -451,6 +457,42 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                     <Trash2 className="size-4" />
                     Delete my session
                   </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Logs & History */}
+            <Card className="border-border/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Clock className="size-5 text-primary" />
+                  Activity log
+                </CardTitle>
+                <CardDescription>Recently recovered view-once media and bot events.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!logsData?.logs || logsData.logs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No activity yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {logsData.logs.map((log: any, i: number) => (
+                      <div key={i} className="flex items-start gap-3 rounded-lg border border-border/50 p-3">
+                        <FileText className="mt-0.5 size-4 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">
+                            {log.mediaType === "image" ? "📷" : "🎥"} {log.mediaType} from{" "}
+                            <code className="text-xs">{log.sender.split("@")[0]}</code>
+                          </p>
+                          {log.caption && (
+                            <p className="text-xs text-muted-foreground line-clamp-1">{log.caption}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(log.timestamp), "MMM d, HH:mm:ss")}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
