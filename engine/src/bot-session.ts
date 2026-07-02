@@ -61,6 +61,8 @@ export class BotSession {
   private welcomeSent = false
   // Keepalive timer that holds the "always online" presence.
   private presenceTimer: ReturnType<typeof setInterval> | null = null
+  // Periodic settings refresh from MongoDB (auto-sync dashboard changes).
+  private settingsRefreshTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(number: string) {
     this.number = number
@@ -108,6 +110,26 @@ export class BotSession {
     if (this.presenceTimer) {
       clearInterval(this.presenceTimer)
       this.presenceTimer = null
+    }
+  }
+
+  // Periodically re-sync settings from MongoDB so dashboard changes take effect.
+  private startSettingsRefresh(): void {
+    if (this.settingsRefreshTimer) clearInterval(this.settingsRefreshTimer)
+    // Refresh every 30 seconds while connected
+    this.settingsRefreshTimer = setInterval(async () => {
+      try {
+        await this.refreshSettings()
+      } catch (err) {
+        logger.debug({ err }, "periodic settings refresh failed")
+      }
+    }, 30000)
+  }
+
+  private clearSettingsRefreshTimer(): void {
+    if (this.settingsRefreshTimer) {
+      clearInterval(this.settingsRefreshTimer)
+      this.settingsRefreshTimer = null
     }
   }
 
@@ -238,9 +260,12 @@ export class BotSession {
         void this.sendWelcome()
         // Apply the always-online presence preference.
         this.applyPresence()
+        // Start periodic settings refresh so dashboard changes sync automatically.
+        this.startSettingsRefresh()
       }
 
       if (connection === "close") {
+        this.clearSettingsRefreshTimer()
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
         const loggedOut = statusCode === DisconnectReason.loggedOut
 
