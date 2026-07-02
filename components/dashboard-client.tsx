@@ -5,29 +5,31 @@ import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { format } from "date-fns"
 import {
-  Bot,
   Eye,
   EyeOff,
-  ShieldCheck,
-  Activity,
-  Radio,
-  LogOut,
-  Trash2,
-  Loader2,
-  Save,
-  Circle,
-  Sparkles,
   Heart,
-  ImageIcon,
-  Wifi,
+  ShieldCheck,
+  Circle,
   Keyboard,
+  Radio,
+  Activity,
+  LogOut,
+  Zap,
+  Settings,
+  Wifi,
   BrainCircuit,
   Clock,
   FileText,
   Puzzle,
   Plus,
-  Zap,
+  Bot,
+  Loader2,
+  ImageIcon,
+  Sparkles,
+  Trash2,
+  Save,
 } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -39,7 +41,6 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { DEFAULT_SETTINGS, type BotSettings, type ViewOnceMode, type Plugin } from "@/lib/types"
 import { formatNumber } from "@/lib/phone"
-import { PluginsManager } from "./plugins-manager"
 
 interface SettingsResponse {
   number: string
@@ -145,10 +146,18 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
               <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            <LogOut className="size-4" />
-            Log out
-          </Button>
+          <div className="flex gap-2">
+            <Link href="/dashboard/plugins">
+              <Button variant="outline" size="sm">
+                <Puzzle className="size-4" />
+                Plugins
+              </Button>
+            </Link>
+            <Button variant="ghost" size="sm" onClick={logout}>
+              <LogOut className="size-4" />
+              Log out
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -402,9 +411,6 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                 />
               </CardContent>
             </Card>
-
-            {/* Plugins */}
-            <PluginsManager />
 
             {/* Danger zone */}
             <Card className="border-destructive/40">
