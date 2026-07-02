@@ -715,6 +715,27 @@ export class BotSession {
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
           break
+        case "gstatus":
+          await this.cmdGroupStatus(msg, args, remoteJid, reply)
+          break
+        case "gaccept":
+          await this.cmdAcceptJoinRequests(msg, remoteJid, reply)
+          break
+        case "gkick":
+          await this.cmdGroupKick(msg, args, remoteJid, reply)
+          break
+        case "glink":
+          await this.cmdGroupLink(msg, remoteJid, reply)
+          break
+        case "gclose":
+          await this.cmdGroupClose(msg, args, remoteJid, reply)
+          break
+        case "gopen":
+          await this.cmdGroupOpen(msg, args, remoteJid, reply)
+          break
+        case "gpoll":
+          await this.cmdGroupPoll(msg, args, remoteJid, reply)
+          break
         default:
           // Check if it's a plugin command
           if ((this.settings as any).plugins) {
@@ -1269,5 +1290,230 @@ export class BotSession {
     }
     this.sock = null
     await clearMongoAuthState(this.number)
+  }
+
+  private async cmdGroupStatus(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      const statusText = args || "Status set by bot"
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+
+      if (groupMetadata.owner !== this.sock.user?.id && !groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin) {
+        return void reply("You must be admin to set group status.")
+      }
+
+      await this.sock.groupUpdateDescription(remoteJid, statusText)
+      await reply(`✓ Group status updated to: ${statusText}`)
+    } catch (err) {
+      logger.debug({ err }, "group status failed")
+      await reply("Failed to update group status. Make sure bot is admin.")
+    }
+  }
+
+  private async cmdAcceptJoinRequests(
+    msg: WAMessage,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const pendingRequests = (groupMetadata as any).pendingParticipants || []
+
+      if (pendingRequests.length === 0) {
+        return void reply("No pending join requests.")
+      }
+
+      for (const participant of pendingRequests) {
+        try {
+          await this.sock.groupParticipantsUpdate(remoteJid, [participant], "add")
+        } catch (e) {
+          logger.debug({ err: e }, "failed to approve request")
+        }
+      }
+
+      await reply(`✓ Accepted ${pendingRequests.length} pending join request(s)`)
+    } catch (err) {
+      logger.debug({ err }, "accept join requests failed")
+      await reply("Failed to accept join requests.")
+    }
+  }
+
+  private async cmdGroupKick(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const isAdmin = groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
+
+      if (!isAdmin) {
+        return void reply("Bot must be admin to kick users.")
+      }
+
+      const mentions = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || []
+      if (mentions.length === 0) {
+        return void reply("Reply to a message or mention users to kick.")
+      }
+
+      const toKick = mentions.filter((jid) => {
+        const p = groupMetadata.participants.find((x) => x.id === jid)
+        return p && !p.isAdmin
+      })
+
+      if (toKick.length === 0) {
+        return void reply("No non-admin users to kick.")
+      }
+
+      await this.sock.groupParticipantsUpdate(remoteJid, toKick, "remove")
+      await reply(`✓ Kicked ${toKick.length} user(s)`)
+    } catch (err) {
+      logger.debug({ err }, "group kick failed")
+      await reply("Failed to kick user(s).")
+    }
+  }
+
+  private async cmdGroupLink(msg: WAMessage, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      const code = await this.sock.groupInviteCode(remoteJid)
+      const link = `https://chat.whatsapp.com/${code}`
+      await reply(`Group Link:\n${link}`)
+    } catch (err) {
+      logger.debug({ err }, "get group link failed")
+      await reply("Failed to get group link.")
+    }
+  }
+
+  private async cmdGroupClose(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    if (!args) {
+      return void reply("Usage: gclose <minutes>\n\nExample: gclose 60")
+    }
+
+    try {
+      const minutes = parseInt(args)
+      if (isNaN(minutes) || minutes < 1) {
+        return void reply("Please provide a valid number of minutes.")
+      }
+
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const isAdmin = groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
+
+      if (!isAdmin) {
+        return void reply("Bot must be admin to close the group.")
+      }
+
+      await this.sock.groupSettingUpdate(remoteJid, "not_announcement")
+      setTimeout(async () => {
+        try {
+          await this.sock?.groupSettingUpdate(remoteJid, "announcement")
+          await this.sock?.sendMessage(remoteJid, { text: "Group is now closed." })
+        } catch (e) {
+          logger.debug({ err: e }, "group close timeout failed")
+        }
+      }, minutes * 60 * 1000)
+
+      await reply(`✓ Group will auto-close in ${minutes} minutes`)
+    } catch (err) {
+      logger.debug({ err }, "group close failed")
+      await reply("Failed to schedule group close.")
+    }
+  }
+
+  private async cmdGroupOpen(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const isAdmin = groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
+
+      if (!isAdmin) {
+        return void reply("Bot must be admin to open the group.")
+      }
+
+      await this.sock.groupSettingUpdate(remoteJid, "not_announcement")
+      await reply("✓ Group is now open for messages")
+    } catch (err) {
+      logger.debug({ err }, "group open failed")
+      await reply("Failed to open group.")
+    }
+  }
+
+  private async cmdGroupPoll(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!args) {
+      return void reply(
+        `Usage: gpoll <title> | <option1> | <option2> | ...\n\n` +
+          `Example: gpoll What should we do? | Play Games | Watch Movie | Study`,
+      )
+    }
+
+    if (!this.sock) return
+
+    try {
+      const parts = args.split("|").map((s) => s.trim())
+      const title = parts[0]
+      const options = parts.slice(1)
+
+      if (options.length < 2) {
+        return void reply("Poll needs at least 2 options.")
+      }
+
+      if (options.length > 4) {
+        return void reply("Poll can have maximum 4 options.")
+      }
+
+      await this.sock.sendMessage(remoteJid, {
+        poll: {
+          name: title,
+          values: options,
+        },
+      })
+
+      await reply(`✓ Poll created: "${title}"`)
+    } catch (err) {
+      logger.debug({ err }, "group poll failed")
+      await reply("Failed to create poll.")
+    }
   }
 }
