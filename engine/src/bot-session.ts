@@ -766,6 +766,11 @@ export class BotSession {
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
     try {
+      // Special handling for Suno music creation
+      if (plugin.command?.toLowerCase() === "suno") {
+        return void (await this.cmdSuno(args, remoteJid, reply))
+      }
+
       const payload = {
         number: this.number,
         command: plugin.command,
@@ -806,6 +811,85 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "plugin execution failed")
       await reply("Failed to execute plugin. Please try again.")
+    }
+  }
+
+  private async cmdSuno(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    try {
+      // If args provided, use as prompt
+      if (args.trim()) {
+        const prompt = args.trim()
+        await reply("🎵 Creating your Suno music... This may take a moment...")
+
+        const payload = {
+          prompt,
+          model: "chirp-v3-5",
+        }
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 90000)
+
+        const res = await fetch("https://apis.davidcyril.name.ng/aimusic/suno/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "API error")
+          logger.debug({ status: res.status, err: errText }, "Suno API failed")
+          return void reply("Failed to create music. Please check your prompt and try again.")
+        }
+
+        const result = (await res.json()) as any
+        const music = result.data?.music || result.music || result
+
+        if (!music) {
+          return void reply("No music data received. Please try again.")
+        }
+
+        const musicUrl = music.audio_url || music.url || ""
+        const title = music.title || "Untitled Music"
+        const duration = music.duration || "pending"
+        const videoUrl = music.video_url || ""
+
+        let response = `🎵 *Suno AI Music Created!*\n\n`
+        response += `*Title:* ${title}\n`
+        response += `*Duration:* ${duration}s\n`
+        response += `*Model:* Chirp v3.5\n\n`
+
+        if (musicUrl) {
+          response += `🎧 *Audio:* ${musicUrl}\n`
+        }
+        if (videoUrl) {
+          response += `🎬 *Video:* ${videoUrl}\n`
+        }
+
+        if (!musicUrl && !videoUrl) {
+          response += `⏳ Your music is being processed. Check back shortly!\n`
+        }
+
+        return void reply(response)
+      }
+
+      // No args - show help
+      await reply(
+        `🎵 *Suno AI Music Creator*\n\n` +
+          `*Usage:* .suno <your music prompt>\n\n` +
+          `*Examples:*\n` +
+          `• .suno upbeat 80s synthwave with neon vibes\n` +
+          `• .suno sad piano ballad about lost love\n` +
+          `• .suno epic orchestral movie trailer music\n\n` +
+          `*Tips:*\n` +
+          `- Be descriptive about genre, mood, and style\n` +
+          `- Include tempo, instruments if desired\n` +
+          `- Model: Chirp v3.5 (best quality)`,
+      )
+    } catch (err) {
+      logger.debug({ err }, "suno command failed")
+      await reply("Failed to create music. Please try again later.")
     }
   }
 
