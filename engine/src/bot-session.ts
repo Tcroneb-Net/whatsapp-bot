@@ -639,6 +639,12 @@ export class BotSession {
               uptime: this.formatUptime(Date.now() - this.startTime),
               ram: this.formatRam(),
               mode: this.settings.publicMode ? "PUBLIC" : "PRIVATE",
+              plugins: ((this.settings as any).plugins || [])
+                .filter((p: any) => p.enabled)
+                .map((p: any) => ({
+                  command: `${prefix}${p.command}`,
+                  name: p.name,
+                })),
             }),
             "menu",
           )

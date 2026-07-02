@@ -49,11 +49,12 @@ export function welcomeMessage(opts: {
 export function menuMessage(
   botName: string,
   prefix: string,
-  meta?: { uptime?: string; ram?: string; mode?: string },
+  meta?: { uptime?: string; ram?: string; mode?: string; plugins?: Array<{ command: string; name: string; enabled?: boolean }> },
 ): string {
   const uptime = meta?.uptime || "0s"
   const ram = meta?.ram || "—"
   const mode = meta?.mode || "PUBLIC"
+  const plugins = meta?.plugins || []
 
   const header =
     `╭━〔 ☬ PREMIUM BOT ☬ 〕━⬣\n` +
@@ -98,6 +99,11 @@ export function menuMessage(
     `${prefix}public — Everyone can use`,
   ])
 
+  const pluginItems = plugins
+    .filter((p) => p.enabled !== false)
+    .map((p) => `${p.command} — ${p.name}`)
+  const pluginsSection = pluginItems.length > 0 ? section("🔌 CUSTOM PLUGINS", pluginItems) : ""
+
   const credits =
     `╭━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `┃   Fast • Smooth • Powerful\n` +
@@ -107,7 +113,11 @@ export function menuMessage(
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `> ☬ *${botName.toUpperCase()}* ☬`
 
-  return [header, general, downloads, search, translate, ai, tools, owner, credits].join("\n\n")
+  const sections = [header, general, downloads, search, translate, ai, tools, owner]
+  if (pluginsSection) sections.push(pluginsSection)
+  sections.push(credits)
+
+  return sections.join("\n\n")
 }
 
 // Format raw lyrics into a clean, spaced, verse-separated layout with a header.
