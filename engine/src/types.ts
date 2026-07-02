@@ -18,6 +18,8 @@ export interface BotSettings {
   autoTyping: boolean
   aiPersona: string
   publicMode: boolean
+  statusReactEmojis: string
+  channelReactEmojis: string
 }
 
 export interface BotDoc {
@@ -45,4 +47,6 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoTyping: false,
   aiPersona: "",
   publicMode: true,
+  statusReactEmojis: "❤️,🔥,😍,👍,🎉",
+  channelReactEmojis: "❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨",
 }

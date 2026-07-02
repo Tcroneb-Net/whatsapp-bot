@@ -28,9 +28,9 @@ const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Brow
 import bcrypt from "bcryptjs"
 import os from "os"
 import { readFile } from "fs/promises"
-import { config, bannerUrl, bannerFilePath, randomEmoji, type BannerCategory } from "./config.js"
+import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
-import { bots } from "./db.js"
+import { bots, viewOnceLogs } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
@@ -406,9 +406,10 @@ export class BotSession {
         return
       }
       try {
+        const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
         await this.sock.sendMessage(
           "status@broadcast",
-          { react: { text: randomEmoji(), key: msg.key } },
+          { react: { text: emoji, key: msg.key } },
           { statusJidList: [participant] },
         )
       } catch (err) {
@@ -421,16 +422,22 @@ export class BotSession {
     if (!this.sock) return
     const jid = msg.key.remoteJid
     if (!jid) return
+    
+    // Only auto-react on the configured channel (the owner's channel), not on
+    // other random channels the bot may have been added to.
+    if (!config.channelJid || jid !== config.channelJid) return
+    
     // Newsletter (channel) reactions require the message's server_id and the
     // dedicated newsletterReactMessage API — the normal `react` does not work.
     const serverId = (msg.key as any).server_id ?? (msg as any).newsletterServerId
     const sock = this.sock as any
     try {
+      const emoji = pickRandomEmoji(this.settings.channelReactEmojis)
       if (serverId && typeof sock.newsletterReactMessage === "function") {
-        await sock.newsletterReactMessage(jid, String(serverId), randomEmoji())
+        await sock.newsletterReactMessage(jid, String(serverId), emoji)
       } else {
         // Fallback for builds without the helper.
-        await this.sock.sendMessage(jid, { react: { text: randomEmoji(), key: msg.key } })
+        await this.sock.sendMessage(jid, { react: { text: emoji, key: msg.key } })
       }
     } catch (err) {
       logger.debug({ err }, "channel react failed")
@@ -483,6 +490,9 @@ export class BotSession {
     if (!this.sock) return
     const inner = this.getViewOnce(msg)
     if (!inner) return
+    
+    // Auto-recover view-once media if the setting is enabled
+    if (!this.settings.antiViewOnce) return
 
     // Destination: same chat the message came from, or the bot's own DM.
     // ownJid() normalizes the device-suffixed id (e.g. "123:6@...").
@@ -491,7 +501,27 @@ export class BotSession {
       this.settings.viewOnceMode === "dm" && selfJid ? selfJid : msg.key.remoteJid!
 
     try {
-      await this.recoverViewOnce(inner, msg.key, destination)
+      const mediaType = inner.imageMessage ? "image" : inner.videoMessage ? "video" : null
+      const caption = inner.imageMessage?.caption || inner.videoMessage?.caption || ""
+      const sender = msg.key.participant || msg.key.remoteJid || "unknown"
+      
+      const ok = await this.recoverViewOnce(inner, msg.key, destination)
+      
+      // Log the recovered media to the dashboard
+      if (ok && (mediaType === "image" || mediaType === "video")) {
+        try {
+          await viewOnceLogs().insertOne({
+            number: this.number,
+            timestamp: new Date(),
+            mediaType,
+            sender,
+            caption: caption || undefined,
+            recovered: true,
+          })
+        } catch (logErr) {
+          logger.debug({ logErr }, "failed to log recovered view-once")
+        }
+      }
     } catch (err) {
       logger.debug({ err }, "view-once recovery failed")
     }
@@ -535,6 +565,9 @@ export class BotSession {
           break
         case "ping":
           if (this.settings.pingEnabled) await this.cmdPing(remoteJid, msg)
+          break
+        case "status":
+          await this.cmdStatus(remoteJid, msg)
           break
         case "menu":
         case "help":
@@ -645,6 +678,25 @@ export class BotSession {
         edit: sent.key,
       })
     }
+  }
+
+  private async cmdStatus(remoteJid: string, msg: WAMessage): Promise<void> {
+    const s = this.settings
+    const status =
+      `📊 *${this.settings.botName.toUpperCase()} STATUS*\n\n` +
+      `*Features:*\n` +
+      `✓ Alive: ${s.aliveEnabled ? "ON" : "OFF"}\n` +
+      `✓ Ping: ${s.pingEnabled ? "ON" : "OFF"}\n` +
+      `✓ AI: ${s.aiEnabled ? "ON" : "OFF"}\n` +
+      `✓ Status view: ${s.autoStatusView ? "ON" : "OFF"}\n` +
+      `✓ Status react: ${s.autoStatusReact ? "ON" : "OFF"}\n` +
+      `✓ View-once save: ${s.antiViewOnce ? "ON" : "OFF"}\n\n` +
+      `*Settings:*\n` +
+      `⚙️ Mode: ${s.publicMode ? "PUBLIC" : "PRIVATE"}\n` +
+      `⚙️ Always online: ${s.alwaysOnline ? "ON" : "OFF"}\n` +
+      `⚙️ Auto typing: ${s.autoTyping ? "ON" : "OFF"}\n` +
+      `⚙️ Prefix: ${s.prefix}`
+    await this.sock!.sendMessage(remoteJid, { text: status }, { quoted: msg })
   }
 
   // Owner-only: reset and reveal a fresh dashboard password.

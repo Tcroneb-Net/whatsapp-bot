@@ -75,7 +75,17 @@ export function bannerFilePath(category: BannerCategory): string | null {
   return null
 }
 
-// Pick a random reaction emoji from the configured pool.
+// Pick a random reaction emoji from a comma-separated list, falling back to defaults.
+export function pickRandomEmoji(emojiList: string): string {
+  const emojis = emojiList
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean)
+  if (!emojis.length) return "❤️"
+  return emojis[Math.floor(Math.random() * emojis.length)]
+}
+
+// Pick a random reaction emoji from the global configured pool (legacy).
 export function randomEmoji(): string {
   const pool = config.reactEmojis.length ? config.reactEmojis : ["❤️"]
   return pool[Math.floor(Math.random() * pool.length)]
