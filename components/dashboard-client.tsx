@@ -28,6 +28,7 @@ import {
   Sparkles,
   Trash2,
   Save,
+  Smile,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -76,12 +77,27 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
+  const EMOJI_SUGGESTIONS = ["❤️", "🔥", "😍", "👍", "🎉", "😂", "🤔", "👏", "🙌", "✨", "💯", "🚀", "😍", "🤩"]
+
   const settings = draft ?? data?.settings ?? DEFAULT_SETTINGS
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(data?.settings)
 
   function update<K extends keyof BotSettings>(key: K, value: BotSettings[K]) {
     const base = draft ?? data?.settings ?? DEFAULT_SETTINGS
     setDraft({ ...base, [key]: value })
+  }
+
+  function toggleEmoji(emoji: string) {
+    const currentEmojis = settings.statusReactEmojis.split(",")
+    let newEmojis: string[]
+
+    if (currentEmojis.includes(emoji)) {
+      newEmojis = currentEmojis.filter((e) => e !== emoji)
+    } else {
+      newEmojis = [...currentEmojis, emoji]
+    }
+
+    update("statusReactEmojis", newEmojis.join(","))
   }
 
   async function save() {
@@ -163,12 +179,25 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
 
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-8">
         {/* Status card */}
-        <Card className="border-border/80 bg-gradient-to-r from-primary/5 to-primary/2 shadow-sm hover:shadow-md transition-shadow">
+        <Card className={`border-2 shadow-sm transition-all duration-500 animate-fade-in-up ${
+          data?.status === "connected"
+            ? "border-primary/50 bg-gradient-to-r from-primary/10 to-primary/5 shadow-lg hover:shadow-xl hover:border-primary"
+            : "border-border/80 bg-gradient-to-r from-primary/5 to-primary/2 hover:shadow-md"
+        }`}>
           <CardContent className="flex items-center justify-between pt-6">
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Connection Status</span>
               <span className={`flex items-center gap-2 font-bold text-lg ${statusConfig.color}`}>
-                <Circle className="size-3 fill-current animate-pulse" />
+                {data?.status === "connected" ? (
+                  <>
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                    </span>
+                  </>
+                ) : (
+                  <Circle className="size-3 fill-current animate-pulse" />
+                )}
                 {statusConfig.label}
               </span>
             </div>
@@ -188,7 +217,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         ) : (
           <>
             {/* Identity */}
-            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow animate-fade-in-up" style={{animationDelay: '0.1s'}}>
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
@@ -269,9 +298,36 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   onChange={(v) => update("autoStatusReact", v)}
                 />
                 <Separator />
-                <div className="py-3 flex flex-col gap-3">
-
-                </div>
+                {settings.autoStatusReact && (
+                  <div className="py-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <Smile className="size-4 text-primary" />
+                      <Label className="text-sm font-medium">Reaction emojis</Label>
+                    </div>
+                    <div className="grid grid-cols-7 gap-2">
+                      {EMOJI_SUGGESTIONS.map((emoji) => {
+                        const isSelected = settings.statusReactEmojis.includes(emoji)
+                        return (
+                          <button
+                            key={emoji}
+                            onClick={() => toggleEmoji(emoji)}
+                            className={`flex items-center justify-center h-10 text-lg rounded-lg transition-all duration-200 ${
+                              isSelected
+                                ? "bg-primary/20 border-2 border-primary ring-2 ring-primary/50 scale-110 shadow-md"
+                                : "bg-muted hover:bg-muted/80 border border-border hover:border-primary/50"
+                            }`}
+                            title={`Toggle ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Selected: {settings.statusReactEmojis.split(",").filter((e) => e).join(", ") || "None"}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
