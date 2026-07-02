@@ -235,6 +235,38 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   checked={settings.autoStatusReact}
                   onChange={(v) => update("autoStatusReact", v)}
                 />
+                <Separator />
+                <div className="py-3 flex flex-col gap-3">
+                  <div>
+                    <Label htmlFor="statusEmojis" className="text-sm font-medium">
+                      Status reaction emojis
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Comma-separated emojis used when reacting to status updates
+                    </p>
+                    <Input
+                      id="statusEmojis"
+                      value={settings.statusReactEmojis}
+                      onChange={(e) => update("statusReactEmojis", e.target.value)}
+                      placeholder="❤️,🔥,😍,👍,🎉"
+                      disabled={!settings.autoStatusReact}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="channelEmojis" className="text-sm font-medium">
+                      Channel reaction emojis
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Comma-separated emojis used when reacting to your channel messages
+                    </p>
+                    <Input
+                      id="channelEmojis"
+                      value={settings.channelReactEmojis}
+                      onChange={(e) => update("channelReactEmojis", e.target.value)}
+                      placeholder="❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨"
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
 

@@ -52,9 +52,17 @@ export async function PATCH(req: Request) {
       update["settings.prefix"] = p
     } else if (key === "viewOnceMode") {
       if (value === "same" || value === "dm") update["settings.viewOnceMode"] = value
+    } else if (key === "statusReactEmojis" || key === "channelReactEmojis") {
+      // Validate emoji list: comma-separated, non-empty
+      if (typeof value !== "string") continue
+      const emojis = value
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean)
+      if (emojis.length > 0) update[`settings.${key}`] = emojis.join(",")
     } else {
-      // boolean toggles
-      if (typeof value === "boolean") update[`settings.${key}`] = value
+      // boolean toggles + strings (aiPersona, welcomeImageUrl)
+      if (typeof value === "boolean" || typeof value === "string") update[`settings.${key}`] = value
     }
   }
 

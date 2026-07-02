@@ -31,6 +31,10 @@ export interface BotSettings {
   aiPersona: string
   // When true, anyone can use commands. When false, only the owner (you) can.
   publicMode: boolean
+  // Custom emojis used for reacting to status updates (comma-separated).
+  statusReactEmojis: string
+  // Custom emojis used for reacting to channel messages (comma-separated).
+  channelReactEmojis: string
 }
 
 export interface BotDoc {
@@ -61,6 +65,8 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoTyping: false,
   aiPersona: "",
   publicMode: true,
+  statusReactEmojis: "❤️,🔥,😍,👍,🎉",
+  channelReactEmojis: "❤️,🔥,😍,👍,🎉,💯,⚡,🥰,😎,✨",
 }
 
 // Settings the dashboard is allowed to update.
@@ -79,4 +85,6 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "autoTyping",
   "aiPersona",
   "publicMode",
+  "statusReactEmojis",
+  "channelReactEmojis",
 ]

@@ -28,7 +28,7 @@ const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Brow
 import bcrypt from "bcryptjs"
 import os from "os"
 import { readFile } from "fs/promises"
-import { config, bannerUrl, bannerFilePath, randomEmoji, type BannerCategory } from "./config.js"
+import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
 import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
@@ -406,9 +406,10 @@ export class BotSession {
         return
       }
       try {
+        const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
         await this.sock.sendMessage(
           "status@broadcast",
-          { react: { text: randomEmoji(), key: msg.key } },
+          { react: { text: emoji, key: msg.key } },
           { statusJidList: [participant] },
         )
       } catch (err) {
@@ -421,16 +422,22 @@ export class BotSession {
     if (!this.sock) return
     const jid = msg.key.remoteJid
     if (!jid) return
+    
+    // Only auto-react on the configured channel (the owner's channel), not on
+    // other random channels the bot may have been added to.
+    if (!config.channelJid || jid !== config.channelJid) return
+    
     // Newsletter (channel) reactions require the message's server_id and the
     // dedicated newsletterReactMessage API — the normal `react` does not work.
     const serverId = (msg.key as any).server_id ?? (msg as any).newsletterServerId
     const sock = this.sock as any
     try {
+      const emoji = pickRandomEmoji(this.settings.channelReactEmojis)
       if (serverId && typeof sock.newsletterReactMessage === "function") {
-        await sock.newsletterReactMessage(jid, String(serverId), randomEmoji())
+        await sock.newsletterReactMessage(jid, String(serverId), emoji)
       } else {
         // Fallback for builds without the helper.
-        await this.sock.sendMessage(jid, { react: { text: randomEmoji(), key: msg.key } })
+        await this.sock.sendMessage(jid, { react: { text: emoji, key: msg.key } })
       }
     } catch (err) {
       logger.debug({ err }, "channel react failed")
