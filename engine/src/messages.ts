@@ -95,7 +95,19 @@ export function menuMessage(
   ])
   const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text>`])
   const ai = section("🤖 AI", [`${prefix}ai <text> — Ask the AI`])
-  const tools = section("🛡️ TOOLS", [`${prefix}vv — Unlock a view-once media`])
+  const tools = section("🛡️ TOOLS", [
+    `${prefix}vv — Unlock a view-once media`,
+    `${prefix}sr — React to status update`,
+  ])
+  const groups = section("👥 GROUP MANAGEMENT", [
+    `${prefix}gstatus — Set group status icon`,
+    `${prefix}gaccept — Accept pending join requests`,
+    `${prefix}gkick <@user> — Kick non-admin users`,
+    `${prefix}glink — Get/manage group link`,
+    `${prefix}gclose — Auto close group by time`,
+    `${prefix}gopen — Auto open group by time`,
+    `${prefix}gpoll <text> — Send group poll`,
+  ])
   const owner = section("👑 OWNER", [
     `${prefix}online on/off — Always online`,
     `${prefix}autotype on/off — Auto typing`,
@@ -180,7 +192,7 @@ export function menuMessage(
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `> ☬ *${botName.toUpperCase()}* ☬`
 
-  const sections = [header, general, downloads, search, translate, ai, tools, owner, ...pluginSections, credits]
+  const sections = [header, general, downloads, search, translate, ai, tools, groups, owner, ...pluginSections, credits]
 
   return sections.join("\n\n")
 }
