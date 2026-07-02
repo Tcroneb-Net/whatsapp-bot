@@ -19,6 +19,25 @@ export interface ViewOnceLogDoc {
   recovered: boolean // True if successfully recovered
 }
 
+// Group settings and management.
+export interface GroupDoc {
+  groupId: string // JID like "123456789@g.us"
+  number: string // Bot owner number
+  status?: string
+  autoClose?: {
+    enabled: boolean
+    minutes?: number
+    closedUntil?: Date
+  }
+  autoPoll?: {
+    enabled: boolean
+    schedule?: string
+  }
+  antiLink?: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
 let client: MongoClient | null = null
 let db: Db | null = null
 
@@ -38,6 +57,7 @@ export async function connectDb(): Promise<Db> {
   await db
     .collection<ViewOnceLogDoc>("viewonce_logs")
     .createIndex({ number: 1, timestamp: -1 })
+  await db.collection<GroupDoc>("groups").createIndex({ groupId: 1, number: 1 }, { unique: true })
 
   return db
 }
@@ -55,6 +75,11 @@ export function authState(): Collection<AuthStateDoc> {
 export function viewOnceLogs(): Collection<ViewOnceLogDoc> {
   if (!db) throw new Error("DB not connected")
   return db.collection<ViewOnceLogDoc>("viewonce_logs")
+}
+
+export function groups(): Collection<GroupDoc> {
+  if (!db) throw new Error("DB not connected")
+  return db.collection<GroupDoc>("groups")
 }
 
 export async function closeDb(): Promise<void> {
