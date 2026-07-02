@@ -1,5 +1,4 @@
 import { MongoClient, type Db, type Collection } from "mongodb"
-import { config } from "./config.js"
 import type { BotDoc } from "./types.js"
 
 // A single auth-state credential blob row, keyed by (number, key).
@@ -25,9 +24,11 @@ let db: Db | null = null
 
 export async function connectDb(): Promise<Db> {
   if (db) return db
-  client = new MongoClient(config.mongoUri)
+  const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017"
+  const mongoDb = process.env.MONGODB_DB || "whatsapp_bot"
+  client = new MongoClient(mongoUri)
   await client.connect()
-  db = client.db(config.mongoDb)
+  db = client.db(mongoDb)
 
   // Indexes
   await db.collection<BotDoc>("bots").createIndex({ number: 1 }, { unique: true })

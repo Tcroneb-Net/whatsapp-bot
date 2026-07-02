@@ -1,6 +1,16 @@
 import { MongoClient, type Db, type Collection } from "mongodb"
 import type { BotDoc } from "./types"
 
+export interface ViewOnceLogDoc {
+  number: string
+  timestamp: Date
+  mediaType: "image" | "video"
+  sender: string
+  caption?: string
+  mediaUrl?: string
+  recovered: boolean
+}
+
 const uri = process.env.MONGODB_URI
 const dbName = process.env.MONGODB_DB || "whatsapp_bot"
 
@@ -42,4 +52,11 @@ export async function getDb(): Promise<Db> {
 export async function getBots(): Promise<Collection<BotDoc>> {
   const db = await getDb()
   return db.collection<BotDoc>("bots")
+}
+
+export async function getViewOnceLogs(): Promise<Collection<ViewOnceLogDoc>> {
+  const db = await getDb()
+  const collection = db.collection<ViewOnceLogDoc>("viewonce_logs")
+  await collection.createIndex({ number: 1, timestamp: -1 })
+  return collection
 }
