@@ -134,26 +134,26 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   }[status]
 
   return (
-    <main className="min-h-dvh">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+    <main className="min-h-dvh bg-gradient-to-br from-background via-background to-muted/30">
+      <header className="border-b border-border/50 bg-background/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
               <Bot className="size-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold leading-tight">Dashboard</span>
+              <span className="text-base font-bold leading-tight">WhatsApp Bot</span>
               <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
             </div>
           </div>
           <div className="flex gap-2">
             <Link href="/dashboard/plugins">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="gap-2">
                 <Puzzle className="size-4" />
                 Plugins
               </Button>
             </Link>
-            <Button variant="ghost" size="sm" onClick={logout}>
+            <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
               <LogOut className="size-4" />
               Log out
             </Button>
@@ -161,20 +161,23 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-8">
         {/* Status card */}
-        <Card className="border-border/80">
+        <Card className="border-border/80 bg-gradient-to-r from-primary/5 to-primary/2 shadow-sm hover:shadow-md transition-shadow">
           <CardContent className="flex items-center justify-between pt-6">
             <div className="flex flex-col gap-1">
-              <span className="text-sm text-muted-foreground">Connection status</span>
-              <span className={`flex items-center gap-2 font-semibold ${statusConfig.color}`}>
-                <Circle className="size-2.5 fill-current" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Connection Status</span>
+              <span className={`flex items-center gap-2 font-bold text-lg ${statusConfig.color}`}>
+                <Circle className="size-3 fill-current animate-pulse" />
                 {statusConfig.label}
               </span>
             </div>
-            <Badge variant="secondary" className="font-mono">
-              {settings.botName}
-            </Badge>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant="secondary" className="font-mono">
+                {settings.botName}
+              </Badge>
+              <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -185,11 +188,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         ) : (
           <>
             {/* Identity */}
-            <Card className="border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Bot className="size-5 text-primary" />
-                  Bot identity
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Bot className="size-5 text-primary" />
+                  </div>
+                  Bot Identity
                 </CardTitle>
                 <CardDescription>Customize how your bot presents itself.</CardDescription>
               </CardHeader>
@@ -237,11 +242,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* Status viewing */}
-            <Card className="border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Eye className="size-5 text-primary" />
-                  Status updates
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Eye className="size-5 text-primary" />
+                  </div>
+                  Status Updates
                 </CardTitle>
                 <CardDescription>Control how your bot handles contacts&apos; statuses.</CardDescription>
               </CardHeader>
@@ -269,11 +276,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* View once */}
-            <Card className="border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <ShieldCheck className="size-5 text-primary" />
-                  Anti view-once
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <ShieldCheck className="size-5 text-primary" />
+                  </div>
+                  Anti View-Once
                 </CardTitle>
                 <CardDescription>Recover view-once media and choose where it is saved.</CardDescription>
               </CardHeader>
@@ -317,10 +326,12 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* Commands */}
-            <Card className="border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Activity className="size-5 text-primary" />
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Activity className="size-5 text-primary" />
+                  </div>
                   Commands
                 </CardTitle>
                 <CardDescription>Enable or disable built-in bot commands.</CardDescription>
@@ -345,11 +356,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* AI & tools */}
-            <Card className="border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Sparkles className="size-5 text-primary" />
-                  AI &amp; tools
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Sparkles className="size-5 text-primary" />
+                  </div>
+                  AI &amp; Tools
                 </CardTitle>
                 <CardDescription>
                   Power user commands: AI chat, translation, search, music and downloads.
@@ -386,11 +399,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* Presence */}
-            <Card className="border-border/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Wifi className="size-5 text-primary" />
-                  Presence &amp; behaviour
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Wifi className="size-5 text-primary" />
+                  </div>
+                  Presence &amp; Behaviour
                 </CardTitle>
                 <CardDescription>Control how your bot appears and reacts in chats.</CardDescription>
               </CardHeader>
@@ -413,11 +428,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* Danger zone */}
-            <Card className="border-destructive/40">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg text-destructive">
-                  <Trash2 className="size-5" />
-                  Delete session
+            <Card className="border-destructive/40 shadow-sm hover:shadow-md transition-shadow bg-destructive/5">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl text-destructive">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-destructive/10">
+                    <Trash2 className="size-5 text-destructive" />
+                  </div>
+                  Delete Session
                 </CardTitle>
                 <CardDescription>
                   Logs your bot out of WhatsApp and permanently removes your session and settings. You
@@ -454,7 +471,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
             </Card>
 
             {/* Logs & History */}
-            <Card className="border-border/80">
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Clock className="size-5 text-primary" />

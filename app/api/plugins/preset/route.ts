@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       description: preset.description,
       command: preset.command,
       apiUrl: preset.apiUrl,
+      category: preset.category,
       enabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),

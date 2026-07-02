@@ -49,7 +49,12 @@ export function welcomeMessage(opts: {
 export function menuMessage(
   botName: string,
   prefix: string,
-  meta?: { uptime?: string; ram?: string; mode?: string; plugins?: Array<{ command: string; name: string; enabled?: boolean }> },
+  meta?: {
+    uptime?: string
+    ram?: string
+    mode?: string
+    plugins?: Array<{ command: string; name: string; enabled?: boolean; category?: string }>
+  },
 ): string {
   const uptime = meta?.uptime || "0s"
   const ram = meta?.ram || "—"
@@ -99,10 +104,72 @@ export function menuMessage(
     `${prefix}public — Everyone can use`,
   ])
 
-  const pluginItems = plugins
-    .filter((p) => p.enabled !== false)
-    .map((p) => `${p.command} — ${p.name}`)
-  const pluginsSection = pluginItems.length > 0 ? section("🔌 CUSTOM PLUGINS", pluginItems) : ""
+  // Group plugins by category
+  const enabledPlugins = plugins.filter((p) => p.enabled !== false)
+  const pluginsByCategory = {
+    music: enabledPlugins.filter((p) => p.category === "music"),
+    downloader: enabledPlugins.filter((p) => p.category === "downloader"),
+    social: enabledPlugins.filter((p) => p.category === "social"),
+    ai: enabledPlugins.filter((p) => p.category === "ai"),
+    tools: enabledPlugins.filter((p) => p.category === "tools"),
+    other: enabledPlugins.filter((p) => !p.category || p.category === "other"),
+  }
+
+  const pluginSections: string[] = []
+
+  if (pluginsByCategory.music.length > 0) {
+    pluginSections.push(
+      section(
+        "🎵 MUSIC",
+        pluginsByCategory.music.map((p) => `${prefix}${p.command} — ${p.name}`),
+      ),
+    )
+  }
+
+  if (pluginsByCategory.downloader.length > 0) {
+    pluginSections.push(
+      section(
+        "📥 DOWNLOADS",
+        pluginsByCategory.downloader.map((p) => `${prefix}${p.command} — ${p.name}`),
+      ),
+    )
+  }
+
+  if (pluginsByCategory.social.length > 0) {
+    pluginSections.push(
+      section(
+        "📱 SOCIAL",
+        pluginsByCategory.social.map((p) => `${prefix}${p.command} — ${p.name}`),
+      ),
+    )
+  }
+
+  if (pluginsByCategory.ai.length > 0) {
+    pluginSections.push(
+      section(
+        "🤖 AI",
+        pluginsByCategory.ai.map((p) => `${prefix}${p.command} — ${p.name}`),
+      ),
+    )
+  }
+
+  if (pluginsByCategory.tools.length > 0) {
+    pluginSections.push(
+      section(
+        "🛠️ TOOLS",
+        pluginsByCategory.tools.map((p) => `${prefix}${p.command} — ${p.name}`),
+      ),
+    )
+  }
+
+  if (pluginsByCategory.other.length > 0) {
+    pluginSections.push(
+      section(
+        "🔌 CUSTOM PLUGINS",
+        pluginsByCategory.other.map((p) => `${prefix}${p.command} — ${p.name}`),
+      ),
+    )
+  }
 
   const credits =
     `╭━━━━━━━━━━━━━━━━━━━━⬣\n` +
@@ -113,9 +180,7 @@ export function menuMessage(
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `> ☬ *${botName.toUpperCase()}* ☬`
 
-  const sections = [header, general, downloads, search, translate, ai, tools, owner]
-  if (pluginsSection) sections.push(pluginsSection)
-  sections.push(credits)
+  const sections = [header, general, downloads, search, translate, ai, tools, owner, ...pluginSections, credits]
 
   return sections.join("\n\n")
 }
