@@ -736,6 +736,9 @@ export class BotSession {
         case "gpoll":
           await this.cmdGroupPoll(msg, args, remoteJid, reply)
           break
+        case "prank":
+          await this.cmdPrank(msg, args, remoteJid, reply)
+          break
         default:
           // Check if it's a plugin command
           if ((this.settings as any).plugins) {
@@ -1304,17 +1307,11 @@ export class BotSession {
 
     try {
       const statusText = args || "Status set by bot"
-      const groupMetadata = await this.sock.groupMetadata(remoteJid)
-
-      if (groupMetadata.owner !== this.sock.user?.id && !groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin) {
-        return void reply("You must be admin to set group status.")
-      }
-
       await this.sock.groupUpdateDescription(remoteJid, statusText)
       await reply(`✓ Group status updated to: ${statusText}`)
     } catch (err) {
       logger.debug({ err }, "group status failed")
-      await reply("Failed to update group status. Make sure bot is admin.")
+      await reply("Failed to update group status. Please make sure you have permission to do so.")
     }
   }
 
@@ -1335,15 +1332,17 @@ export class BotSession {
         return void reply("No pending join requests.")
       }
 
+      let accepted = 0
       for (const participant of pendingRequests) {
         try {
-          await this.sock.groupParticipantsUpdate(remoteJid, [participant], "add")
+          await this.sock.groupParticipantsUpdate(remoteJid, [participant.jid || participant], "add")
+          accepted++
         } catch (e) {
           logger.debug({ err: e }, "failed to approve request")
         }
       }
 
-      await reply(`✓ Accepted ${pendingRequests.length} pending join request(s)`)
+      await reply(`✓ Accepted ${accepted} of ${pendingRequests.length} pending join request(s)`)
     } catch (err) {
       logger.debug({ err }, "accept join requests failed")
       await reply("Failed to accept join requests.")
@@ -1361,32 +1360,29 @@ export class BotSession {
     }
 
     try {
-      const groupMetadata = await this.sock.groupMetadata(remoteJid)
-      const isAdmin = groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
-
-      if (!isAdmin) {
-        return void reply("Bot must be admin to kick users.")
-      }
-
       const mentions = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || []
       if (mentions.length === 0) {
-        return void reply("Reply to a message or mention users to kick.")
+        return void reply("Reply to a message and mention users to remove them from the group.")
       }
 
-      const toKick = mentions.filter((jid) => {
-        const p = groupMetadata.participants.find((x) => x.id === jid)
-        return p && !p.isAdmin
-      })
-
-      if (toKick.length === 0) {
-        return void reply("No non-admin users to kick.")
+      let removed = 0
+      for (const jid of mentions) {
+        try {
+          await this.sock.groupParticipantsUpdate(remoteJid, [jid], "remove")
+          removed++
+        } catch (e) {
+          logger.debug({ err: e }, "failed to remove user")
+        }
       }
 
-      await this.sock.groupParticipantsUpdate(remoteJid, toKick, "remove")
-      await reply(`✓ Kicked ${toKick.length} user(s)`)
+      if (removed === 0) {
+        return void reply("Could not remove any users.")
+      }
+
+      await reply(`✓ Removed ${removed} user(s) from the group`)
     } catch (err) {
       logger.debug({ err }, "group kick failed")
-      await reply("Failed to kick user(s).")
+      await reply("Failed to remove user(s).")
     }
   }
 
@@ -1425,27 +1421,22 @@ export class BotSession {
         return void reply("Please provide a valid number of minutes.")
       }
 
-      const groupMetadata = await this.sock.groupMetadata(remoteJid)
-      const isAdmin = groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
-
-      if (!isAdmin) {
-        return void reply("Bot must be admin to close the group.")
-      }
-
-      await this.sock.groupSettingUpdate(remoteJid, "not_announcement")
+      await this.sock.groupSettingUpdate(remoteJid, "announcement")
+      await reply(`✓ Group closed - only admins can send messages`)
+      
       setTimeout(async () => {
         try {
-          await this.sock?.groupSettingUpdate(remoteJid, "announcement")
-          await this.sock?.sendMessage(remoteJid, { text: "Group is now closed." })
+          await this.sock?.groupSettingUpdate(remoteJid, "not_announcement")
+          await this.sock?.sendMessage(remoteJid, { text: "✓ Group is now open to all members." })
         } catch (e) {
-          logger.debug({ err: e }, "group close timeout failed")
+          logger.debug({ err: e }, "group open timeout failed")
         }
       }, minutes * 60 * 1000)
 
-      await reply(`✓ Group will auto-close in ${minutes} minutes`)
+      await reply(`✓ Group will auto-open in ${minutes} minutes`)
     } catch (err) {
       logger.debug({ err }, "group close failed")
-      await reply("Failed to schedule group close.")
+      await reply("Failed to close group.")
     }
   }
 
@@ -1460,15 +1451,8 @@ export class BotSession {
     }
 
     try {
-      const groupMetadata = await this.sock.groupMetadata(remoteJid)
-      const isAdmin = groupMetadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
-
-      if (!isAdmin) {
-        return void reply("Bot must be admin to open the group.")
-      }
-
       await this.sock.groupSettingUpdate(remoteJid, "not_announcement")
-      await reply("✓ Group is now open for messages")
+      await reply("✓ Group is now open - all members can send messages")
     } catch (err) {
       logger.debug({ err }, "group open failed")
       await reply("Failed to open group.")
@@ -1514,6 +1498,72 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "group poll failed")
       await reply("Failed to create poll.")
+    }
+  }
+
+  private async cmdPrank(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock) return
+
+    // Check if user is owner
+    const sender = msg.key.participant || msg.key.remoteJid
+    if (sender !== `${this.number}@s.whatsapp.net`) {
+      return void reply("🚫 This command is only available for the bot owner.")
+    }
+
+    if (!args) {
+      return void reply(
+        `Usage: prank <url>\n\n` +
+          `Creates a fun prank session and sends it to the group.\n` +
+          `Example: prank https://example.com`,
+      )
+    }
+
+    try {
+      const url = args.trim()
+
+      // Validate URL
+      try {
+        new URL(url)
+      } catch {
+        return void reply("Invalid URL provided.")
+      }
+
+      await reply("⏳ Creating prank session...")
+
+      // Create prank session
+      const createResponse = await fetch("https://coder.nx.kg/api/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+
+      if (!createResponse.ok) {
+        return void reply("Failed to create prank session. API error.")
+      }
+
+      const sessionData = await createResponse.json()
+      const sessionId = (sessionData as any).id || (sessionData as any).uuid || (sessionData as any).session_id
+
+      if (!sessionId) {
+        return void reply("Failed to generate prank session ID.")
+      }
+
+      // Send prank to group
+      const prankMessage = `🎉 *You've been pranked!* 🎉\n\n` +
+        `Click the link below for a fun surprise:\n` +
+        `${url}\n\n` +
+        `Session: ${sessionId}`
+
+      await this.sock.sendMessage(remoteJid, { text: prankMessage })
+      await reply(`✓ Prank sent! Session ID: ${sessionId}`)
+    } catch (err) {
+      logger.debug({ err }, "prank command failed")
+      await reply("Failed to create prank session.")
     }
   }
 }
