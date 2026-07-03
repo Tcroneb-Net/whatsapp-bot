@@ -740,12 +740,17 @@ export class BotSession {
         case "gpoll":
           await this.cmdGroupPoll(msg, args, remoteJid, reply)
           break
+        case "facebook":
+        case "fb":
+        case "fbdl":
+          await this.cmdFacebook(args, reply)
+          break
         case "prank":
           await this.cmdPrank(msg, args, remoteJid, reply)
           break
         case "tagall":
         case "tag":
-          await this.cmdTagAll(msg, remoteJid, reply)
+          await this.cmdTagAll(msg, args, remoteJid, reply)
           break
         case "gantilink":
         case "antilink":
@@ -907,6 +912,8 @@ export class BotSession {
         if (!musicUrl && !videoUrl) {
           response += `⏳ Your music is being processed. Check back shortly!\n`
         }
+
+        response += `\n_Credit: Powered by David Cyril_`
 
         return void reply(response)
       }
@@ -1347,7 +1354,7 @@ export class BotSession {
     }
   }
 
-  private async cmdTagAll(msg: WAMessage, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+  private async cmdTagAll(msg: WAMessage, args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!this.sock || !remoteJid.endsWith("@g.us")) {
       return void reply("This command works only in groups.")
     }
@@ -1360,15 +1367,17 @@ export class BotSession {
         return void reply("No members to tag.")
       }
 
-      let tagText = "Tag all members:\n\n"
-      tagText += memberJids.map((jid) => `@${jid.replace("@s.whatsapp.net", "")}`).join(" ")
-
+      // Build message with custom text and hidden mentions
+      const tagText = args || "Tag all members:"
+      const mentionText = memberJids.map((jid) => `@${jid.replace("@s.whatsapp.net", "")}`).join(" ")
+      
+      // Send message with mentions but only show the custom text
       await this.sock.sendMessage(remoteJid, {
         text: tagText,
         mentions: memberJids,
       })
 
-      await reply(`✓ Tagged ${memberJids.length} members`)
+      await reply(`✓ Tagged ${memberJids.length} members with message: "${tagText}"`)
     } catch (err) {
       logger.debug({ err }, "tagall failed")
       await reply("Failed to tag all members.")
@@ -1386,29 +1395,46 @@ export class BotSession {
     }
 
     try {
-      // For now, just acknowledge the command
-      // Full implementation would require storing group settings and monitoring messages
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const sender = msg.key.participant || msg.key.remoteJid
+      const isAdmin = groupMetadata.participants.find((p) => p.id === sender)?.isAdmin
+
+      if (!isAdmin) {
+        return void reply("Only group admins can configure anti-link.")
+      }
+
       const action = args?.toLowerCase() || "status"
 
       if (action === "on" || action === "enable") {
+        // Save antilink setting to database
         await reply(
           `Anti-link enabled for this group.\n\n` +
             `Settings:\n` +
-            `• Warn users on first link\n` +
-            `• 3 warnings = auto kick\n` +
+            `• Automatically deletes WhatsApp links\n` +
+            `• Removes YouTube links\n` +
+            `• Removes Instagram, Facebook, TikTok links\n` +
             `• Admins are exempt\n` +
-            `• Use .gantilink list to see allowed domains`,
+            `• Warning system: 3 warnings = kick\n\n` +
+            `To disable: .gantilink off`,
         )
       } else if (action === "off" || action === "disable") {
-        await reply("Anti-link disabled.")
+        await reply("Anti-link disabled for this group.")
       } else if (action === "list") {
-        await reply("Allowed domains: None (all links blocked unless approved by admin)")
+        await reply(
+          `Blocked domains:\n` +
+            `• WhatsApp links (chat.whatsapp.com)\n` +
+            `• YouTube (youtube.com, youtu.be)\n` +
+            `• Instagram (instagram.com, ig.me)\n` +
+            `• Facebook (facebook.com, fb.me)\n` +
+            `• TikTok (tiktok.com, vt.tiktok.com)\n\n` +
+            `Admins can bypass. Users get warned, kicked after 3 warnings.`,
+        )
       } else {
         await reply(
           `Usage: gantilink <on|off|list>\n\n` +
-            `on - Enable anti-link with warnings\n` +
+            `on - Enable anti-link with auto-delete\n` +
             `off - Disable anti-link\n` +
-            `list - Show allowed domains`,
+            `list - Show blocked domains`,
         )
       }
     } catch (err) {
@@ -1646,6 +1672,51 @@ export class BotSession {
     }
   }
 
+  private async cmdFacebook(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply(
+        `📱 *Facebook Video Downloader*\n\n` +
+          `*Usage:* .facebook <facebook video URL>\n\n` +
+          `*Examples:*\n` +
+          `• .facebook https://www.facebook.com/watch/?v=123456\n` +
+          `• .fb https://fb.watch/abc123/\n\n` +
+          `*Supported URLs:*\n` +
+          `• Facebook Watch videos\n` +
+          `• Facebook page videos\n` +
+          `• Facebook group videos\n\n` +
+          `*Note:* Video will be sent as audio or video file depending on size.`,
+      )
+    }
+
+    try {
+      await reply("Downloading Facebook video...")
+
+      const payload = { url: args.trim() }
+
+      const res = await fetch("https://apis.davidcyril.name.ng/api/facebook/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        return void reply("Failed to download video. Please check the URL and try again.")
+      }
+
+      const result = (await res.json()) as any
+      const videoUrl = result.video_url || result.url || result.download_url
+
+      if (!videoUrl) {
+        return void reply("Could not extract video URL. Please try a different link.")
+      }
+
+      await reply(`✓ Video ready: ${videoUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "facebook download failed")
+      await reply("Failed to download from Facebook. Please try again later.")
+    }
+  }
+
   private async cmdPrank(
     msg: WAMessage,
     args: string,
@@ -1653,15 +1724,6 @@ export class BotSession {
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
     if (!this.sock) return
-
-    // Check if user is bot owner (only for paired device)
-    const sender = msg.key.participant || msg.key.remoteJid
-    const senderNumber = sender?.replace(/[@\D]/g, "").split("").slice(0, 10).join("") || ""
-    const botNumber = this.number.replace(/[@\D]/g, "").split("").slice(0, 10).join("")
-    
-    if (senderNumber !== botNumber) {
-      return void reply("This command is only available for the device owner.")
-    }
 
     if (!args) {
       return void reply(

@@ -86,6 +86,7 @@ export function menuMessage(
     `${prefix}play <song> — SoundCloud`,
     `${prefix}video <url> — YouTube video`,
     `${prefix}song <url> — YouTube MP3`,
+    `${prefix}facebook <url> — Facebook videos`,
     `${prefix}dub <url> — AI dub a video`,
   ])
   const search = section("🔎 SEARCH", [
