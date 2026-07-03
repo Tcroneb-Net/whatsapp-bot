@@ -472,7 +472,7 @@ export class BotSession {
     }
 
     // --- Poll responses: handle music search selections ---
-    if (msg.message?.pollUpdateMessage) {
+    if (msg.message?.pollUpdateMessage || (msg.message as any)?.pollCreationMessage) {
       try {
         await this.handlePollResponse(msg, remoteJid)
       } catch (err) {
@@ -675,33 +675,58 @@ export class BotSession {
       if (!pollUpdate) return
 
       // Get selected option index - try different property names
-      const selectedIndex = (pollUpdate as any).selectedIndex || (pollUpdate as any).selectedOptions?.[0]
-      if (selectedIndex === undefined || selectedIndex === null) return
+      let selectedIndex = (pollUpdate as any).selectedIndex
+      
+      if (selectedIndex === undefined || selectedIndex === null) {
+        // Try alternative structure
+        selectedIndex = (pollUpdate as any).selectedOptions?.[0]
+      }
+
+      if (selectedIndex === undefined || selectedIndex === null) {
+        console.log("[v0] Poll update structure:", JSON.stringify(pollUpdate))
+        return
+      }
 
       // Find the most recent search for this chat
       const searchKeys = Object.keys(this.searchCache).filter((k) =>
         k.startsWith(`search_${remoteJid}_`)
       )
       
-      if (searchKeys.length === 0) return // No recent search
+      if (searchKeys.length === 0) {
+        console.log("[v0] No recent searches found for poll response")
+        return
+      }
 
       const latestKey = searchKeys.sort().pop()
       if (!latestKey) return
 
       const results = this.searchCache[latestKey] as any[]
-      const selectedNum = (selectedIndex as number) + 1
+      if (!results || results.length === 0) {
+        console.log("[v0] No results in search cache for", latestKey)
+        return
+      }
 
-      if (!results || results.length < selectedNum) return
+      const selectedNum = typeof selectedIndex === "number" ? selectedIndex : parseInt(selectedIndex as string, 10)
+      
+      if (selectedNum < 0 || selectedNum >= results.length) {
+        console.log("[v0] Selected index out of range:", selectedNum, "available:", results.length)
+        return
+      }
 
-      const selectedResult = results[selectedNum - 1]
+      const selectedResult = results[selectedNum]
       const videoUrl = selectedResult.url
 
-      if (!videoUrl) return
+      if (!videoUrl) {
+        console.log("[v0] No URL in selected result:", selectedResult)
+        return
+      }
 
+      console.log("[v0] Poll response detected - downloading:", videoUrl)
       // Auto-download and send the song
       await this.downloadAndSendSong(videoUrl, selectedResult, remoteJid)
     } catch (err) {
       logger.debug({ err }, "poll response handling failed")
+      console.log("[v0] Poll response error:", err)
     }
   }
 
@@ -709,6 +734,29 @@ export class BotSession {
     if (!this.sock) return
 
     try {
+      // Send thumbnail image with song info first
+      const thumbnailUrl = metadata.thumbnail || `https://img.youtube.com/vi/${this.extractVideoId(videoUrl)}/maxresdefault.jpg`
+      
+      const songInfo = `🎵 *${metadata.title || "Unknown Song"}*\n\n` +
+        `🎤 *Channel:* ${metadata.channel || "Unknown Artist"}\n` +
+        `⏱️ *Duration:* ${metadata.duration || "Unknown"}\n` +
+        `👁️ *Views:* ${metadata.views || "N/A"}\n\n` +
+        `⏳ Downloading... Please wait a moment...`
+
+      // Send image with song info
+      try {
+        await this.sock.sendMessage(remoteJid, {
+          image: { url: thumbnailUrl },
+          caption: songInfo,
+        })
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send thumbnail")
+        // If image fails, just send text
+        await this.sock.sendMessage(remoteJid, {
+          text: songInfo,
+        })
+      }
+
       // Download as MP3 from YouTube
       const dlRes = await fetch("https://www.puruboy.kozow.com/api/downloader/ytmp3", {
         method: "POST",
@@ -718,18 +766,24 @@ export class BotSession {
 
       if (!dlRes.ok) {
         await this.sock.sendMessage(remoteJid, {
-          text: "Failed to download song. Please try again.",
+          text: "❌ Failed to download song. Please try again.",
         })
         return
       }
 
       const dlData = (await dlRes.json()) as any
-      const audioUrl = dlData.audio || dlData.result?.audio || dlData.url || dlData.download_url || dlData.data?.url
+      const audioUrl = 
+        dlData.audio || 
+        dlData.result?.audio || 
+        dlData.result?.url ||
+        dlData.url || 
+        dlData.download_url || 
+        dlData.data?.url
 
       if (!audioUrl) {
         console.log("[v0] YT MP3 download response:", JSON.stringify(dlData))
         await this.sock.sendMessage(remoteJid, {
-          text: "Could not extract audio. Please try another song.",
+          text: "❌ Could not extract audio. Please try another song.",
         })
         return
       }
@@ -742,16 +796,25 @@ export class BotSession {
       })
 
       // Send success message
-      const successMsg = `✓ *${metadata.title || "Song"}*\nChannel: ${metadata.channel || "Unknown"}\n\n✅ Downloaded successfully\nPowered by WhatsBot - World of Technology Team`
+      const successMsg = `✅ *${metadata.title || "Song"}* downloaded successfully!\n\n` +
+        `🎤 ${metadata.channel || "Unknown"}\n` +
+        `🔊 Playing now...\n\n` +
+        `Powered by WhatsBot - World of Technology Team`
+      
       await this.sock.sendMessage(remoteJid, {
         text: successMsg,
       })
     } catch (err) {
       logger.debug({ err }, "download and send song failed")
       await this.sock.sendMessage(remoteJid, {
-        text: "Failed to download song. Please try again.",
+        text: "❌ Failed to download song. Please try again.",
       })
     }
+  }
+
+  private extractVideoId(url: string): string {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
+    return match ? match[1] : "default"
   }
 
   private async handleAntiLink(msg: WAMessage, remoteJid: string): Promise<void> {
@@ -2148,80 +2211,140 @@ export class BotSession {
 
   private async cmdImageGeneration(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .img <prompt> [model]\n\nModels: standard (default), hd\n\nExample: .img cat with hat hd")
+      return void reply("Usage: .img <prompt> [model]\n\nModels: standard (default), hd, flux\n\nExample: .img beautiful sunset over ocean hd")
     }
 
     if (!this.sock) return
 
     try {
       const parts = args.split(" ")
-      const model = parts[parts.length - 1] === "hd" ? "hd" : "standard"
-      const prompt = model === "hd" ? parts.slice(0, -1).join(" ") : args
+      const lastPart = parts[parts.length - 1]?.toLowerCase()
+      const model = ["hd", "flux", "standard"].includes(lastPart) ? lastPart : "standard"
+      const prompt = ["hd", "flux", "standard"].includes(lastPart) ? parts.slice(0, -1).join(" ") : args
 
-      await reply("🎨 Generating image with " + model + " model...")
-
-      // Call Flux API
-      const response = await fetch("https://www.puruboy.kozow.com/api/ai/flux-v2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model }),
-      })
-
-      if (!response.ok) {
-        return void reply("Failed to connect to image generation service.")
+      if (!prompt.trim()) {
+        return void reply("Please provide a prompt for image generation.")
       }
 
-      if (!response.body) {
-        return void reply("No response from image service.")
-      }
+      await reply("🎨 Generating image with " + model + " model...\n⏳ This may take 30-60 seconds...")
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ""
       let imageUrl: string | null = null
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        fullText += decoder.decode(value)
+      // Try multiple image generation APIs
+      const apis = [
+        { 
+          url: "https://www.puruboy.kozow.com/api/ai/flux-v2", 
+          name: "Flux v2",
+          method: "POST",
+          getUrl: (data: any) => data.image_url || data.url || data.image || data.result?.url || data.result?.image
+        },
+        { 
+          url: "https://www.puruboy.kozow.com/api/ai/flux", 
+          name: "Flux",
+          method: "POST",
+          getUrl: (data: any) => data.image_url || data.url || data.image
+        },
+        { 
+          url: "https://www.puruboy.kozow.com/api/ai/text2image", 
+          name: "Text2Image",
+          method: "POST",
+          getUrl: (data: any) => data.image || data.url || data.image_url
+        },
+      ]
 
-        // Check if we got the result marker
-        if (fullText.includes("[true]")) {
-          const markerIndex = fullText.indexOf("[true]")
-          const urlPart = fullText.substring(markerIndex + 6).trim()
+      for (const api of apis) {
+        try {
+          console.log("[v0] Trying image generation API:", api.name)
           
-          // Try to parse as JSON first
-          try {
-            const jsonData = JSON.parse(urlPart)
-            imageUrl = jsonData.image_url || jsonData.url || jsonData.image || jsonData.result?.url
-          } catch {
-            // If not JSON, treat as URL
-            imageUrl = urlPart.split("\n")[0].trim()
+          const response = await fetch(api.url, {
+            method: api.method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: prompt.trim(), model }),
+          })
+
+          if (!response.ok) {
+            console.log("[v0]", api.name, "failed with status:", response.status)
+            continue
           }
+
+          const contentType = response.headers.get("content-type") || ""
           
-          break
+          if (contentType.includes("application/json")) {
+            // JSON response
+            const data = await response.json()
+            console.log("[v0]", api.name, "response:", JSON.stringify(data).substring(0, 300))
+            
+            imageUrl = api.getUrl(data)
+            if (imageUrl && imageUrl.startsWith("http")) {
+              console.log("[v0] Image URL found from", api.name)
+              break
+            }
+          } else if (response.body) {
+            // Streaming response
+            const reader = response.body.getReader()
+            const decoder = new TextDecoder()
+            let fullText = ""
+
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              fullText += decoder.decode(value)
+
+              if (fullText.length > 10000) break // Limit to prevent memory issues
+            }
+
+            console.log("[v0]", api.name, "streaming response:", fullText.substring(0, 300))
+
+            // Try to extract URL from streaming response
+            if (fullText.includes("http")) {
+              const urlMatch = fullText.match(/https?:\/\/[^\s"<>{}|\\^`\[\]]+/)
+              if (urlMatch) {
+                imageUrl = urlMatch[0]
+                console.log("[v0] Image URL extracted from streaming response")
+                break
+              }
+            }
+
+            // Try JSON parsing
+            try {
+              const jsonMatch = fullText.match(/\{[\s\S]*\}/)
+              if (jsonMatch) {
+                const jsonData = JSON.parse(jsonMatch[0])
+                imageUrl = api.getUrl(jsonData)
+                if (imageUrl && imageUrl.startsWith("http")) {
+                  console.log("[v0] Image URL found from JSON in streaming response")
+                  break
+                }
+              }
+            } catch (e) {
+              console.log("[v0] JSON parsing failed")
+            }
+          }
+        } catch (apiErr) {
+          console.log("[v0]", api.name, "API error:", apiErr)
+          continue
         }
       }
 
-      if (imageUrl) {
-        try {
-          await this.sock.sendMessage(remoteJid, {
-            image: { url: imageUrl },
-            caption: `✓ Generated with ${model} model\n\nPowered by WhatsBot - World of Technology Team`,
-          })
-          return void reply("✓ Image sent!")
-        } catch (sendErr) {
-          logger.debug({ sendErr }, "failed to send generated image")
-          // Send image URL as text if sending fails
-          await reply(`✓ Image generated:\n${imageUrl}`)
-        }
-      } else {
-        console.log("[v0] Image generation response:", fullText.substring(0, 500))
-        await reply("Image generation completed but could not extract URL. Please try again.")
+      if (!imageUrl) {
+        return void reply("❌ Could not generate image. Try:\n• Different prompt\n• Shorter description\n• Try again in a moment")
+      }
+
+      // Send the generated image
+      try {
+        await this.sock.sendMessage(remoteJid, {
+          image: { url: imageUrl },
+          caption: `✨ Generated with ${model} model\n\nPrompt: ${prompt.trim()}\n\nPowered by WhatsBot - World of Technology Team`,
+        })
+        return void reply("✓ Image generated and sent!")
+      } catch (sendErr) {
+        logger.debug({ sendErr }, "failed to send generated image")
+        await reply(`✓ Image generated:\n${imageUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "image generation failed")
-      await reply("Failed to generate image. Try a different prompt or model.")
+      console.log("[v0] Image generation error:", err)
+      await reply("❌ Failed to generate image. Please try again with a different prompt.")
     }
   }
 
