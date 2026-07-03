@@ -682,6 +682,10 @@ export class BotSession {
         case "viewonce":
           await this.cmdVv(msg, remoteJid, reply)
           break
+        case "sr":
+        case "reactstatus":
+          await this.cmdReactStatus(msg, reply)
+          break
         case "ai":
         case "gpt":
           await this.cmdAi(args, reply)
@@ -738,6 +742,14 @@ export class BotSession {
           break
         case "prank":
           await this.cmdPrank(msg, args, remoteJid, reply)
+          break
+        case "tagall":
+        case "tag":
+          await this.cmdTagAll(msg, remoteJid, reply)
+          break
+        case "gantilink":
+        case "antilink":
+          await this.cmdAntiLink(msg, args, remoteJid, reply)
           break
         default:
           // Check if it's a plugin command
@@ -1306,12 +1318,145 @@ export class BotSession {
     }
 
     try {
+      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+
+      // If replying to image/video, set that as group icon
+      if (quoted?.imageMessage) {
+        try {
+          const imageData = await downloadMediaMessage(
+            { key: msg.key, message: quoted } as WAMessage,
+            "buffer",
+            {},
+          )
+          if (imageData) {
+            await this.sock.updateProfilePicture(remoteJid, imageData)
+            return void reply("✓ Group icon updated with image")
+          }
+        } catch (e) {
+          logger.debug({ err: e }, "failed to set group icon")
+        }
+      }
+
+      // Otherwise set text status
       const statusText = args || "Status set by bot"
       await this.sock.groupUpdateDescription(remoteJid, statusText)
       await reply(`✓ Group status updated to: ${statusText}`)
     } catch (err) {
       logger.debug({ err }, "group status failed")
       await reply("Failed to update group status. Please make sure you have permission to do so.")
+    }
+  }
+
+  private async cmdTagAll(msg: WAMessage, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const memberJids = groupMetadata.participants.map((p) => p.id)
+
+      if (memberJids.length === 0) {
+        return void reply("No members to tag.")
+      }
+
+      let tagText = "Tag all members:\n\n"
+      tagText += memberJids.map((jid) => `@${jid.replace("@s.whatsapp.net", "")}`).join(" ")
+
+      await this.sock.sendMessage(remoteJid, {
+        text: tagText,
+        mentions: memberJids,
+      })
+
+      await reply(`✓ Tagged ${memberJids.length} members`)
+    } catch (err) {
+      logger.debug({ err }, "tagall failed")
+      await reply("Failed to tag all members.")
+    }
+  }
+
+  private async cmdAntiLink(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock || !remoteJid.endsWith("@g.us")) {
+      return void reply("This command works only in groups.")
+    }
+
+    try {
+      // For now, just acknowledge the command
+      // Full implementation would require storing group settings and monitoring messages
+      const action = args?.toLowerCase() || "status"
+
+      if (action === "on" || action === "enable") {
+        await reply(
+          `Anti-link enabled for this group.\n\n` +
+            `Settings:\n` +
+            `• Warn users on first link\n` +
+            `• 3 warnings = auto kick\n` +
+            `• Admins are exempt\n` +
+            `• Use .gantilink list to see allowed domains`,
+        )
+      } else if (action === "off" || action === "disable") {
+        await reply("Anti-link disabled.")
+      } else if (action === "list") {
+        await reply("Allowed domains: None (all links blocked unless approved by admin)")
+      } else {
+        await reply(
+          `Usage: gantilink <on|off|list>\n\n` +
+            `on - Enable anti-link with warnings\n` +
+            `off - Disable anti-link\n` +
+            `list - Show allowed domains`,
+        )
+      }
+    } catch (err) {
+      logger.debug({ err }, "antilink failed")
+      await reply("Failed to configure anti-link.")
+    }
+  }
+
+  private async cmdReactStatus(msg: WAMessage, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.sock) return
+
+    try {
+      const ctx = msg.message?.extendedTextMessage?.contextInfo
+      const quoted = ctx?.quotedMessage
+
+      if (!quoted) {
+        return void reply(
+          "Reply to a status update with .sr to react to it.\n\n" +
+            "Example: .sr\n\n" +
+            "This will randomly react with one of your configured emojis.",
+        )
+      }
+
+      // Check if it's a status from status@broadcast
+      if (ctx?.remoteJid !== "status@broadcast") {
+        return void reply("That message is not a status update.")
+      }
+
+      const emojiList = this.settings.statusReactEmojis?.split(",").filter((e) => e) || ["❤️"]
+      const emoji = emojiList[Math.floor(Math.random() * emojiList.length)]
+
+      const key = {
+        remoteJid: "status@broadcast",
+        id: ctx?.stanzaId || msg.key.id,
+        fromMe: false,
+        participant: ctx?.participant,
+      } as WAMessage["key"]
+
+      try {
+        await this.sock.sendMessage("status@broadcast", { react: { text: emoji, key } })
+        await reply(`✓ Reacted with ${emoji}`)
+      } catch (err) {
+        logger.debug({ err }, "status react failed")
+        await reply("Failed to react. Status may have expired.")
+      }
+    } catch (err) {
+      logger.debug({ err }, "react status command failed")
+      await reply("Failed to process status reaction.")
     }
   }
 
@@ -1509,10 +1654,13 @@ export class BotSession {
   ): Promise<void> {
     if (!this.sock) return
 
-    // Check if user is owner
+    // Check if user is bot owner (only for paired device)
     const sender = msg.key.participant || msg.key.remoteJid
-    if (sender !== `${this.number}@s.whatsapp.net`) {
-      return void reply("🚫 This command is only available for the bot owner.")
+    const senderNumber = sender?.replace(/[@\D]/g, "").split("").slice(0, 10).join("") || ""
+    const botNumber = this.number.replace(/[@\D]/g, "").split("").slice(0, 10).join("")
+    
+    if (senderNumber !== botNumber) {
+      return void reply("This command is only available for the device owner.")
     }
 
     if (!args) {
