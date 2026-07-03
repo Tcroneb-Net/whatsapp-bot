@@ -262,6 +262,8 @@ export class BotSession {
         this.applyPresence()
         // Start periodic settings refresh so dashboard changes sync automatically.
         this.startSettingsRefresh()
+        // Promote owner as admin in all groups where bot is admin
+        void this.promoteOwnerAsAdmin()
       }
 
       if (connection === "close") {
@@ -307,6 +309,34 @@ export class BotSession {
       { number: this.number },
       { $set: { status, lastSeen: new Date(), updatedAt: new Date() } },
     )
+  }
+
+  // Promote the bot owner as admin in all groups where the bot is admin.
+  private async promoteOwnerAsAdmin(): Promise<void> {
+    if (!this.sock) return
+    try {
+      const chats = await this.sock.groupFetchAllParticipating()
+      const ownerJid = this.ownJid()
+      if (!ownerJid) return
+
+      for (const [jid, groupData] of Object.entries(chats)) {
+        if (!jid.endsWith("@g.us")) continue
+        try {
+          const metadata = await this.sock.groupMetadata(jid)
+          const botIsAdmin = metadata.participants.find((p) => p.id === this.sock?.user?.id)?.isAdmin
+          const ownerIsAdmin = metadata.participants.find((p) => p.id === ownerJid)?.isAdmin
+
+          if (botIsAdmin && !ownerIsAdmin) {
+            await this.sock.groupParticipantsUpdate(jid, [ownerJid], "promote")
+            logger.debug({ jid, owner: ownerJid }, "promoted owner as admin")
+          }
+        } catch (err) {
+          logger.debug({ jid, err }, "failed to promote owner in group")
+        }
+      }
+    } catch (err) {
+      logger.debug({ err }, "promoteOwnerAsAdmin failed")
+    }
   }
 
   // The bot's own JID (for DMing the owner).
@@ -554,7 +584,10 @@ export class BotSession {
     if (!inner) return
     
     // Auto-recover view-once media if the setting is enabled
-    if (!this.settings.antiViewOnce) return
+    if (!this.settings.antiViewOnce) {
+      logger.debug({number: this.number}, "antiViewOnce disabled, skipping recovery")
+      return
+    }
 
     // Destination: same chat the message came from, or the bot's own DM.
     // ownJid() normalizes the device-suffixed id (e.g. "123:6@...").
@@ -689,6 +722,10 @@ export class BotSession {
         case "ai":
         case "gpt":
           await this.cmdAi(args, reply)
+          break
+        case "suno":
+        case "music":
+          await this.cmdSuno(args, remoteJid, reply)
           break
         case "translate":
         case "tr":
