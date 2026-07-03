@@ -100,13 +100,15 @@ export function menuMessage(
     `${prefix}sr — React to status update`,
   ])
   const groups = section("👥 GROUP MANAGEMENT", [
-    `${prefix}gstatus — Set group status icon`,
+    `${prefix}gstatus — Set group status (text or image)`,
     `${prefix}gaccept — Accept pending join requests`,
     `${prefix}gkick <@user> — Kick non-admin users`,
     `${prefix}glink — Get/manage group link`,
     `${prefix}gclose — Auto close group by time`,
     `${prefix}gopen — Auto open group by time`,
     `${prefix}gpoll <text> — Send group poll`,
+    `${prefix}tagall — Tag all group members`,
+    `${prefix}gantilink — Anti-link protection system`,
   ])
   const owner = section("👑 OWNER", [
     `${prefix}online on/off — Always online`,
