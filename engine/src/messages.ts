@@ -95,7 +95,10 @@ export function menuMessage(
     `${prefix}yts <query> — YouTube search`,
   ])
   const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text>`])
-  const ai = section("🤖 AI", [`${prefix}ai <text> — Ask the AI`])
+  const ai = section("🤖 AI", [
+    `${prefix}ai <text> — Ask the AI`,
+    `${prefix}suno <description> — Create music with AI`,
+  ])
   const tools = section("🛡️ TOOLS", [
     `${prefix}vv — Unlock a view-once media`,
     `${prefix}sr — React to status update`,
