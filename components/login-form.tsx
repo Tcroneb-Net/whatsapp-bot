@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Loader2, Smartphone, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +8,6 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 
 export function LoginForm() {
-  const router = useRouter()
   const [number, setNumber] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -26,11 +24,12 @@ export function LoginForm() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Login failed")
       toast.success("Welcome back!")
-      router.push("/dashboard")
-      router.refresh()
+      // Use window.location for redirect instead of router to avoid initialization issues
+      setTimeout(() => {
+        window.location.href = "/dashboard"
+      }, 500)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed")
-    } finally {
       setLoading(false)
     }
   }

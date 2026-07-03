@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { format } from "date-fns"
 import {
@@ -57,7 +56,6 @@ const fetcher = (url: string) =>
   })
 
 export function DashboardClient({ initialNumber }: { initialNumber: string }) {
-  const router = useRouter()
   const { data, isLoading, mutate } = useSWR<SettingsResponse>("/api/settings", fetcher, {
     refreshInterval: 15000,
   })
@@ -122,9 +120,13 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" })
-    router.push("/login")
-    router.refresh()
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch (err) {
+      console.log("[v0] Logout error:", err)
+    }
+    // Use window.location for redirect instead of router to avoid initialization issues
+    window.location.href = "/login"
   }
 
   async function deleteSession() {
@@ -134,8 +136,10 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to delete session")
       toast.success("Session deleted. You can pair again anytime.")
-      router.push("/")
-      router.refresh()
+      // Use window.location for redirect instead of router to avoid initialization issues
+      setTimeout(() => {
+        window.location.href = "/"
+      }, 1000)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete session")
       setDeleting(false)
