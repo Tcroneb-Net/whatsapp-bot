@@ -114,6 +114,7 @@ export function menuMessage(
     `${prefix}password — Reset password`,
     `${prefix}private — Owner-only mode`,
     `${prefix}public — Everyone can use`,
+    `${prefix}prank <url> — Send fun prank links to group`,
   ])
 
   // Group plugins by category

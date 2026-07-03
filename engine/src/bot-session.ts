@@ -736,6 +736,9 @@ export class BotSession {
         case "gpoll":
           await this.cmdGroupPoll(msg, args, remoteJid, reply)
           break
+        case "prank":
+          await this.cmdPrank(msg, args, remoteJid, reply)
+          break
         default:
           // Check if it's a plugin command
           if ((this.settings as any).plugins) {
@@ -1495,6 +1498,72 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "group poll failed")
       await reply("Failed to create poll.")
+    }
+  }
+
+  private async cmdPrank(
+    msg: WAMessage,
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock) return
+
+    // Check if user is owner
+    const sender = msg.key.participant || msg.key.remoteJid
+    if (sender !== `${this.number}@s.whatsapp.net`) {
+      return void reply("🚫 This command is only available for the bot owner.")
+    }
+
+    if (!args) {
+      return void reply(
+        `Usage: prank <url>\n\n` +
+          `Creates a fun prank session and sends it to the group.\n` +
+          `Example: prank https://example.com`,
+      )
+    }
+
+    try {
+      const url = args.trim()
+
+      // Validate URL
+      try {
+        new URL(url)
+      } catch {
+        return void reply("Invalid URL provided.")
+      }
+
+      await reply("⏳ Creating prank session...")
+
+      // Create prank session
+      const createResponse = await fetch("https://coder.nx.kg/api/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+
+      if (!createResponse.ok) {
+        return void reply("Failed to create prank session. API error.")
+      }
+
+      const sessionData = await createResponse.json()
+      const sessionId = (sessionData as any).id || (sessionData as any).uuid || (sessionData as any).session_id
+
+      if (!sessionId) {
+        return void reply("Failed to generate prank session ID.")
+      }
+
+      // Send prank to group
+      const prankMessage = `🎉 *You've been pranked!* 🎉\n\n` +
+        `Click the link below for a fun surprise:\n` +
+        `${url}\n\n` +
+        `Session: ${sessionId}`
+
+      await this.sock.sendMessage(remoteJid, { text: prankMessage })
+      await reply(`✓ Prank sent! Session ID: ${sessionId}`)
+    } catch (err) {
+      logger.debug({ err }, "prank command failed")
+      await reply("Failed to create prank session.")
     }
   }
 }
