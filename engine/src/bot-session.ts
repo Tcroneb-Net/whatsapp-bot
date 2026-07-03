@@ -2227,7 +2227,7 @@ export class BotSession {
 
   private async cmdYouTubeDl(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .ytdl <YouTube URL>\n\nDownloads full YouTube video.")
+      return void reply("Usage: .ytdl <YouTube URL>\n\nDownloads full YouTube video in best quality.\nSupports any YouTube link format.")
     }
 
     if (!this.sock) return
@@ -2235,44 +2235,73 @@ export class BotSession {
     try {
       await reply("⏳ Downloading YouTube video...")
 
-      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/youtube", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
-      })
+      const url = args.trim()
+      const apis = [
+        { url: "https://www.puruboy.kozow.com/api/downloader/youtube", name: "youtube" },
+        { url: "https://www.puruboy.kozow.com/api/downloader/savetube", name: "savetube" },
+      ]
 
-      if (!res.ok) {
-        return void reply("Failed to connect to download service.")
+      let success = false
+      let videoUrl = null
+      let title = "YouTube Video"
+
+      for (const api of apis) {
+        try {
+          const res = await fetch(api.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!res.ok) continue
+
+          const data = (await res.json()) as any
+          
+          videoUrl = 
+            data.video || 
+            data.result?.video ||
+            data.result?.url ||
+            data.video_url || 
+            data.url || 
+            data.download_url || 
+            data.data?.url
+
+          title = data.title || data.result?.title || "YouTube Video"
+
+          if (videoUrl) {
+            console.log("[v0] YouTube downloaded via", api.name)
+            success = true
+            break
+          }
+        } catch (e) {
+          console.log("[v0] API", api.name, "failed, trying next...")
+          continue
+        }
       }
 
-      const data = (await res.json()) as any
-      const videoUrl = data.video || data.result?.video || data.video_url || data.url || data.download_url || data.data?.url
-      const title = data.title || data.result?.title || "YouTube Video"
-
-      if (!videoUrl) {
-        console.log("[v0] YouTube response:", JSON.stringify(data))
-        return void reply("Could not extract video. The URL might be invalid.")
+      if (!success || !videoUrl) {
+        return void reply("❌ Could not download YouTube video. The URL might be invalid, restricted, or deleted. Try another link.")
       }
 
       try {
         await this.sock.sendMessage(remoteJid, {
           video: { url: videoUrl },
-          caption: `✓ ${title}\n\nDownloaded by WhatsBot`,
+          caption: `✓ ${title}\n\nDownloaded by WhatsBot - World of Technology Team`,
         })
         await reply("✓ Video sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send youtube video")
-        await reply(`✓ Video ready: ${videoUrl}`)
+        await reply(`✓ Video ready:\n${videoUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "youtube download failed")
-      await reply("Failed to download from YouTube.")
+      await reply("❌ Failed to download. Please try again with a different link or later.")
     }
   }
 
   private async cmdXDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .x <X/Twitter URL>\n\nDownloads videos from X (Twitter).")
+      return void reply("Usage: .x <X/Twitter URL>\n\nDownloads videos and media from X (Twitter).\nSupports any X.com or twitter.com link.")
     }
 
     if (!this.sock) return
@@ -2280,43 +2309,70 @@ export class BotSession {
     try {
       await reply("⏳ Downloading from X...")
 
-      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/x", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
-      })
+      const url = args.trim()
+      const apis = [
+        { url: "https://www.puruboy.kozow.com/api/downloader/x", name: "x" },
+      ]
 
-      if (!res.ok) {
-        return void reply("Failed to connect to download service.")
+      let success = false
+      let mediaUrl = null
+
+      for (const api of apis) {
+        try {
+          const res = await fetch(api.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!res.ok) continue
+
+          const data = (await res.json()) as any
+          
+          mediaUrl = 
+            data.media || 
+            data.result?.media || 
+            data.result?.url ||
+            data.video_url || 
+            data.url || 
+            data.media_url || 
+            data.download_url || 
+            data.data?.url
+
+          if (mediaUrl) {
+            console.log("[v0] X media downloaded via", api.name)
+            success = true
+            break
+          }
+        } catch (e) {
+          console.log("[v0] API", api.name, "failed")
+          continue
+        }
       }
 
-      const data = (await res.json()) as any
-      const mediaUrl = data.media || data.result?.media || data.video_url || data.url || data.media_url || data.download_url || data.data?.url
-
-      if (!mediaUrl) {
-        console.log("[v0] X response:", JSON.stringify(data))
-        return void reply("Could not extract media. The URL might be invalid.")
+      if (!success || !mediaUrl) {
+        return void reply("❌ Could not download X media. The URL might be invalid, deleted, or private. Try another link.")
       }
 
       try {
         await this.sock.sendMessage(remoteJid, {
           video: { url: mediaUrl },
-          caption: "✓ X/Twitter media downloaded",
+          caption: "✓ X/Twitter media downloaded\n\nPowered by WhatsBot",
         })
         await reply("✓ Media sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send x media")
-        await reply(`✓ Media ready: ${mediaUrl}`)
+        await reply(`✓ Media ready:\n${mediaUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "x download failed")
-      await reply("Failed to download from X.")
+      await reply("❌ Failed to download from X. Please try again later.")
     }
   }
 
   private async cmdTikTokDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .tt <TikTok URL>\n\nDownloads TikTok videos without watermark.")
+      return void reply("Usage: .tt <TikTok URL>\n\nDownloads TikTok videos without watermark.\nSupports any TikTok link format.")
     }
 
     if (!this.sock) return
@@ -2324,46 +2380,78 @@ export class BotSession {
     try {
       await reply("⏳ Downloading TikTok video...")
 
-      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/tiktok-v2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
-      })
+      const url = args.trim()
+      
+      // Try multiple TikTok APIs in sequence
+      const apis = [
+        { url: "https://www.puruboy.kozow.com/api/downloader/tiktok-v2", name: "tiktok-v2" },
+        { url: "https://www.puruboy.kozow.com/api/downloader/tiktok", name: "tiktok" },
+        { url: "https://www.puruboy.kozow.com/api/downloader/snaptik", name: "snaptik" },
+      ]
 
-      if (!res.ok) {
-        return void reply("Failed to connect to download service. Please try again.")
+      let success = false
+      let videoUrl = null
+
+      for (const api of apis) {
+        try {
+          const res = await fetch(api.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!res.ok) continue
+
+          const data = (await res.json()) as any
+          
+          // Try all possible response formats
+          videoUrl = 
+            data.video || 
+            data.result?.video || 
+            data.result?.url ||
+            data.video_url || 
+            data.url || 
+            data.download_url || 
+            data.data?.url ||
+            data.media ||
+            data.result?.media ||
+            data.result?.download_url
+
+          if (videoUrl) {
+            console.log("[v0] TikTok downloaded via", api.name)
+            success = true
+            break
+          }
+        } catch (e) {
+          console.log("[v0] API", api.name, "failed, trying next...")
+          continue
+        }
       }
 
-      const data = (await res.json()) as any
-      
-      // Handle various response formats
-      const videoUrl = data.video || data.result?.video || data.video_url || data.url || data.download_url || data.data?.url
-
-      if (!videoUrl) {
-        console.log("[v0] TikTok response:", JSON.stringify(data))
-        return void reply("Could not extract video. The URL might be invalid or private.")
+      if (!success || !videoUrl) {
+        return void reply("❌ Could not download TikTok video. The URL might be invalid, private, or deleted. Try another link.")
       }
 
       // Send video to user
       try {
         await this.sock.sendMessage(remoteJid, {
           video: { url: videoUrl },
-          caption: "✓ TikTok video downloaded",
+          caption: "✓ TikTok video downloaded successfully\n\nPowered by WhatsBot",
         })
         await reply("✓ Video sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send tiktok video")
-        await reply(`✓ Video ready: ${videoUrl}`)
+        await reply(`✓ Video ready:\n${videoUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "tiktok download failed")
-      await reply("Failed to download from TikTok.")
+      await reply("❌ Failed to download. Please try with a different link or try again later.")
     }
   }
 
   private async cmdSpotifyDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .spotify <Spotify URL or track link>\n\nDownloads Spotify tracks as MP3.")
+      return void reply("Usage: .spotify <Spotify URL or track link>\n\nDownloads Spotify tracks as MP3.\nSupports any Spotify link format (open.spotify.com).")
     }
 
     if (!this.sock) return
@@ -2371,23 +2459,32 @@ export class BotSession {
     try {
       await reply("⏳ Downloading from Spotify...")
 
+      const url = args.trim()
       const res = await fetch("https://www.puruboy.kozow.com/api/downloader/spotify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
+        body: JSON.stringify({ url }),
       })
 
       if (!res.ok) {
-        return void reply("Failed to connect to download service.")
+        return void reply("❌ Failed to connect to Spotify service. Try again later.")
       }
 
       const data = (await res.json()) as any
-      const audioUrl = data.audio || data.result?.audio || data.audio_url || data.url || data.download_url || data.data?.url
+      const audioUrl = 
+        data.audio || 
+        data.result?.audio || 
+        data.result?.url ||
+        data.audio_url || 
+        data.url || 
+        data.download_url || 
+        data.data?.url
+      
       const title = data.title || data.result?.title || "Spotify Track"
 
       if (!audioUrl) {
         console.log("[v0] Spotify response:", JSON.stringify(data))
-        return void reply("Could not extract audio. The URL might be invalid.")
+        return void reply("❌ Could not download Spotify track. The URL might be invalid or the track unavailable. Try another link.")
       }
 
       try {
@@ -2399,17 +2496,17 @@ export class BotSession {
         await reply("✓ Audio sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send spotify audio")
-        await reply(`✓ Audio ready: ${audioUrl}`)
+        await reply(`✓ Audio ready:\n${audioUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "spotify download failed")
-      await reply("Failed to download from Spotify.")
+      await reply("❌ Failed to download from Spotify. Please try again later.")
     }
   }
 
   private async cmdSoundCloudDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .sc <SoundCloud URL>\n\nDownloads SoundCloud tracks as MP3.")
+      return void reply("Usage: .sc <SoundCloud URL>\n\nDownloads SoundCloud tracks as MP3.\nSupports any SoundCloud link format.")
     }
 
     if (!this.sock) return
@@ -2417,23 +2514,52 @@ export class BotSession {
     try {
       await reply("⏳ Downloading from SoundCloud...")
 
-      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/soundcloud-v2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
-      })
+      const url = args.trim()
+      const apis = [
+        { url: "https://www.puruboy.kozow.com/api/downloader/soundcloud-v2", name: "soundcloud-v2" },
+        { url: "https://www.puruboy.kozow.com/api/downloader/soundcloud", name: "soundcloud" },
+      ]
 
-      if (!res.ok) {
-        return void reply("Failed to connect to download service.")
+      let success = false
+      let audioUrl = null
+      let title = "SoundCloud Track"
+
+      for (const api of apis) {
+        try {
+          const res = await fetch(api.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!res.ok) continue
+
+          const data = (await res.json()) as any
+          
+          audioUrl = 
+            data.audio || 
+            data.result?.audio || 
+            data.result?.url ||
+            data.audio_url || 
+            data.url || 
+            data.download_url || 
+            data.data?.url
+
+          title = data.title || data.result?.title || "SoundCloud Track"
+
+          if (audioUrl) {
+            console.log("[v0] SoundCloud downloaded via", api.name)
+            success = true
+            break
+          }
+        } catch (e) {
+          console.log("[v0] API", api.name, "failed, trying next...")
+          continue
+        }
       }
 
-      const data = (await res.json()) as any
-      const audioUrl = data.audio || data.result?.audio || data.audio_url || data.url || data.download_url || data.data?.url
-      const title = data.title || data.result?.title || "SoundCloud Track"
-
-      if (!audioUrl) {
-        console.log("[v0] SoundCloud response:", JSON.stringify(data))
-        return void reply("Could not extract audio. The URL might be invalid.")
+      if (!success || !audioUrl) {
+        return void reply("❌ Could not download SoundCloud track. The URL might be invalid, deleted, or restricted. Try another link.")
       }
 
       try {
@@ -2445,17 +2571,17 @@ export class BotSession {
         await reply("✓ Audio sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send soundcloud audio")
-        await reply(`✓ Audio ready: ${audioUrl}`)
+        await reply(`✓ Audio ready:\n${audioUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "soundcloud download failed")
-      await reply("Failed to download from SoundCloud.")
+      await reply("❌ Failed to download from SoundCloud. Please try again later.")
     }
   }
 
   private async cmdInstagramDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .ig <Instagram post/reel URL>\n\nDownloads Instagram photos and reels.")
+      return void reply("Usage: .ig <Instagram post/reel URL>\n\nDownloads Instagram photos, reels, and stories.\nSupports any Instagram link format (instagram.com, ig.me).")
     }
 
     if (!this.sock) return
@@ -2463,43 +2589,69 @@ export class BotSession {
     try {
       await reply("⏳ Downloading from Instagram...")
 
-      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/instagram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
-      })
+      const url = args.trim()
+      const apis = [
+        { url: "https://www.puruboy.kozow.com/api/downloader/instagram", name: "instagram" },
+      ]
 
-      if (!res.ok) {
-        return void reply("Failed to connect to download service.")
+      let success = false
+      let mediaUrl = null
+
+      for (const api of apis) {
+        try {
+          const res = await fetch(api.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!res.ok) continue
+
+          const data = (await res.json()) as any
+          
+          mediaUrl = 
+            data.media || 
+            data.result?.media || 
+            data.result?.url ||
+            data.media_url || 
+            data.url || 
+            data.download_url || 
+            data.data?.url
+
+          if (mediaUrl) {
+            console.log("[v0] Instagram downloaded via", api.name)
+            success = true
+            break
+          }
+        } catch (e) {
+          console.log("[v0] API", api.name, "failed")
+          continue
+        }
       }
 
-      const data = (await res.json()) as any
-      const mediaUrl = data.media || data.result?.media || data.media_url || data.url || data.download_url || data.data?.url
-
-      if (!mediaUrl) {
-        console.log("[v0] Instagram response:", JSON.stringify(data))
-        return void reply("Could not extract media. The URL might be invalid or private.")
+      if (!success || !mediaUrl) {
+        return void reply("❌ Could not download Instagram media. The URL might be invalid, deleted, or private. Try another link.")
       }
 
       try {
         await this.sock.sendMessage(remoteJid, {
           video: { url: mediaUrl },
-          caption: "✓ Instagram media downloaded",
+          caption: "✓ Instagram media downloaded\n\nPowered by WhatsBot",
         })
         await reply("✓ Media sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send instagram media")
-        await reply(`✓ Media ready: ${mediaUrl}`)
+        await reply(`✓ Media ready:\n${mediaUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "instagram download failed")
-      await reply("Failed to download from Instagram.")
+      await reply("❌ Failed to download from Instagram. Please try again later.")
     }
   }
 
   private async cmdFacebookDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .fbdl <Facebook video/reel URL>\n\nDownloads Facebook videos and reels.")
+      return void reply("Usage: .fbdl <Facebook video/reel URL>\n\nDownloads Facebook videos, reels, and posts.\nSupports any Facebook link format (facebook.com, fb.me).")
     }
 
     if (!this.sock) return
@@ -2507,37 +2659,64 @@ export class BotSession {
     try {
       await reply("⏳ Downloading from Facebook...")
 
-      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/fbdl", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: args.trim() }),
-      })
+      const url = args.trim()
+      const apis = [
+        { url: "https://www.puruboy.kozow.com/api/downloader/fbdl", name: "fbdl" },
+        { url: "https://www.puruboy.kozow.com/api/downloader/fb", name: "fb" },
+      ]
 
-      if (!res.ok) {
-        return void reply("Failed to connect to download service.")
+      let success = false
+      let videoUrl = null
+
+      for (const api of apis) {
+        try {
+          const res = await fetch(api.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!res.ok) continue
+
+          const data = (await res.json()) as any
+          
+          videoUrl = 
+            data.video || 
+            data.result?.video || 
+            data.result?.url ||
+            data.video_url || 
+            data.url || 
+            data.download_url || 
+            data.data?.url
+
+          if (videoUrl) {
+            console.log("[v0] Facebook downloaded via", api.name)
+            success = true
+            break
+          }
+        } catch (e) {
+          console.log("[v0] API", api.name, "failed, trying next...")
+          continue
+        }
       }
 
-      const data = (await res.json()) as any
-      const videoUrl = data.video || data.result?.video || data.video_url || data.url || data.download_url || data.data?.url
-
-      if (!videoUrl) {
-        console.log("[v0] Facebook response:", JSON.stringify(data))
-        return void reply("Could not extract video. The URL might be invalid or private.")
+      if (!success || !videoUrl) {
+        return void reply("❌ Could not download Facebook video. The URL might be invalid, deleted, or restricted. Try another link.")
       }
 
       try {
         await this.sock.sendMessage(remoteJid, {
           video: { url: videoUrl },
-          caption: "✓ Facebook video downloaded\n\nPowered by WhatsBot",
+          caption: "✓ Facebook video downloaded\n\nPowered by WhatsBot - World of Technology Team",
         })
         await reply("✓ Video sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send facebook video")
-        await reply(`✓ Video ready: ${videoUrl}`)
+        await reply(`✓ Video ready:\n${videoUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "facebook download failed")
-      await reply("Failed to download from Facebook.")
+      await reply("❌ Failed to download from Facebook. Please try again later.")
     }
   }
 
