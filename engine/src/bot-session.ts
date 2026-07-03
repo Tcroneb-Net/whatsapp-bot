@@ -472,7 +472,7 @@ export class BotSession {
     }
 
     // --- Poll responses: handle music search selections ---
-    if (msg.message?.pollUpdateMessage) {
+    if (msg.message?.pollUpdateMessage || (msg.message as any)?.pollCreationMessage) {
       try {
         await this.handlePollResponse(msg, remoteJid)
       } catch (err) {
@@ -675,33 +675,58 @@ export class BotSession {
       if (!pollUpdate) return
 
       // Get selected option index - try different property names
-      const selectedIndex = (pollUpdate as any).selectedIndex || (pollUpdate as any).selectedOptions?.[0]
-      if (selectedIndex === undefined || selectedIndex === null) return
+      let selectedIndex = (pollUpdate as any).selectedIndex
+      
+      if (selectedIndex === undefined || selectedIndex === null) {
+        // Try alternative structure
+        selectedIndex = (pollUpdate as any).selectedOptions?.[0]
+      }
+
+      if (selectedIndex === undefined || selectedIndex === null) {
+        console.log("[v0] Poll update structure:", JSON.stringify(pollUpdate))
+        return
+      }
 
       // Find the most recent search for this chat
       const searchKeys = Object.keys(this.searchCache).filter((k) =>
         k.startsWith(`search_${remoteJid}_`)
       )
       
-      if (searchKeys.length === 0) return // No recent search
+      if (searchKeys.length === 0) {
+        console.log("[v0] No recent searches found for poll response")
+        return
+      }
 
       const latestKey = searchKeys.sort().pop()
       if (!latestKey) return
 
       const results = this.searchCache[latestKey] as any[]
-      const selectedNum = (selectedIndex as number) + 1
+      if (!results || results.length === 0) {
+        console.log("[v0] No results in search cache for", latestKey)
+        return
+      }
 
-      if (!results || results.length < selectedNum) return
+      const selectedNum = typeof selectedIndex === "number" ? selectedIndex : parseInt(selectedIndex as string, 10)
+      
+      if (selectedNum < 0 || selectedNum >= results.length) {
+        console.log("[v0] Selected index out of range:", selectedNum, "available:", results.length)
+        return
+      }
 
-      const selectedResult = results[selectedNum - 1]
+      const selectedResult = results[selectedNum]
       const videoUrl = selectedResult.url
 
-      if (!videoUrl) return
+      if (!videoUrl) {
+        console.log("[v0] No URL in selected result:", selectedResult)
+        return
+      }
 
+      console.log("[v0] Poll response detected - downloading:", videoUrl)
       // Auto-download and send the song
       await this.downloadAndSendSong(videoUrl, selectedResult, remoteJid)
     } catch (err) {
       logger.debug({ err }, "poll response handling failed")
+      console.log("[v0] Poll response error:", err)
     }
   }
 
@@ -709,6 +734,29 @@ export class BotSession {
     if (!this.sock) return
 
     try {
+      // Send thumbnail image with song info first
+      const thumbnailUrl = metadata.thumbnail || `https://img.youtube.com/vi/${this.extractVideoId(videoUrl)}/maxresdefault.jpg`
+      
+      const songInfo = `🎵 *${metadata.title || "Unknown Song"}*\n\n` +
+        `🎤 *Channel:* ${metadata.channel || "Unknown Artist"}\n` +
+        `⏱️ *Duration:* ${metadata.duration || "Unknown"}\n` +
+        `👁️ *Views:* ${metadata.views || "N/A"}\n\n` +
+        `⏳ Downloading... Please wait a moment...`
+
+      // Send image with song info
+      try {
+        await this.sock.sendMessage(remoteJid, {
+          image: { url: thumbnailUrl },
+          caption: songInfo,
+        })
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send thumbnail")
+        // If image fails, just send text
+        await this.sock.sendMessage(remoteJid, {
+          text: songInfo,
+        })
+      }
+
       // Download as MP3 from YouTube
       const dlRes = await fetch("https://www.puruboy.kozow.com/api/downloader/ytmp3", {
         method: "POST",
@@ -718,18 +766,24 @@ export class BotSession {
 
       if (!dlRes.ok) {
         await this.sock.sendMessage(remoteJid, {
-          text: "Failed to download song. Please try again.",
+          text: "❌ Failed to download song. Please try again.",
         })
         return
       }
 
       const dlData = (await dlRes.json()) as any
-      const audioUrl = dlData.audio || dlData.result?.audio || dlData.url || dlData.download_url || dlData.data?.url
+      const audioUrl = 
+        dlData.audio || 
+        dlData.result?.audio || 
+        dlData.result?.url ||
+        dlData.url || 
+        dlData.download_url || 
+        dlData.data?.url
 
       if (!audioUrl) {
         console.log("[v0] YT MP3 download response:", JSON.stringify(dlData))
         await this.sock.sendMessage(remoteJid, {
-          text: "Could not extract audio. Please try another song.",
+          text: "❌ Could not extract audio. Please try another song.",
         })
         return
       }
@@ -742,16 +796,25 @@ export class BotSession {
       })
 
       // Send success message
-      const successMsg = `✓ *${metadata.title || "Song"}*\nChannel: ${metadata.channel || "Unknown"}\n\n✅ Downloaded successfully\nPowered by WhatsBot - World of Technology Team`
+      const successMsg = `✅ *${metadata.title || "Song"}* downloaded successfully!\n\n` +
+        `🎤 ${metadata.channel || "Unknown"}\n` +
+        `🔊 Playing now...\n\n` +
+        `Powered by WhatsBot - World of Technology Team`
+      
       await this.sock.sendMessage(remoteJid, {
         text: successMsg,
       })
     } catch (err) {
       logger.debug({ err }, "download and send song failed")
       await this.sock.sendMessage(remoteJid, {
-        text: "Failed to download song. Please try again.",
+        text: "❌ Failed to download song. Please try again.",
       })
     }
+  }
+
+  private extractVideoId(url: string): string {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
+    return match ? match[1] : "default"
   }
 
   private async handleAntiLink(msg: WAMessage, remoteJid: string): Promise<void> {
