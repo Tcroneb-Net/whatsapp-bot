@@ -83,10 +83,15 @@ export function menuMessage(
     `${prefix}pairwhats`,
   ])
   const downloads = section("📥 DOWNLOADS", [
-    `${prefix}play <song> — SoundCloud`,
-    `${prefix}video <url> — YouTube video`,
+    `${prefix}play <song> — Search & download MP3 with poll`,
+    `${prefix}ytdl <url> — YouTube video`,
     `${prefix}song <url> — YouTube MP3`,
-    `${prefix}facebook <url> — Facebook videos`,
+    `${prefix}x <url> — X/Twitter videos`,
+    `${prefix}tt <url> — TikTok videos`,
+    `${prefix}spotify <url> — Spotify tracks`,
+    `${prefix}sc <url> — SoundCloud tracks`,
+    `${prefix}ig <url> — Instagram photos/reels`,
+    `${prefix}fbdl <url> — Facebook videos`,
     `${prefix}dub <url> — AI dub a video`,
   ])
   const search = section("🔎 SEARCH", [
@@ -98,6 +103,7 @@ export function menuMessage(
   const ai = section("🤖 AI", [
     `${prefix}ai <text> — Ask the AI`,
     `${prefix}suno <description> — Create music with AI`,
+    `${prefix}img <prompt> [hd] — Generate images with Flux AI`,
   ])
   const tools = section("🛡️ TOOLS", [
     `${prefix}vv — Unlock a view-once media`,

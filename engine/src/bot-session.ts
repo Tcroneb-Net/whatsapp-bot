@@ -743,7 +743,8 @@ export class BotSession {
           await this.cmdPinterest(args, remoteJid, reply)
           break
         case "play":
-          await this.cmdPlay(args, remoteJid, reply)
+        case "search":
+          await this.cmdMusicSearch(args, remoteJid, reply)
           break
         case "song":
         case "ytmp3":
@@ -752,6 +753,38 @@ export class BotSession {
         case "video":
         case "ytmp4":
           await this.cmdYouTubeVideo(args, remoteJid, reply)
+          break
+        case "img":
+        case "image":
+        case "flux":
+          await this.cmdImageGeneration(args, remoteJid, reply)
+          break
+        case "ytdl":
+          await this.cmdYouTubeDl(args, remoteJid, reply)
+          break
+        case "xdl":
+        case "x":
+          await this.cmdXDownload(args, remoteJid, reply)
+          break
+        case "tiktok":
+        case "tt":
+          await this.cmdTikTokDownload(args, remoteJid, reply)
+          break
+        case "spotify":
+        case "spot":
+          await this.cmdSpotifyDownload(args, remoteJid, reply)
+          break
+        case "sc":
+        case "soundcloud":
+          await this.cmdSoundCloudDownload(args, remoteJid, reply)
+          break
+        case "ig":
+        case "instagram":
+          await this.cmdInstagramDownload(args, remoteJid, reply)
+          break
+        case "fbdl":
+        case "fbv":
+          await this.cmdFacebookDownload(args, remoteJid, reply)
           break
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
@@ -1811,6 +1844,311 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "prank command failed")
       await reply("Failed to create prank session.")
+    }
+  }
+
+  private async cmdMusicSearch(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .play <song name>\n\nSearches for songs and sends results as a poll. Select one to download as MP3!")
+    }
+
+    if (!this.sock) return
+
+    try {
+      await reply("🔍 Searching for: " + args)
+
+      // Search API call
+      const searchRes = await fetch("https://www.puruboy.kozow.com/api/search/spotify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ q: args }),
+      })
+
+      if (!searchRes.ok) {
+        return void reply("Search failed. Please try another song name.")
+      }
+
+      const searchData = (await searchRes.json()) as any
+      const results = searchData.results || searchData.data || []
+
+      if (results.length === 0) {
+        return void reply("No songs found. Try a different search.")
+      }
+
+      // Create poll with top 4 results
+      const pollResults = results.slice(0, 4).map((r: any) => r.title || r.name || "Unknown")
+
+      if (this.sock && remoteJid) {
+        await this.sock.sendMessage(remoteJid, {
+          poll: {
+            name: `Search Results for: ${args}`,
+            values: pollResults,
+          },
+        })
+      }
+
+      await reply(`✓ Poll sent with ${pollResults.length} results. Select one to download!`)
+    } catch (err) {
+      logger.debug({ err }, "music search failed")
+      await reply("Failed to search for songs.")
+    }
+  }
+
+  private async cmdImageGeneration(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .img <prompt> [model]\n\nModels: standard (default), hd\n\nExample: .img cat with hat hd")
+    }
+
+    if (!this.sock) return
+
+    try {
+      const parts = args.split(" ")
+      const model = parts[parts.length - 1] === "hd" ? "hd" : "standard"
+      const prompt = model === "hd" ? parts.slice(0, -1).join(" ") : args
+
+      await reply("🎨 Generating image with model: " + model)
+
+      // Stream API call for Flux
+      const response = await fetch("https://www.puruboy.kozow.com/api/ai/flux-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, model }),
+      })
+
+      if (!response.ok || !response.body) {
+        return void reply("Image generation failed.")
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullText = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        fullText += decoder.decode(value)
+
+        if (fullText.includes("[true]")) {
+          const resultUrl = fullText.replace("[true]", "").trim()
+          try {
+            const jsonRes = await fetch(resultUrl)
+            const imageData = (await jsonRes.json()) as any
+            const imageUrl = imageData.image_url || imageData.url
+
+            if (imageUrl && this.sock) {
+              await this.sock.sendMessage(remoteJid, {
+                image: { url: imageUrl },
+                caption: `✓ Generated with ${model} model\n\nPowered by WhatsBot - World of Technology Team`,
+              })
+            }
+            return void reply("✓ Image sent!")
+          } catch (e) {
+            logger.debug({ err: e }, "failed to fetch generated image")
+          }
+          break
+        }
+      }
+
+      await reply("Image generation completed.")
+    } catch (err) {
+      logger.debug({ err }, "image generation failed")
+      await reply("Failed to generate image. Try a different prompt.")
+    }
+  }
+
+  private async cmdYouTubeDl(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .ytdl <YouTube URL>\n\nDownloads full YouTube video.")
+    }
+
+    try {
+      await reply("⏳ Downloading YouTube video...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const videoUrl = data.video_url || data.url || data.download_url
+
+      if (!videoUrl) {
+        return void reply("Failed to get video download link.")
+      }
+
+      await reply(`✓ Video ready:\n${videoUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "youtube download failed")
+      await reply("Failed to download from YouTube.")
+    }
+  }
+
+  private async cmdXDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .x <X/Twitter URL>\n\nDownloads videos from X (Twitter).")
+    }
+
+    try {
+      await reply("⏳ Downloading from X...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/x", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const mediaUrl = data.video_url || data.url || data.media_url
+
+      if (!mediaUrl) {
+        return void reply("Failed to get X media link.")
+      }
+
+      await reply(`✓ Media ready:\n${mediaUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "x download failed")
+      await reply("Failed to download from X.")
+    }
+  }
+
+  private async cmdTikTokDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .tt <TikTok URL>\n\nDownloads TikTok videos without watermark.")
+    }
+
+    try {
+      await reply("⏳ Downloading TikTok video...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/tiktok-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const videoUrl = data.video_url || data.url || data.download_url
+
+      if (!videoUrl) {
+        return void reply("Failed to get TikTok video link.")
+      }
+
+      await reply(`✓ TikTok video ready:\n${videoUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "tiktok download failed")
+      await reply("Failed to download from TikTok.")
+    }
+  }
+
+  private async cmdSpotifyDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .spotify <Spotify URL or track link>\n\nDownloads Spotify tracks as MP3.")
+    }
+
+    try {
+      await reply("⏳ Downloading from Spotify...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/spotify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const audioUrl = data.audio_url || data.url || data.download_url
+
+      if (!audioUrl) {
+        return void reply("Failed to get Spotify download link.")
+      }
+
+      await reply(`✓ Spotify track ready:\n${audioUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "spotify download failed")
+      await reply("Failed to download from Spotify.")
+    }
+  }
+
+  private async cmdSoundCloudDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .sc <SoundCloud URL>\n\nDownloads SoundCloud tracks as MP3.")
+    }
+
+    try {
+      await reply("⏳ Downloading from SoundCloud...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/soundcloud-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const audioUrl = data.audio_url || data.url || data.download_url
+
+      if (!audioUrl) {
+        return void reply("Failed to get SoundCloud download link.")
+      }
+
+      await reply(`✓ SoundCloud track ready:\n${audioUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "soundcloud download failed")
+      await reply("Failed to download from SoundCloud.")
+    }
+  }
+
+  private async cmdInstagramDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .ig <Instagram post/reel URL>\n\nDownloads Instagram photos and reels.")
+    }
+
+    try {
+      await reply("⏳ Downloading from Instagram...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const mediaUrl = data.media_url || data.url || data.download_url
+
+      if (!mediaUrl) {
+        return void reply("Failed to get Instagram media link.")
+      }
+
+      await reply(`✓ Instagram media ready:\n${mediaUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "instagram download failed")
+      await reply("Failed to download from Instagram.")
+    }
+  }
+
+  private async cmdFacebookDownload(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .fbdl <Facebook video/reel URL>\n\nDownloads Facebook videos and reels.")
+    }
+
+    try {
+      await reply("⏳ Downloading from Facebook...")
+
+      const res = await fetch("https://www.puruboy.kozow.com/api/downloader/fbdl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: args.trim() }),
+      })
+
+      const data = (await res.json()) as any
+      const videoUrl = data.video_url || data.url || data.download_url
+
+      if (!videoUrl) {
+        return void reply("Failed to get Facebook video link.")
+      }
+
+      await reply(`✓ Facebook video ready:\n${videoUrl}`)
+    } catch (err) {
+      logger.debug({ err }, "facebook download failed")
+      await reply("Failed to download from Facebook.")
     }
   }
 }
