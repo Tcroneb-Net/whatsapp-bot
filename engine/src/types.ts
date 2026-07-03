@@ -3,12 +3,19 @@
 
 export type ViewOnceMode = "same" | "dm"
 
+export interface AntiLinkSettings {
+  enabled: boolean
+  groupJid: string
+  warnings: Record<string, number>
+}
+
 export interface BotSettings {
   botName: string
   autoStatusView: boolean
   autoStatusReact: boolean
   viewOnceMode: ViewOnceMode
   antiViewOnce: boolean
+  antiLink?: AntiLinkSettings
   aliveEnabled: boolean
   pingEnabled: boolean
   prefix: string

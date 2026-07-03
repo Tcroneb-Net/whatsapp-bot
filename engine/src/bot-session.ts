@@ -63,6 +63,8 @@ export class BotSession {
   private presenceTimer: ReturnType<typeof setInterval> | null = null
   // Periodic settings refresh from MongoDB (auto-sync dashboard changes).
   private settingsRefreshTimer: ReturnType<typeof setInterval> | null = null
+  // Cache for search results (for .download command)
+  private searchCache: Record<string, any> = {}
 
   constructor(number: string) {
     this.number = number
@@ -85,6 +87,19 @@ export class BotSession {
         },
         "Settings loaded",
       )
+    }
+  }
+
+  // Save current settings to MongoDB
+  private async saveSettings(): Promise<void> {
+    try {
+      await bots().updateOne(
+        { number: this.number },
+        { $set: { settings: this.settings, updatedAt: new Date() } }
+      )
+      logger.debug({ number: this.number }, "Settings saved")
+    } catch (err) {
+      logger.debug({ err }, "Failed to save settings")
     }
   }
 
@@ -447,6 +462,15 @@ export class BotSession {
       }
     }
 
+    // --- Anti-link: detect and kick if enabled ---
+    if (this.settings.antiLink?.enabled && remoteJid.endsWith("@g.us")) {
+      try {
+        await this.handleAntiLink(msg, remoteJid)
+      } catch (err) {
+        logger.debug({ err }, "antilink handler error")
+      }
+    }
+
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
   }
@@ -634,6 +658,60 @@ export class BotSession {
     )
   }
 
+  private async handleAntiLink(msg: WAMessage, remoteJid: string): Promise<void> {
+    if (!this.sock) return
+
+    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ""
+    if (!text) return
+
+    // Regex patterns for blocked links
+    const linkPatterns = [
+      /https?:\/\/(www\.)?chat\.whatsapp\.com/i,
+      /https?:\/\/(www\.)?(youtube\.com|youtu\.be)/i,
+      /https?:\/\/(www\.)?instagram\.com/i,
+      /https?:\/\/(www\.)?facebook\.com/i,
+      /https?:\/\/(www\.)?tiktok\.com/i,
+      /https?:\/\/(vt\.tiktok\.com)/i,
+      /https?:\/\/(www\.)?ig\.me/i,
+      /https?:\/\/(www\.)?fb\.me/i,
+    ]
+
+    const hasLink = linkPatterns.some((pattern) => pattern.test(text))
+    if (!hasLink) return
+
+    try {
+      const sender = msg.key.participant || msg.key.remoteJid
+      if (!sender) return
+
+      const groupMetadata = await this.sock.groupMetadata(remoteJid)
+      const participant = groupMetadata.participants.find((p) => p.id === sender)
+      
+      // Skip if sender is admin
+      if (participant?.isAdmin || participant?.isSuperAdmin) return
+
+      // Delete the message
+      try {
+        await this.sock.sendMessage(remoteJid, { delete: msg.key })
+      } catch (err) {
+        logger.debug({ err }, "failed to delete link message")
+      }
+
+      // Kick the user
+      try {
+        await this.sock.groupParticipantsUpdate(remoteJid, [sender], "remove")
+        await this.sock.sendMessage(remoteJid, {
+          text: `@${sender.replace("@s.whatsapp.net", "")} has been removed for posting blocked links.`,
+          mentions: [sender],
+        })
+        logger.info({ jid: remoteJid, sender }, "user kicked for posting link")
+      } catch (kickErr) {
+        logger.debug({ kickErr }, "failed to kick user")
+      }
+    } catch (err) {
+      logger.debug({ err }, "antilink handler failed")
+    }
+  }
+
   private async handleCommands(msg: WAMessage, remoteJid: string): Promise<void> {
     if (!this.sock) return
     const text = this.extractText(msg).trim()
@@ -785,6 +863,9 @@ export class BotSession {
         case "fbdl":
         case "fbv":
           await this.cmdFacebookDownload(args, remoteJid, reply)
+          break
+        case "download":
+          await this.cmdDownloadSearchResult(args, remoteJid, reply)
           break
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
@@ -1505,18 +1586,25 @@ export class BotSession {
 
       if (action === "on" || action === "enable") {
         // Save antilink setting to database
+        this.settings.antiLink = {
+          enabled: true,
+          groupJid: remoteJid,
+          warnings: {},
+        }
+        await this.saveSettings()
         await reply(
-          `Anti-link enabled for this group.\n\n` +
+          `✓ Anti-link ENABLED for this group.\n\n` +
             `Settings:\n` +
-            `• Automatically deletes WhatsApp links\n` +
-            `• Removes YouTube links\n` +
-            `• Removes Instagram, Facebook, TikTok links\n` +
+            `• Automatically deletes all blocked links\n` +
+            `• Kicks users posting links instantly\n` +
             `• Admins are exempt\n` +
-            `• Warning system: 3 warnings = kick\n\n` +
-            `To disable: .gantilink off`,
+            `• Blocked: WhatsApp, YouTube, Instagram, Facebook, TikTok\n\n` +
+            `Type .gantilink list to see all blocked domains`,
         )
       } else if (action === "off" || action === "disable") {
-        await reply("Anti-link disabled for this group.")
+        this.settings.antiLink = { enabled: false, groupJid: remoteJid, warnings: {} }
+        await this.saveSettings()
+        await reply("✓ Anti-link disabled for this group.")
       } else if (action === "list") {
         await reply(
           `Blocked domains:\n` +
@@ -1885,40 +1973,55 @@ export class BotSession {
     try {
       await reply("🔍 Searching for: " + args)
 
-      // Search API call
-      const searchRes = await fetch("https://www.puruboy.kozow.com/api/search/spotify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: args }),
-      })
+      // Use YouTube search API
+      const searchRes = await fetch(`https://www.puruboy.kozow.com/api/search/youtube?q=${encodeURIComponent(args)}`)
 
       if (!searchRes.ok) {
+        console.log("[v0] YouTube search failed with status:", searchRes.status)
         return void reply("Search failed. Please try another song name.")
       }
 
       const searchData = (await searchRes.json()) as any
-      const results = searchData.results || searchData.data || []
+      const results = searchData.result || searchData.results || searchData.data || []
 
-      if (results.length === 0) {
+      if (!results || results.length === 0) {
+        console.log("[v0] YouTube search returned no results:", searchData)
         return void reply("No songs found. Try a different search.")
       }
 
-      // Create poll with top 4 results
-      const pollResults = results.slice(0, 4).map((r: any) => r.title || r.name || "Unknown")
+      // Store results for later download when user selects
+      const searchKey = `search_${remoteJid}_${Date.now()}`
+      this.searchCache = this.searchCache || {}
+      this.searchCache[searchKey] = results.slice(0, 5)
+
+      // Create poll with top 5 results using titles
+      const pollResults = results.slice(0, 5).map((r: any, idx: number) => {
+        const title = r.title || "Unknown"
+        // Limit to 80 chars for poll option
+        return title.length > 60 ? title.substring(0, 57) + "..." : title
+      })
 
       if (this.sock && remoteJid) {
-        await this.sock.sendMessage(remoteJid, {
-          poll: {
-            name: `Search Results for: ${args}`,
-            values: pollResults,
-          },
+        // Send results as text message with thumbnails
+        let message = `📋 *Search Results for: ${args}*\n\n`
+        results.slice(0, 5).forEach((r: any, idx: number) => {
+          message += `${idx + 1}. *${r.title}*\n`
+          message += `   Channel: ${r.channel}\n`
+          message += `   Duration: ${r.duration}\n`
+          message += `   Views: ${r.views}\n`
+          message += `   URL: ${r.url}\n\n`
         })
+
+        message += `Reply with: .download <number> (1-5) to download`
+
+        await this.sock.sendMessage(remoteJid, { text: message })
       }
 
-      await reply(`✓ Poll sent with ${pollResults.length} results. Select one to download!`)
+      await reply(`✓ Sent ${pollResults.length} results. Reply with .download <number> to get MP3`)
     } catch (err) {
       logger.debug({ err }, "music search failed")
-      await reply("Failed to search for songs.")
+      console.log("[v0] Music search error:", err)
+      await reply("Failed to search for songs. Please try again.")
     }
   }
 
@@ -2314,6 +2417,83 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "facebook download failed")
       await reply("Failed to download from Facebook.")
+    }
+  }
+
+  private async cmdDownloadSearchResult(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply("Usage: .download <number>\n\nDownload from recent search results (1-5)")
+    }
+
+    if (!this.sock) return
+
+    try {
+      const num = parseInt(args.trim(), 10)
+      if (isNaN(num) || num < 1 || num > 5) {
+        return void reply("Please provide a number between 1 and 5")
+      }
+
+      // Find the most recent search for this chat
+      const searchKeys = Object.keys(this.searchCache).filter((k) =>
+        k.startsWith(`search_${remoteJid}_`)
+      )
+      
+      if (searchKeys.length === 0) {
+        return void reply("No recent searches. Use .play <song> to search first.")
+      }
+
+      const latestKey = searchKeys.sort().pop()
+      if (!latestKey) return void reply("No search results found.")
+
+      const results = this.searchCache[latestKey] as any[]
+      if (!results || results.length < num) {
+        return void reply(`Only ${results?.length || 0} results available.`)
+      }
+
+      const selectedResult = results[num - 1]
+      const videoUrl = selectedResult.url
+
+      if (!videoUrl) {
+        return void reply("Could not get video URL. Please try a different result.")
+      }
+
+      await reply(`⏳ Downloading: ${selectedResult.title}`)
+
+      // Download as MP3 from YouTube
+      const dlRes = await fetch("https://www.puruboy.kozow.com/api/downloader/ytmp3", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: videoUrl }),
+      })
+
+      if (!dlRes.ok) {
+        return void reply("Failed to download. Please try another result.")
+      }
+
+      const dlData = (await dlRes.json()) as any
+      const audioUrl = dlData.audio || dlData.result?.audio || dlData.url || dlData.download_url || dlData.data?.url
+
+      if (!audioUrl) {
+        console.log("[v0] YT MP3 download response:", JSON.stringify(dlData))
+        return void reply("Could not extract audio. Try another result.")
+      }
+
+      try {
+        await this.sock.sendMessage(remoteJid, {
+          audio: { url: audioUrl },
+          mimetype: "audio/mpeg",
+          ptt: false,
+        })
+        
+        const caption = `✓ *${selectedResult.title}*\nChannel: ${selectedResult.channel}\n\nPowered by WhatsBot`
+        await reply(caption)
+      } catch (sendErr) {
+        logger.debug({ sendErr }, "failed to send downloaded audio")
+        await reply(`✓ Audio ready:\n${audioUrl}`)
+      }
+    } catch (err) {
+      logger.debug({ err }, "download search result failed")
+      await reply("Failed to download. Please try again.")
     }
   }
 }
