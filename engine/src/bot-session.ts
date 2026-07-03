@@ -723,6 +723,10 @@ export class BotSession {
         case "gpt":
           await this.cmdAi(args, reply)
           break
+        case "suno":
+        case "music":
+          await this.cmdSuno(args, remoteJid, reply)
+          break
         case "translate":
         case "tr":
           await this.cmdTranslate(args, reply)
