@@ -94,8 +94,7 @@ export function menuMessage(
     `${prefix}pair — Pair new device`,
   ])
   const downloads = section("📥 MEDIA DOWNLOADS", [
-    `${prefix}play <song> — Search & download MP3`,
-    `${prefix}song <song> — Song with lyrics & video`,
+    `${prefix}play <song> — Search & download MP3 / Song with lyrics`,
     `${prefix}download <url> — TikTok, Instagram, Facebook, YouTube, etc.`,
     `${prefix}spotify <url> — Spotify tracks`,
     `${prefix}sc <url> — SoundCloud tracks`,
