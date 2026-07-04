@@ -2282,17 +2282,32 @@ Powered by WhatsBot - World of Technology Team`
     }
 
     try {
-      const sender = msg.key.participant || msg.key.remoteJid
+      let sender = msg.key.participant || msg.key.remoteJid
+      
+      // Normalize sender JID (remove device ID if present: "12345:6@..." -> "12345@...")
+      if (sender?.includes(":")) {
+        sender = sender.split(":")[0] + "@s.whatsapp.net"
+      }
       
       // Check if sender is bot owner
       const ownerJid = this.ownJid()
       const isBotOwner = sender === ownerJid
       
+      console.log("[v0] AntiLink - Sender:", sender, "Owner:", ownerJid, "IsBotOwner:", isBotOwner)
+      
       // Check if sender is group admin
       let isAdmin = false
       try {
         const groupMetadata = await this.sock.groupMetadata(remoteJid)
-        isAdmin = groupMetadata.participants.find((p) => p.id === sender)?.isAdmin || false
+        const senderInGroup = groupMetadata.participants.find((p) => {
+          let pId = p.id
+          if (pId?.includes(":")) {
+            pId = pId.split(":")[0] + "@s.whatsapp.net"
+          }
+          return pId === sender
+        })
+        isAdmin = senderInGroup?.isAdmin || false
+        console.log("[v0] AntiLink - IsAdmin:", isAdmin, "SenderInGroup:", senderInGroup?.id)
       } catch (adminErr) {
         console.log("[v0] Failed to check group admin status:", adminErr)
         return void reply("Failed to verify permissions. Please try again.")
@@ -2302,6 +2317,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Allow only owner and admins to configure
       if (!isBotOwner && !isAdmin) {
+        console.log("[v0] AntiLink - Permission denied. IsBotOwner:", isBotOwner, "IsAdmin:", isAdmin)
         return void reply("❌ Only bot owner or group admins can configure anti-link.")
       }
 
@@ -2313,28 +2329,48 @@ Powered by WhatsBot - World of Technology Team`
           warnings: {},
         }
         await this.saveSettings()
+        console.log("[v0] AntiLink enabled for group:", remoteJid)
         
         // Get bot's permissions
-        const botIsAdmin = await this.sock.groupMetadata(remoteJid).then(
-          (m) => m.participants.find((p) => p.id === this.sock!.user!.id)?.isAdmin
-        ).catch(() => false)
+        let botIsAdmin = false
+        try {
+          const groupMeta = await this.sock.groupMetadata(remoteJid)
+          const botId = this.sock.user?.id
+          let botIdNormalized = botId
+          if (botIdNormalized?.includes(":")) {
+            botIdNormalized = botIdNormalized.split(":")[0] + "@s.whatsapp.net"
+          }
+          const botInGroup = groupMeta.participants.find((p) => {
+            let pId = p.id
+            if (pId?.includes(":")) {
+              pId = pId.split(":")[0] + "@s.whatsapp.net"
+            }
+            return pId === botIdNormalized
+          })
+          botIsAdmin = botInGroup?.isAdmin || false
+        } catch (err) {
+          console.log("[v0] Failed to check bot admin status:", err)
+        }
 
         if (!botIsAdmin) {
           await reply(
-            `⚠️ Anti-link is ON, but bot needs admin privileges to delete links.\n\n` +
-              `Please make bot an admin so it can:\n` +
-              `• Delete messages with links\n` +
-              `• Kick users posting links\n` +
-              `• Warn users effectively`,
+            `✓ Anti-link ENABLED (Limited)\n\n` +
+            `⚠️ Bot is not an admin in this group.\n` +
+            `To enforce anti-link properly, please:\n` +
+            `• Make bot an admin\n` +
+            `• Then anti-link will auto-delete links\n\n` +
+            `Without admin:\n` +
+            `• Can detect and warn about links\n` +
+            `• Can notify group about violations`,
           )
         } else {
           await reply(
             `✓ Anti-link ENABLED\n\n` +
-              `Blocking:\n` +
-              `• WhatsApp, YouTube, Instagram, Facebook, TikTok\n` +
-              `• Any other suspicious links\n\n` +
-              `Actions: Auto-delete → Warn → Kick\n` +
-              `Type .gantilink list to see blocked domains`,
+            `Bot is admin - will enforce:\n` +
+            `• Auto-delete messages with links\n` +
+            `• WhatsApp, YouTube, Instagram, Facebook, TikTok\n` +
+            `• Warn users, kick after violations\n\n` +
+            `Type .gantilink list to see all blocked domains`,
           )
         }
       } else if (action === "off" || action === "disable") {
