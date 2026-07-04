@@ -620,7 +620,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                       >
                         <option value="warn">⚠️ Warn (message)</option>
                         <option value="mute">🤐 Mute (warning)</option>
-                        <option value="kick">🚫 Kick (remove)</option>
+                        <option value="kick">���� Kick (remove)</option>
                       </select>
                     </div>
                   )}
@@ -745,12 +745,17 @@ function ToggleRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 flex-1">
         <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Icon className="size-4" />
         </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-medium">{label}</span>
+        <div className="flex flex-col gap-1 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{label}</span>
+            <Badge variant={checked ? "default" : "outline"} className="text-xs">
+              {checked ? "ON" : "OFF"}
+            </Badge>
+          </div>
           <span className="text-xs text-muted-foreground">{desc}</span>
         </div>
       </div>

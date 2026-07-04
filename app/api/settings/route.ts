@@ -60,6 +60,26 @@ export async function PATCH(req: Request) {
         .map((e) => e.trim())
         .filter(Boolean)
       if (emojis.length > 0) update[`settings.${key}`] = emojis.join(",")
+    } else if (key === "groupSettings") {
+      // Handle group settings object
+      if (typeof value === "object" && value !== null) {
+        const groupSettings = {
+          antiLink: typeof value.antiLink === "boolean" ? value.antiLink : false,
+          antiLinkAction: ["warn", "kick", "mute"].includes(value.antiLinkAction as string)
+            ? (value.antiLinkAction as string)
+            : "warn",
+          autoOpenTime: typeof value.autoOpenTime === "string" ? value.autoOpenTime : undefined,
+          autoCloseTime: typeof value.autoCloseTime === "string" ? value.autoCloseTime : undefined,
+          autoAcceptJoin: typeof value.autoAcceptJoin === "boolean" ? value.autoAcceptJoin : false,
+          autoAcceptRequests:
+            typeof value.autoAcceptRequests === "boolean" ? value.autoAcceptRequests : false,
+          allowTagAll: typeof value.allowTagAll === "boolean" ? value.allowTagAll : true,
+        }
+        update["settings.groupSettings"] = groupSettings
+      }
+    } else if (key === "viewOnceAutoUnlock") {
+      // Handle boolean toggle
+      if (typeof value === "boolean") update[`settings.${key}`] = value
     } else {
       // boolean toggles + strings (aiPersona, welcomeImageUrl)
       if (typeof value === "boolean" || typeof value === "string") update[`settings.${key}`] = value
