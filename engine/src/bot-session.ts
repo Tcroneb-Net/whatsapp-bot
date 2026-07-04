@@ -371,11 +371,31 @@ export class BotSession {
   private async fetchImage(url: string): Promise<Buffer | null> {
     if (!url) return null
     try {
-      const res = await fetch(url)
-      if (!res.ok) return null
+      // Convert relative paths to absolute URLs for the app
+      let fullUrl = url
+      if (url.startsWith("/")) {
+        // Try localhost first (for local development)
+        try {
+          const res = await fetch(`http://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
+          if (res.ok) {
+            const arr = await res.arrayBuffer()
+            return Buffer.from(arr)
+          }
+        } catch {
+          console.log("[v0] Failed to fetch from localhost, trying deployed URL")
+        }
+        // Fallback to deployed URL (if available via environment)
+        fullUrl = url
+      }
+      const res = await fetch(fullUrl, { signal: AbortSignal.timeout(10000) })
+      if (!res.ok) {
+        console.log("[v0] Image fetch failed:", res.status, url)
+        return null
+      }
       const arr = await res.arrayBuffer()
       return Buffer.from(arr)
-    } catch {
+    } catch (err) {
+      console.log("[v0] Failed to fetch image:", url, err)
       return null
     }
   }
@@ -1576,40 +1596,58 @@ Powered by WhatsBot - World of Technology Team`
     if (!this.sock) return
 
     try {
-      const apiUrl = `https://omegatech-api.dixonomega.tech/api/random/quotes`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) })
-
-      if (!response.ok) {
-        console.log("[v0] Quotes API failed:", response.status)
-        return void reply("Could not fetch quote. Please try again.")
-      }
-
-      const data = (await response.json()) as any
-      console.log("[v0] Quote API response:", JSON.stringify(data).substring(0, 200))
-
       let quote = ""
       let author = "Unknown"
 
-      // Try multiple response structures
-      if (data?.result?.quote) {
-        quote = data.result.quote || data.result.text || ""
-        author = data.result.author || data.result.by || "Unknown"
-      } else if (data?.quote) {
-        quote = data.quote || data.text || ""
-        author = data.author || data.by || "Unknown"
-      } else if (data?.data?.quote) {
-        quote = data.data.quote || data.data.text || ""
-        author = data.data.author || data.data.by || "Unknown"
-      } else if (Array.isArray(data) && data.length > 0) {
-        // Handle array response
-        const item = data[0]
-        quote = item.quote || item.text || item.content || ""
-        author = item.author || item.by || item.source || "Unknown"
+      // Try primary API
+      try {
+        const apiUrl = `https://omegatech-api.dixonomega.tech/api/random/quotes`
+        const response = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) })
+
+        if (response.ok) {
+          const data = (await response.json()) as any
+          console.log("[v0] Quote API response:", JSON.stringify(data).substring(0, 200))
+
+          // Try multiple response structures
+          if (data?.result?.quote) {
+            quote = data.result.quote || data.result.text || ""
+            author = data.result.author || data.result.by || "Unknown"
+          } else if (data?.quote) {
+            quote = data.quote || data.text || ""
+            author = data.author || data.by || "Unknown"
+          } else if (data?.data?.quote) {
+            quote = data.data.quote || data.data.text || ""
+            author = data.data.author || data.data.by || "Unknown"
+          } else if (Array.isArray(data) && data.length > 0) {
+            const item = data[0]
+            quote = item.quote || item.text || item.content || ""
+            author = item.author || item.by || item.source || "Unknown"
+          }
+        }
+      } catch (primaryErr) {
+        console.log("[v0] Primary quote API failed:", primaryErr)
+      }
+
+      // Fallback to second API if first one fails
+      if (!quote || quote.trim().length === 0) {
+        try {
+          const fallbackUrl = `https://api.quotable.io/random`
+          const response = await fetch(fallbackUrl, { signal: AbortSignal.timeout(8000) })
+
+          if (response.ok) {
+            const data = (await response.json()) as any
+            quote = data.content || data.quote || ""
+            author = data.author || "Unknown"
+            console.log("[v0] Using fallback quote API")
+          }
+        } catch (fallbackErr) {
+          console.log("[v0] Fallback quote API failed:", fallbackErr)
+        }
       }
 
       if (!quote || quote.trim().length === 0) {
-        console.log("[v0] No quote found in response")
-        return void reply("Could not fetch quote. Please try again.")
+        console.log("[v0] No quote found from any API")
+        return void reply("Could not fetch quote. Please try again later.")
       }
 
       const formatted = `*"${quote}"*\n\n— ${author}\n\n━━━━━━━━━━━━━━━━━━\nPowered by WhatsBot`
@@ -1619,7 +1657,7 @@ Powered by WhatsBot - World of Technology Team`
     } catch (err) {
       logger.debug({ err }, "quote command failed")
       console.log("[v0] Quote error:", err)
-      await reply("Failed to get quote. Please try again.")
+      await reply("Failed to send quote. Please try again.")
     }
   }
 
@@ -2251,14 +2289,21 @@ Powered by WhatsBot - World of Technology Team`
       const isBotOwner = sender === ownerJid
       
       // Check if sender is group admin
-      const groupMetadata = await this.sock.groupMetadata(remoteJid)
-      const isAdmin = groupMetadata.participants.find((p) => p.id === sender)?.isAdmin
-
-      if (!isBotOwner && !isAdmin) {
-        return void reply("Only bot owner or group admins can configure anti-link.")
+      let isAdmin = false
+      try {
+        const groupMetadata = await this.sock.groupMetadata(remoteJid)
+        isAdmin = groupMetadata.participants.find((p) => p.id === sender)?.isAdmin || false
+      } catch (adminErr) {
+        console.log("[v0] Failed to check group admin status:", adminErr)
+        return void reply("Failed to verify permissions. Please try again.")
       }
 
-      const action = args?.toLowerCase() || "status"
+      const action = args?.toLowerCase().trim() || "status"
+
+      // Allow only owner and admins to configure
+      if (!isBotOwner && !isAdmin) {
+        return void reply("❌ Only bot owner or group admins can configure anti-link.")
+      }
 
       if (action === "on" || action === "enable") {
         // Save antilink setting to database
@@ -2268,35 +2313,52 @@ Powered by WhatsBot - World of Technology Team`
           warnings: {},
         }
         await this.saveSettings()
-        await reply(
-          `✓ Anti-link ENABLED for this group.\n\n` +
-            `Settings:\n` +
-            `• Automatically deletes all blocked links\n` +
-            `• Kicks users posting links instantly\n` +
-            `• Admins are exempt\n` +
-            `• Blocked: WhatsApp, YouTube, Instagram, Facebook, TikTok\n\n` +
-            `Type .gantilink list to see all blocked domains`,
-        )
+        
+        // Get bot's permissions
+        const botIsAdmin = await this.sock.groupMetadata(remoteJid).then(
+          (m) => m.participants.find((p) => p.id === this.sock!.user!.id)?.isAdmin
+        ).catch(() => false)
+
+        if (!botIsAdmin) {
+          await reply(
+            `⚠️ Anti-link is ON, but bot needs admin privileges to delete links.\n\n` +
+              `Please make bot an admin so it can:\n` +
+              `• Delete messages with links\n` +
+              `• Kick users posting links\n` +
+              `• Warn users effectively`,
+          )
+        } else {
+          await reply(
+            `✓ Anti-link ENABLED\n\n` +
+              `Blocking:\n` +
+              `• WhatsApp, YouTube, Instagram, Facebook, TikTok\n` +
+              `• Any other suspicious links\n\n` +
+              `Actions: Auto-delete → Warn → Kick\n` +
+              `Type .gantilink list to see blocked domains`,
+          )
+        }
       } else if (action === "off" || action === "disable") {
         this.settings.antiLink = { enabled: false, groupJid: remoteJid, warnings: {} }
         await this.saveSettings()
-        await reply("✓ Anti-link disabled for this group.")
+        await reply("✓ Anti-link disabled.")
       } else if (action === "list") {
         await reply(
           `Blocked domains:\n` +
-            `• WhatsApp links (chat.whatsapp.com)\n` +
+            `• WhatsApp (chat.whatsapp.com)\n` +
             `• YouTube (youtube.com, youtu.be)\n` +
             `• Instagram (instagram.com, ig.me)\n` +
             `• Facebook (facebook.com, fb.me)\n` +
             `• TikTok (tiktok.com, vt.tiktok.com)\n\n` +
-            `Admins can bypass. Users get warned, kicked after 3 warnings.`,
+            `Admins bypass. Users warned, kicked after violations.`,
         )
       } else {
+        const status = this.settings.antiLink?.enabled ? "ON ✓" : "OFF"
         await reply(
-          `Usage: gantilink <on|off|list>\n\n` +
-            `on - Enable anti-link with auto-delete\n` +
-            `off - Disable anti-link\n` +
-            `list - Show blocked domains`,
+          `Anti-link Status: ${status}\n\n` +
+            `Usage: .gantilink <action>\n\n` +
+            `• on - Enable auto-delete of links\n` +
+            `• off - Disable anti-link\n` +
+            `• list - Show all blocked domains`,
         )
       }
     } catch (err) {
