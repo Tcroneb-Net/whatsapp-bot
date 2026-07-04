@@ -130,6 +130,7 @@ export function menuMessage(
     `Anti-link, tag-all, and more available in dashboard`,
   ])
   const owner = section("👑 OWNER", [
+    `${prefix}autoreact on/off — Toggle status auto reactions`,
     `${prefix}online on/off — Always online`,
     `${prefix}autotype on/off — Auto typing`,
     `${prefix}password — Reset password`,
@@ -211,7 +212,7 @@ export function menuMessage(
     `> By ${config.teamName}\n` +
     `> Sponsored by ${config.sponsor}\n` +
     `> Pair free at ${config.pairUrl}\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
+    `╰━━━━━━━━━━━━━━━━━���━━⬣\n` +
     `> ☬ *${botName.toUpperCase()}* ☬`
 
   const sections = [header, general, downloads, search, create, translate, ai, tools, groups, ...pluginSections, credits]
