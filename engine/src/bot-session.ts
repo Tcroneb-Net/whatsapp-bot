@@ -847,12 +847,10 @@ export class BotSession {
           await this.cmdPinterest(args, remoteJid, reply)
           break
         case "play":
-        case "search":
-          await this.cmdPlay(args, remoteJid, reply)
-          break
         case "song":
+        case "search":
         case "ytmp3":
-          await this.cmdSong(args, remoteJid, reply)
+          await this.cmdPlay(args, remoteJid, reply)
           break
         case "video":
         case "ytmp4":
@@ -1331,7 +1329,7 @@ export class BotSession {
     try {
       const ok = await this.recoverViewOnce(inner as proto.IMessage, key, ownerJid)
       if (!ok) await reply("Could not unlock that media.")
-      else await reply("✓ Media unlocked and sent to your DM")
+      // Silent operation - no success message in chat
     } catch (err) {
       logger.debug({ err }, "vv recovery failed")
       await reply("Failed to unlock that media. It may have expired.")
@@ -1949,96 +1947,7 @@ Powered by WhatsBot - World of Technology Team`
     }
   }
 
-  private async cmdSong(
-    args: string,
-    remoteJid: string,
-    reply: (b: string) => Promise<unknown>,
-  ): Promise<void> {
-    if (!args) return void reply("Usage: .song <song name or artist>\n\nExample: .song Eminem Venom")
-    if (!this.sock) return
 
-    try {
-      await reply("🎵 Getting your song with lyrics and video...")
-
-      const apiUrl = `https://apis.davidcyril.name.ng/song?query=${encodeURIComponent(args)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
-
-      if (!response.ok) {
-        console.log("[v0] Song API failed:", response.status, await response.text())
-        return void reply(`API Error: ${response.status}. Please try again.`)
-      }
-
-      const data = (await response.json()) as any
-      console.log("[v0] Song API response status:", data?.status, "success:", data?.success)
-      
-      // API returns status: true or status: 200, check both
-      if (!data?.result || (data?.status !== true && data?.status !== 200 && !data?.success)) {
-        console.log("[v0] No song found in response")
-        return void reply("No results found. Try a different search.")
-      }
-
-      const result = data.result
-      const title = result.title || "Unknown"
-      const duration = result.duration || "Unknown"
-      const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
-      const thumbnail = result.thumbnail || ""
-      // Try multiple possible field names for audio download
-      const audioUrl = result.download_url || result.audio_url || result.audio?.download_url || result.url || ""
-      const videoUrl = result.video_url || result.video?.download_url || ""
-
-      // Send thumbnail with song info
-      const info =
-        `🎵 *${title}*\n\n` +
-        `⏱️ *Duration:* ${duration}\n` +
-        `👁️ *Views:* ${views}\n` +
-        `📅 *Published:* ${result.published || "Unknown"}\n\n` +
-        `⏳ Preparing downloads...`
-
-      const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
-      try {
-        if (thumbBuf) {
-          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: info })
-        } else {
-          await this.sock.sendMessage(remoteJid, { text: info })
-        }
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send thumbnail")
-      }
-
-      // Send audio if available
-      if (audioUrl) {
-        try {
-          await this.sock.sendMessage(remoteJid, {
-            audio: { url: audioUrl },
-            mimetype: "audio/mpeg",
-            fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
-            ptt: false,
-          })
-        } catch (audioErr) {
-          console.log("[v0] Failed to send audio:", audioErr)
-        }
-      }
-
-      // Send video if available
-      if (videoUrl) {
-        try {
-          await this.sock.sendMessage(remoteJid, {
-            video: { url: videoUrl },
-            caption: `🎬 *${title}* (720p)`,
-          })
-        } catch (videoErr) {
-          console.log("[v0] Failed to send video:", videoErr)
-        }
-      }
-
-      const successMsg = `✅ *${title}* ready!\n\n🎤 ${result.artist || ""}\n\nPowered by WhatsBot - World of Technology Team`
-      await this.sock.sendMessage(remoteJid, { text: successMsg })
-    } catch (err) {
-      logger.debug({ err }, "song command failed")
-      console.log("[v0] Song error:", err)
-      await reply("Failed to get song. Please try again.")
-    }
-  }
 
   private async cmdYouTubeVideo(
     args: string,
