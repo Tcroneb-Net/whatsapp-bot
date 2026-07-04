@@ -916,6 +916,10 @@ export class BotSession {
         case "lyric":
           await this.cmdLyrics(args, remoteJid, reply)
           break
+        case "autoreact":
+        case "ar":
+          await this.cmdAutoReact(args, isOwner, reply)
+          break
         case "quote":
         case "quotes":
           await this.cmdQuote(args, remoteJid, reply)
@@ -1524,6 +1528,46 @@ Powered by WhatsBot - World of Technology Team`
     }
   }
 
+  private async cmdAutoReact(
+    args: string,
+    isOwner: boolean,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!isOwner) return void reply("Only bot owner can use this command.")
+
+    const action = args.toLowerCase().trim()
+
+    if (!action || !["on", "off", "status"].includes(action)) {
+      const current = this.settings.autoStatusReact ? "ON" : "OFF"
+      return void reply(
+        `Current Status: Auto React is ${current}\n\n` +
+          `Usage: .autoreact <action>\n\n` +
+          `Actions:\n` +
+          `• on — Turn on auto status reactions\n` +
+          `• off — Turn off auto status reactions\n` +
+          `• status — Show current status`,
+      )
+    }
+
+    if (action === "status") {
+      const current = this.settings.autoStatusReact ? "ON ✅" : "OFF ❌"
+      return void reply(`Auto Status React is currently: ${current}`)
+    }
+
+    const newValue = action === "on"
+    if (this.settings.autoStatusReact === newValue) {
+      const status = newValue ? "already on" : "already off"
+      return void reply(`Auto React is ${status}. No changes needed.`)
+    }
+
+    this.settings.autoStatusReact = newValue
+    await this.saveSettings()
+
+    const status = newValue ? "ON ✅" : "OFF ❌"
+    await reply(`Auto Status React is now ${status}`)
+    console.log(`[v0] Auto React toggled to ${newValue}`)
+  }
+
   private async cmdQuote(
     args: string,
     remoteJid: string,
@@ -1541,18 +1585,37 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       const data = (await response.json()) as any
+      console.log("[v0] Quote API response:", JSON.stringify(data).substring(0, 200))
 
-      if (data?.result) {
-        const quote = data.result.quote || data.result.text || ""
-        const author = data.result.author || data.result.by || "Unknown"
+      let quote = ""
+      let author = "Unknown"
 
-        const formatted = `*"${quote}"*\n\n— ${author}\n\n━━━━━━━━━━━━━━━━━━\nPowered by WhatsBot`
+      // Try multiple response structures
+      if (data?.result?.quote) {
+        quote = data.result.quote || data.result.text || ""
+        author = data.result.author || data.result.by || "Unknown"
+      } else if (data?.quote) {
+        quote = data.quote || data.text || ""
+        author = data.author || data.by || "Unknown"
+      } else if (data?.data?.quote) {
+        quote = data.data.quote || data.data.text || ""
+        author = data.data.author || data.data.by || "Unknown"
+      } else if (Array.isArray(data) && data.length > 0) {
+        // Handle array response
+        const item = data[0]
+        quote = item.quote || item.text || item.content || ""
+        author = item.author || item.by || item.source || "Unknown"
+      }
 
-        await this.sock.sendMessage(remoteJid, { text: formatted })
-        await reply("✅ Quote sent!")
-      } else {
+      if (!quote || quote.trim().length === 0) {
+        console.log("[v0] No quote found in response")
         return void reply("Could not fetch quote. Please try again.")
       }
+
+      const formatted = `*"${quote}"*\n\n— ${author}\n\n━━━━━━━━━━━━━━━━━━\nPowered by WhatsBot`
+
+      await this.sock.sendMessage(remoteJid, { text: formatted })
+      await reply("✅ Quote sent!")
     } catch (err) {
       logger.debug({ err }, "quote command failed")
       console.log("[v0] Quote error:", err)
