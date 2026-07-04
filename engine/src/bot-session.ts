@@ -1419,7 +1419,13 @@ export class BotSession {
       // If replying to a media message
       if (msgMedia) {
         try {
-          fileBuffer = (await downloadMediaMessage(msgMedia as any, "buffer", {}, { logger } as any)) as Buffer
+          const downloadedData = await downloadMediaMessage(msgMedia as any, "buffer", {}, { logger } as any)
+          fileBuffer = downloadedData && Buffer.isBuffer(downloadedData) ? downloadedData : null
+          
+          if (!fileBuffer) {
+            console.log("[v0] Downloaded data is not a buffer:", typeof downloadedData, downloadedData?.length)
+            return void reply("Failed to extract file. Please try again.")
+          }
           
           // Get file name from various message types
           if (msgMedia === msg?.message?.imageMessage) {
@@ -1575,16 +1581,35 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       const data = (await response.json()) as any
-      console.log("[v0] Lyrics API response:", data?.success, data?.found)
+      console.log("[v0] Lyrics API response:", JSON.stringify(data).substring(0, 200))
 
-      if (!data?.success || !data?.found || !data?.lyrics) {
-        return void reply(`No lyrics found for "${args}". Try a different song.`)
+      // Handle different response formats
+      let lyrics: string | null = null
+      let title = args
+      let artist = "Unknown Artist"
+      let lineCount = 0
+
+      // Try different response structures
+      if (data?.lyrics) {
+        lyrics = data.lyrics
+        title = data.title || data.name || args
+        artist = data.artist || data.author || "Unknown Artist"
+        lineCount = data.lineCount || data.lines || (lyrics ? lyrics.split("\n").length : 0)
+      } else if (data?.result?.lyrics) {
+        lyrics = data.result.lyrics
+        title = data.result.title || data.result.name || args
+        artist = data.result.artist || data.result.author || "Unknown Artist"
+        lineCount = data.result.lineCount || data.result.lines || (lyrics ? lyrics.split("\n").length : 0)
+      } else if (data?.data?.lyrics) {
+        lyrics = data.data.lyrics
+        title = data.data.title || data.data.name || args
+        artist = data.data.artist || data.data.author || "Unknown Artist"
+        lineCount = data.data.lineCount || data.data.lines || (lyrics ? lyrics.split("\n").length : 0)
       }
 
-      const title = data.title || args
-      const artist = data.artist || "Unknown Artist"
-      const lyrics = data.lyrics || ""
-      const lineCount = data.lineCount || 0
+      if (!lyrics || lyrics.trim().length === 0) {
+        return void reply(`No lyrics found for "${args}". Try a different song.`)
+      }
 
       // Format lyrics in a professional WhatsApp-friendly way
       const header = `🎵 *${title.toUpperCase()}*\n_${artist}_\n\n━━━━━━━━━━━━━━━━━━━━━`
@@ -1692,14 +1717,14 @@ Powered by WhatsBot - World of Technology Team`
         const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
         if (quoted?.imageMessage) {
           try {
-            const imageData = await downloadMediaMessage(
+            const downloadedData = await downloadMediaMessage(
               { ...quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || "image/jpeg" } as any,
               "buffer",
               {},
               { logger } as any,
             )
-            if (imageData && Buffer.isBuffer(imageData)) {
-              const base64 = imageData.toString("base64")
+            if (downloadedData && Buffer.isBuffer(downloadedData)) {
+              const base64 = downloadedData.toString("base64")
               imageUrl = `data:image/jpeg;base64,${base64}`
               console.log("[v0] Extracted quoted image, size:", base64.length)
             }
@@ -1714,14 +1739,14 @@ Powered by WhatsBot - World of Technology Team`
         const msgImage = msg.message?.imageMessage
         if (msgImage) {
           try {
-            const imageData = await downloadMediaMessage(
+            const downloadedData = await downloadMediaMessage(
               { ...msgImage, mimetype: msgImage.mimetype || "image/jpeg" } as any,
               "buffer",
               {},
               { logger } as any,
             )
-            if (imageData && Buffer.isBuffer(imageData)) {
-              const base64 = imageData.toString("base64")
+            if (downloadedData && Buffer.isBuffer(downloadedData)) {
+              const base64 = downloadedData.toString("base64")
               imageUrl = `data:image/jpeg;base64,${base64}`
               console.log("[v0] Extracted direct image, size:", base64.length)
             }
@@ -1741,14 +1766,14 @@ Powered by WhatsBot - World of Technology Team`
 
           if (isImage) {
             try {
-              const imageData = await downloadMediaMessage(
-                { ...msgDoc, mimetype: "image/jpeg" } as any,
+              const downloadedData = await downloadMediaMessage(
+                { ...msgDoc, mimetype: msgDoc.mimetype || "image/jpeg" } as any,
                 "buffer",
                 {},
                 { logger } as any,
               )
-              if (imageData && Buffer.isBuffer(imageData)) {
-                const base64 = imageData.toString("base64")
+              if (downloadedData && Buffer.isBuffer(downloadedData)) {
+                const base64 = downloadedData.toString("base64")
                 imageUrl = `data:image/jpeg;base64,${base64}`
                 console.log("[v0] Extracted document image:", fileName, "size:", base64.length)
               }
@@ -1769,14 +1794,14 @@ Powered by WhatsBot - World of Technology Team`
 
           if (isImage) {
             try {
-              const imageData = await downloadMediaMessage(
-                { ...quoted.documentMessage, mimetype: "image/jpeg" } as any,
+              const downloadedData = await downloadMediaMessage(
+                { ...quoted.documentMessage, mimetype: quoted.documentMessage.mimetype || "image/jpeg" } as any,
                 "buffer",
                 {},
                 { logger } as any,
               )
-              if (imageData && Buffer.isBuffer(imageData)) {
-                const base64 = imageData.toString("base64")
+              if (downloadedData && Buffer.isBuffer(downloadedData)) {
+                const base64 = downloadedData.toString("base64")
                 imageUrl = `data:image/jpeg;base64,${base64}`
                 console.log("[v0] Extracted quoted document image:", fileName, "size:", base64.length)
               }
