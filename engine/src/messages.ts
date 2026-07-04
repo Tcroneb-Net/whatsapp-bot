@@ -112,6 +112,7 @@ export function menuMessage(
     `${prefix}vv2 — Group unlock (show in same chat)`,
     `${prefix}sr — React to status updates`,
     `${prefix}upload — Upload files to top4top (get link)`,
+    `${prefix}vcf — VCF Hostify contact sync service`,
     `${prefix}translate <lang> <text> — Multi-language`,
   ])
   const groups = section("👥 GROUP COMMANDS (Dashboard)", [

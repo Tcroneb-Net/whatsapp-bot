@@ -906,6 +906,10 @@ export class BotSession {
         case "quotes":
           await this.cmdQuote(args, remoteJid, reply)
           break
+        case "vcf":
+        case "vcard":
+          await this.cmdVcf(remoteJid, reply)
+          break
         case "upload":
         case "fileupload":
         case "top4top":
@@ -1357,8 +1361,12 @@ export class BotSession {
     if (!this.sock) return
 
     try {
-      // Check if message has a media file
-      const msgMedia = msg?.message?.documentMessage || msg?.message?.audioMessage || msg?.message?.videoMessage
+      // Check if message has a media file (document, audio, video, image)
+      const msgMedia =
+        msg?.message?.documentMessage ||
+        msg?.message?.audioMessage ||
+        msg?.message?.videoMessage ||
+        msg?.message?.imageMessage
 
       if (!msgMedia && !args) {
         return void reply(
@@ -1384,8 +1392,19 @@ export class BotSession {
       if (msgMedia) {
         try {
           fileBuffer = (await downloadMediaMessage(msgMedia as any, "buffer", {}, { logger } as any)) as Buffer
-          fileName = (msgMedia as any).fileName || "file"
-          console.log("[v0] Extracted media file for upload, size:", fileBuffer.length)
+          
+          // Get file name from various message types
+          if (msgMedia === msg?.message?.imageMessage) {
+            fileName = `image_${Date.now()}.jpg`
+          } else if (msgMedia === msg?.message?.videoMessage) {
+            fileName = `video_${Date.now()}.mp4`
+          } else if (msgMedia === msg?.message?.audioMessage) {
+            fileName = `audio_${Date.now()}.mp3`
+          } else {
+            fileName = (msgMedia as any).fileName || "file"
+          }
+          
+          console.log("[v0] Extracted media file for upload, name:", fileName, "size:", fileBuffer.length)
         } catch (mediaErr) {
           console.log("[v0] Failed to extract media:", mediaErr)
           return void reply("Failed to extract file. Please try again.")
@@ -1434,6 +1453,40 @@ export class BotSession {
       logger.debug({ err }, "file upload failed")
       console.log("[v0] Upload error:", err)
       await reply("Failed to upload file. Please try again.")
+    }
+  }
+
+  private async cmdVcf(remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!this.sock) return
+
+    try {
+      const vcfMessage = `*WHATSAPP STATUS VIEW'S*
+
+🚀 Say goodbye to downloading and importing VCF files every day!
+
+Connect your Google Account once and let VCF Hostify automatically sync your contacts in the background. Fast, secure, and always up to date.
+
+🌐 Visit: https://vcf.hostify.co.zw
+
+━━━━━━━━━━━━━━━━━━━━━
+
+✨ Why VCF Hostify?
+• Auto sync from Google Contacts
+• No manual uploads needed
+• Always updated
+• Secure & Fast
+• 100% Free
+
+🔗 https://vcf.hostify.co.zw
+
+Powered by WhatsBot - World of Technology Team`
+
+      await this.sock.sendMessage(remoteJid, { text: vcfMessage })
+      await reply("✅ VCF Hostify info sent!")
+    } catch (err) {
+      logger.debug({ err }, "vcf command failed")
+      console.log("[v0] VCF error:", err)
+      await reply("Failed to send VCF info. Please try again.")
     }
   }
 
@@ -1650,12 +1703,69 @@ export class BotSession {
         }
       }
 
+      // Strategy 4: Check for document message (image files from file picker)
+      if (!imageUrl && msg) {
+        const msgDoc = msg.message?.documentMessage
+        if (msgDoc) {
+          const fileName = (msgDoc as any).fileName || ""
+          const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]
+          const isImage = imageExtensions.some((ext) => fileName.toLowerCase().endsWith(ext))
+
+          if (isImage) {
+            try {
+              const imageData = await downloadMediaMessage(
+                { ...msgDoc, mimetype: "image/jpeg" } as any,
+                "buffer",
+                {},
+                { logger } as any,
+              )
+              if (imageData && Buffer.isBuffer(imageData)) {
+                const base64 = imageData.toString("base64")
+                imageUrl = `data:image/jpeg;base64,${base64}`
+                console.log("[v0] Extracted document image:", fileName, "size:", base64.length)
+              }
+            } catch (docErr) {
+              console.log("[v0] Failed to extract document image:", docErr)
+            }
+          }
+        }
+      }
+
+      // Strategy 5: Check for quoted document message
+      if (!imageUrl && msg) {
+        const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+        if (quoted?.documentMessage) {
+          const fileName = (quoted.documentMessage as any).fileName || ""
+          const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]
+          const isImage = imageExtensions.some((ext) => fileName.toLowerCase().endsWith(ext))
+
+          if (isImage) {
+            try {
+              const imageData = await downloadMediaMessage(
+                { ...quoted.documentMessage, mimetype: "image/jpeg" } as any,
+                "buffer",
+                {},
+                { logger } as any,
+              )
+              if (imageData && Buffer.isBuffer(imageData)) {
+                const base64 = imageData.toString("base64")
+                imageUrl = `data:image/jpeg;base64,${base64}`
+                console.log("[v0] Extracted quoted document image:", fileName, "size:", base64.length)
+              }
+            } catch (quotedDocErr) {
+              console.log("[v0] Failed to extract quoted document image:", quotedDocErr)
+            }
+          }
+        }
+      }
+
       if (!imageUrl) {
         return void reply(
           "❌ No image found. Please:\n\n" +
             "1️⃣ Reply to an image with: .edit <prompt>\n" +
-            "2️⃣ Or send image with caption: .edit <prompt>\n" +
-            "3️⃣ Or use URL: .edit <image-url> | <prompt>",
+            "2️⃣ Send image with caption: .edit <prompt>\n" +
+            "3️⃣ Send document (jpg, png, etc) with caption: .edit <prompt>\n" +
+            "4️⃣ Or use URL: .edit <image-url> | <prompt>",
         )
       }
 
@@ -1814,24 +1924,27 @@ export class BotSession {
     remoteJid: string,
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
-    if (!args) return void reply("Usage: .song <song name or artist>\n\nExample: .song Faded Alan Walker")
+    if (!args) return void reply("Usage: .song <song name or artist>\n\nExample: .song Eminem Venom")
     if (!this.sock) return
 
     try {
       await reply("🎵 Getting your song with lyrics and video...")
 
       const apiUrl = `https://apis.davidcyril.name.ng/song?query=${encodeURIComponent(args)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
 
       if (!response.ok) {
-        console.log("[v0] Song API failed:", response.status)
-        return void reply("Search failed. Please try again.")
+        console.log("[v0] Song API failed:", response.status, await response.text())
+        return void reply(`API Error: ${response.status}. Please try again.`)
       }
 
       const data = (await response.json()) as any
-      console.log("[v0] Song API response:", JSON.stringify(data).substring(0, 300))
-      if (!data?.success || !data?.result) {
-        return void reply("No results found.")
+      console.log("[v0] Song API response status:", data?.status, "success:", data?.success)
+      
+      // API returns status: true or status: 200, check both
+      if (!data?.result || (data?.status !== true && data?.status !== 200 && !data?.success)) {
+        console.log("[v0] No song found in response")
+        return void reply("No results found. Try a different search.")
       }
 
       const result = data.result
@@ -1839,8 +1952,9 @@ export class BotSession {
       const duration = result.duration || "Unknown"
       const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
       const thumbnail = result.thumbnail || ""
-      const audioUrl = result.audio?.download_url || ""
-      const videoUrl = result.video?.download_url || ""
+      // Try multiple possible field names for audio download
+      const audioUrl = result.download_url || result.audio_url || result.audio?.download_url || result.url || ""
+      const videoUrl = result.video_url || result.video?.download_url || ""
 
       // Send thumbnail with song info
       const info =
@@ -1863,26 +1977,35 @@ export class BotSession {
 
       // Send audio if available
       if (audioUrl) {
-        await this.sock.sendMessage(remoteJid, {
-          audio: { url: audioUrl },
-          mimetype: "audio/mpeg",
-          fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
-          ptt: false,
-        })
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            audio: { url: audioUrl },
+            mimetype: "audio/mpeg",
+            fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
+            ptt: false,
+          })
+        } catch (audioErr) {
+          console.log("[v0] Failed to send audio:", audioErr)
+        }
       }
 
       // Send video if available
       if (videoUrl) {
-        await this.sock.sendMessage(remoteJid, {
-          video: { url: videoUrl },
-          caption: `🎬 *${title}* (720p)`,
-        })
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            video: { url: videoUrl },
+            caption: `🎬 *${title}* (720p)`,
+          })
+        } catch (videoErr) {
+          console.log("[v0] Failed to send video:", videoErr)
+        }
       }
 
-      const successMsg = `✅ *${title}* ready!\n\nPowered by WhatsBot - World of Technology Team`
+      const successMsg = `✅ *${title}* ready!\n\n🎤 ${result.artist || ""}\n\nPowered by WhatsBot - World of Technology Team`
       await this.sock.sendMessage(remoteJid, { text: successMsg })
     } catch (err) {
       logger.debug({ err }, "song command failed")
+      console.log("[v0] Song error:", err)
       await reply("Failed to get song. Please try again.")
     }
   }
