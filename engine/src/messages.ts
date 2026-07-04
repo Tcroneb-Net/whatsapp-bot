@@ -108,7 +108,8 @@ export function menuMessage(
     `${prefix}gpt <text> — ChatGPT-style responses`,
   ])
   const tools = section("🛠️ TOOLS & UTILITIES", [
-    `${prefix}vv — View once message unlocker`,
+    `${prefix}vv — Private unlock (send to DM silently)`,
+    `${prefix}vv2 — Group unlock (show in same chat)`,
     `${prefix}sr — React to status updates`,
     `${prefix}upload — Upload files to top4top (get link)`,
     `${prefix}translate <lang> <text> — Multi-language`,
