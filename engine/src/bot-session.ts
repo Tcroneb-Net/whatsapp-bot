@@ -845,7 +845,7 @@ export class BotSession {
         case "edit":
         case "editimg":
         case "imgmagic":
-          await this.cmdEditImage(args, remoteJid, reply)
+          await this.cmdEditImage(args, remoteJid, reply, m)
           break
         case "img":
         case "image":
@@ -897,6 +897,19 @@ export class BotSession {
           break
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
+          break
+        case "lyrics":
+        case "lyric":
+          await this.cmdLyrics(args, remoteJid, reply)
+          break
+        case "quote":
+        case "quotes":
+          await this.cmdQuote(args, remoteJid, reply)
+          break
+        case "upload":
+        case "fileupload":
+        case "top4top":
+          await this.cmdFileUpload(args, remoteJid, reply, m)
           break
         case "gstatus":
           await this.cmdGroupStatus(msg, args, remoteJid, reply)
@@ -963,7 +976,24 @@ export class BotSession {
       `⏱️ Uptime: *${uptime}*\n` +
       `📶 Status: *Connected*\n` +
       `🤖 AI & Tools: *${this.settings.aiEnabled ? "ON" : "OFF"}*`
+    
     await this.sendBranded(remoteJid, caption, "system")
+
+    // Send a random quote
+    try {
+      const quoteRes = await fetch("https://omegatech-api.dixonomega.tech/api/random/quotes", { signal: AbortSignal.timeout(5000) })
+      if (quoteRes.ok) {
+        const quoteData = (await quoteRes.json()) as any
+        if (quoteData?.result) {
+          const quote = quoteData.result.quote || quoteData.result.text || ""
+          const author = quoteData.result.author || quoteData.result.by || "Unknown"
+          const quoteMsg = `\n✨ *Daily Quote:*\n"${quote}"\n— ${author}`
+          await this.sock!.sendMessage(remoteJid, { text: quoteMsg })
+        }
+      }
+    } catch (err) {
+      console.log("[v0] Failed to fetch quote for alive:", err)
+    }
   }
 
   private async cmdPing(remoteJid: string, msg: WAMessage): Promise<void> {
@@ -976,6 +1006,22 @@ export class BotSession {
         text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
         edit: sent.key,
       })
+    }
+
+    // Send a random quote
+    try {
+      const quoteRes = await fetch("https://omegatech-api.dixonomega.tech/api/random/quotes", { signal: AbortSignal.timeout(5000) })
+      if (quoteRes.ok) {
+        const quoteData = (await quoteRes.json()) as any
+        if (quoteData?.result) {
+          const quote = quoteData.result.quote || quoteData.result.text || ""
+          const author = quoteData.result.author || quoteData.result.by || "Unknown"
+          const quoteMsg = `\n✨ *Random Quote:*\n"${quote}"\n— ${author}`
+          await this.sock!.sendMessage(remoteJid, { text: quoteMsg })
+        }
+      }
+    } catch (err) {
+      console.log("[v0] Failed to fetch quote for ping:", err)
     }
   }
 
@@ -1302,35 +1348,199 @@ export class BotSession {
     await reply(out ? `*Translation (${lang})*\n\n${out}` : "Translation failed. Please try again.")
   }
 
+  private async cmdFileUpload(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+    msg?: WAMessage,
+  ): Promise<void> {
+    if (!this.sock) return
+
+    try {
+      // Check if message has a media file
+      const msgMedia = msg?.message?.documentMessage || msg?.message?.audioMessage || msg?.message?.videoMessage
+
+      if (!msgMedia && !args) {
+        return void reply(
+          "📤 *File Upload to Top4Top*\n\n" +
+            "Upload files and get shareable links!\n\n" +
+            "*Usage:*\n" +
+            "Reply to a file/image/video with: .upload\n\n" +
+            "Supported: Images, Videos, Audio, Documents\n\n" +
+            "_Links expire after 30 days_",
+        )
+      }
+
+      if (!msgMedia && !args.startsWith("http")) {
+        return void reply("Please reply to a file or provide a file URL.")
+      }
+
+      await reply("📤 Uploading your file...")
+
+      let fileBuffer: Buffer | null = null
+      let fileName = "file"
+
+      // If replying to a media message
+      if (msgMedia) {
+        try {
+          fileBuffer = (await downloadMediaMessage(msgMedia as any, "buffer", {}, { logger } as any)) as Buffer
+          fileName = (msgMedia as any).fileName || "file"
+          console.log("[v0] Extracted media file for upload, size:", fileBuffer.length)
+        } catch (mediaErr) {
+          console.log("[v0] Failed to extract media:", mediaErr)
+          return void reply("Failed to extract file. Please try again.")
+        }
+      }
+
+      if (!fileBuffer) {
+        return void reply("No file data found. Please reply to a file.")
+      }
+
+      // Convert buffer to FormData for upload
+      const formData = new FormData()
+      const blob = new Blob([fileBuffer], { type: "application/octet-stream" })
+      formData.append("files", blob, fileName)
+
+      const response = await fetch("https://omegatech-api.dixonomega.tech/api/tools/Top4top-uploader", {
+        method: "POST",
+        body: formData,
+        signal: AbortSignal.timeout(60000),
+      })
+
+      if (!response.ok) {
+        console.log("[v0] Upload API failed:", response.status)
+        return void reply("Upload failed. Please try again.")
+      }
+
+      const data = (await response.json()) as any
+      console.log("[v0] Upload response:", data?.success, data?.data?.uploaded)
+
+      if (!data?.success || !data?.data?.files || data.data.files.length === 0) {
+        return void reply("Upload failed. Please try again.")
+      }
+
+      const uploadedFile = data.data.files[0]
+      const fileUrl = uploadedFile.url || ""
+
+      if (!fileUrl) {
+        return void reply("Upload succeeded but no URL returned.")
+      }
+
+      const uploadMsg = `✅ *File Uploaded Successfully*\n\n📁 *Name:* ${uploadedFile.filename || "file"}\n🔗 *Link:* ${fileUrl}\n\n⏰ _Expires in 30 days_\n\nPowered by WhatsBot`
+
+      await this.sock.sendMessage(remoteJid, { text: uploadMsg })
+      await reply("✅ File uploaded!")
+    } catch (err) {
+      logger.debug({ err }, "file upload failed")
+      console.log("[v0] Upload error:", err)
+      await reply("Failed to upload file. Please try again.")
+    }
+  }
+
+  private async cmdQuote(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!this.sock) return
+
+    try {
+      const apiUrl = `https://omegatech-api.dixonomega.tech/api/random/quotes`
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(10000) })
+
+      if (!response.ok) {
+        console.log("[v0] Quotes API failed:", response.status)
+        return void reply("Could not fetch quote. Please try again.")
+      }
+
+      const data = (await response.json()) as any
+
+      if (data?.result) {
+        const quote = data.result.quote || data.result.text || ""
+        const author = data.result.author || data.result.by || "Unknown"
+
+        const formatted = `*"${quote}"*\n\n— ${author}\n\n━━━━━━━━━━━━━━━━━━\nPowered by WhatsBot`
+
+        await this.sock.sendMessage(remoteJid, { text: formatted })
+        await reply("✅ Quote sent!")
+      } else {
+        return void reply("Could not fetch quote. Please try again.")
+      }
+    } catch (err) {
+      logger.debug({ err }, "quote command failed")
+      console.log("[v0] Quote error:", err)
+      await reply("Failed to get quote. Please try again.")
+    }
+  }
+
   private async cmdLyrics(
     args: string,
     remoteJid: string,
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
-    if (!this.aiGuard(reply)) return
-    if (!args) return void reply("Usage: lyrics <song name>")
-    await reply(`🔎 Searching lyrics for "${args}"...`)
-    const res = await safeHostify(() => hostify.lyrics(args))
-    if (!res || !res.lyrics) return void reply("No lyrics found for that search.")
+    if (!args) return void reply("Usage: .lyrics <song name> OR .lyrics <artist> <song>\n\nExample: .lyrics Eminem Venom")
+    
+    if (!this.sock) return
 
-    // Split a "Artist - Title" style result if present.
-    let title = res.title || args
-    let artist: string | undefined
-    if (title.includes(" - ")) {
-      const [a, ...rest] = title.split(" - ")
-      artist = a.trim()
-      title = rest.join(" - ").trim()
+    try {
+      await reply(`🔎 Searching lyrics for "${args}"...`)
+
+      const apiUrl = `https://omegatech-api.dixonomega.tech/api/tools/lyrics?query=${encodeURIComponent(args)}`
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
+
+      if (!response.ok) {
+        console.log("[v0] Lyrics API failed:", response.status)
+        return void reply("Failed to search lyrics. Please try again.")
+      }
+
+      const data = (await response.json()) as any
+      console.log("[v0] Lyrics API response:", data?.success, data?.found)
+
+      if (!data?.success || !data?.found || !data?.lyrics) {
+        return void reply(`No lyrics found for "${args}". Try a different song.`)
+      }
+
+      const title = data.title || args
+      const artist = data.artist || "Unknown Artist"
+      const lyrics = data.lyrics || ""
+      const lineCount = data.lineCount || 0
+
+      // Format lyrics in a professional WhatsApp-friendly way
+      const header = `🎵 *${title.toUpperCase()}*\n_${artist}_\n\n━━━━━━━━━━━━━━━━━━━━━`
+      
+      // Split lyrics into manageable chunks (WhatsApp has message limits)
+      const lyricsLines = lyrics.split("\n")
+      let currentMessage = header
+      const messages: string[] = []
+
+      for (const line of lyricsLines) {
+        // If adding this line would exceed limit, save current and start new
+        if ((currentMessage + "\n" + line).length > 4000) {
+          messages.push(currentMessage)
+          currentMessage = line
+        } else {
+          currentMessage += "\n" + line
+        }
+      }
+
+      // Add footer to last message
+      const footer = `\n━━━━━━━━━━━━━━━━━━━━━\n📝 *Lines:* ${lineCount}\n\nPowered by WhatsBot - World of Technology Team`
+      if (currentMessage + footer.length < 4000) {
+        currentMessage += footer
+      }
+      messages.push(currentMessage)
+
+      // Send all messages
+      for (const msg of messages) {
+        await this.sock.sendMessage(remoteJid, { text: msg })
+      }
+
+      await reply("✅ Lyrics sent!")
+    } catch (err) {
+      logger.debug({ err }, "lyrics command failed")
+      console.log("[v0] Lyrics error:", err)
+      await reply("Failed to get lyrics. Please try again.")
     }
-
-    const formatted = lyricsMessage({ title, artist, lyrics: res.lyrics })
-    // Lyrics can exceed the image caption limit, so send the banner with a
-    // short header caption first, then the full styled lyrics as text.
-    await this.sendBranded(
-      remoteJid,
-      `🎵 *${title.toUpperCase()}*${artist ? `\n_${artist}_` : ""}`,
-      "media",
-    ).catch(() => {})
-    await this.sock!.sendMessage(remoteJid, { text: formatted.slice(0, 65000) })
   }
 
   private async cmdYouTubeSearch(args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
@@ -1366,14 +1576,15 @@ export class BotSession {
     }
   }
 
-  private async cmdEditImage(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+  private async cmdEditImage(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>, msg?: WAMessage): Promise<void> {
     if (!args) {
       return void reply(
         "🎨 *Nano Banana Image Editor*\n\n" +
           "Edit images with AI prompts!\n\n" +
           "*Usage:*\n" +
           "1. Reply to an image with: .edit <your prompt>\n" +
-          "2. Or send: .edit <image-url> | <your prompt>\n\n" +
+          "2. Send image with caption: .edit <your prompt>\n" +
+          "3. Or use URL: .edit <image-url> | <your prompt>\n\n" +
           "*Examples:*\n" +
           "• Remove background and make it blurred\n" +
           "• Add a sunset in the background\n" +
@@ -1385,26 +1596,71 @@ export class BotSession {
     if (!this.sock) return
 
     try {
-      // Check if message is a reply to an image
-      const repliedMsg = (this as any).lastRepliedTo
       let imageUrl: string | null = null
       let prompt = args.trim()
 
-      // If user provided image-url | prompt format
+      // Strategy 1: User provided image-url | prompt format
       if (args.includes("|")) {
         const [imgPart, promptPart] = args.split("|").map((s) => s.trim())
         imageUrl = imgPart.startsWith("http") ? imgPart : null
         prompt = promptPart || imgPart
       }
 
-      // If no image URL from args, check for quoted/replied image
+      // Strategy 2: Check for quoted/replied image
+      if (!imageUrl && msg) {
+        const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+        if (quoted?.imageMessage) {
+          try {
+            const imageData = await downloadMediaMessage(
+              { ...quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || "image/jpeg" } as any,
+              "buffer",
+              {},
+              { logger } as any,
+            )
+            if (imageData && Buffer.isBuffer(imageData)) {
+              const base64 = imageData.toString("base64")
+              imageUrl = `data:image/jpeg;base64,${base64}`
+              console.log("[v0] Extracted quoted image, size:", base64.length)
+            }
+          } catch (quotedErr) {
+            console.log("[v0] Failed to extract quoted image:", quotedErr)
+          }
+        }
+      }
+
+      // Strategy 3: Check for direct image message
+      if (!imageUrl && msg) {
+        const msgImage = msg.message?.imageMessage
+        if (msgImage) {
+          try {
+            const imageData = await downloadMediaMessage(
+              { ...msgImage, mimetype: msgImage.mimetype || "image/jpeg" } as any,
+              "buffer",
+              {},
+              { logger } as any,
+            )
+            if (imageData && Buffer.isBuffer(imageData)) {
+              const base64 = imageData.toString("base64")
+              imageUrl = `data:image/jpeg;base64,${base64}`
+              console.log("[v0] Extracted direct image, size:", base64.length)
+            }
+          } catch (dirErr) {
+            console.log("[v0] Failed to extract direct image:", dirErr)
+          }
+        }
+      }
+
       if (!imageUrl) {
-        // This is simplified - in production you'd check msg.message.imageMessage
-        return void reply("Please provide an image URL or reply to an image with your prompt.\n\nFormat: .edit <image-url> | <prompt>")
+        return void reply(
+          "❌ No image found. Please:\n\n" +
+            "1️⃣ Reply to an image with: .edit <prompt>\n" +
+            "2️⃣ Or send image with caption: .edit <prompt>\n" +
+            "3️⃣ Or use URL: .edit <image-url> | <prompt>",
+        )
       }
 
       if (!prompt) {
-        return void reply("Please provide a prompt for image editing.\n\nFormat: .edit <image-url> | <prompt>")
+        return void reply("Please provide a prompt for image editing.\n\nExample: Remove background and add sunset")
       }
 
       await reply("🎨 Processing your image with nano-banana2...\n⏳ This takes 30-60 seconds...")
@@ -1487,16 +1743,18 @@ export class BotSession {
       await reply("🎵 Searching for your song...")
 
       const apiUrl = `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(args)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
 
       if (!response.ok) {
-        console.log("[v0] Play API failed:", response.status)
-        return void reply("Search failed. Please try again.")
+        console.log("[v0] Play API failed:", response.status, await response.text())
+        return void reply(`API Error: ${response.status}. Please try again.`)
       }
 
       const data = (await response.json()) as any
-      console.log("[v0] Play API response:", JSON.stringify(data).substring(0, 300))
-      if (!data?.success || !data?.result) {
+      console.log("[v0] Play API response status:", data?.status, "success:", data?.success)
+      
+      // API returns status: true or status: 200, check both
+      if (!data?.result || (data?.status !== true && data?.status !== 200 && !data?.success)) {
         return void reply("No results found. Try a different search.")
       }
 
@@ -2250,21 +2508,31 @@ export class BotSession {
       await reply("📥 Downloading from social media...")
 
       const apiUrl = `https://apis.davidcyril.name.ng/download/aiov2?url=${encodeURIComponent(url)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) })
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(45000) })
 
-      if (!response.ok) return void reply("❌ Download failed. Please check the URL and try again.")
+      if (!response.ok) {
+        console.log("[v0] Download API failed:", response.status)
+        return void reply("❌ Download API error. Please check the URL and try again.")
+      }
 
       const data = (await response.json()) as any
-      if (!data?.success || !Array.isArray(data?.result) || data.result.length === 0) {
+      console.log("[v0] Download response:", data?.status, data?.success, "results:", data?.result?.length)
+      
+      // Check for valid response - api returns status: true or success: true
+      if (!data?.result || !Array.isArray(data.result) || data.result.length === 0) {
+        console.log("[v0] No results in response:", JSON.stringify(data).substring(0, 200))
         return void reply("❌ Could not download from this URL. Try another link.")
       }
 
       const item = data.result[0]
       const title = item.title || "Download"
-      const thumbnail = item.thumbnail || item.video_preview || ""
-      const videoUrl = item.video_download || item.video || ""
+      const thumbnail = item.thumbnail || item.video_preview || item.image || ""
+      const videoUrl = item.video_download || item.video || item.url || ""
 
-      if (!videoUrl) return void reply("❌ No video found in this link.")
+      if (!videoUrl) {
+        console.log("[v0] No video URL found in result:", JSON.stringify(item).substring(0, 200))
+        return void reply("❌ No video found in this link.")
+      }
 
       // Send thumbnail with info
       const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null

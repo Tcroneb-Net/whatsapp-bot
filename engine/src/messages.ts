@@ -35,13 +35,15 @@ export function welcomeMessage(opts: {
         `_Keep this safe. Use it to log in and manage your bot._\n`
       : "") +
     `Dashboard: ${config.pairUrl}\n\n` +
-    `*CURRENT SETUP*\n` +
+    `*FEATURES ENABLED*\n` +
     `Auto Status View: ${status(settings.autoStatusView)}\n` +
     `Auto Status Like: ${status(settings.autoStatusReact)}\n` +
-    `Anti View-Once: ${status(settings.antiViewOnce)} (${settings.viewOnceMode === "dm" ? "saved to your DM" : "saved to same chat"})\n` +
+    `Anti View-Once: ${status(settings.antiViewOnce)}\n` +
     `AI & Tools: ${status(settings.aiEnabled)}\n` +
+    `Nano Banana AI Editor: ON\n` +
+    `Lyrics & Quotes: ON\n` +
     `Command Prefix: ${prefix}\n\n` +
-    `Type *${prefix}menu* to see everything I can do.\n\n` +
+    `Type *${prefix}menu* to see all commands or visit dashboard for settings.\n\n` +
     footer()
   )
 }
@@ -76,49 +78,45 @@ export function menuMessage(
     `\n╰━━━━━━━━━━━━━━━━━━━━⬣`
 
   const general = section("⚙️ GENERAL", [
-    `${prefix}menu`,
-    `${prefix}ping`,
-    `${prefix}alive`,
-    `${prefix}pair`,
-    `${prefix}pairwhats`,
+    `${prefix}menu — This menu`,
+    `${prefix}ping — Check latency & get quote`,
+    `${prefix}alive — Bot status & quote`,
+    `${prefix}pair — Pair new device`,
   ])
-  const downloads = section("📥 DOWNLOADS", [
-    `${prefix}play <song> — Search & download MP3 with poll`,
-    `${prefix}ytdl <url> — YouTube video`,
-    `${prefix}song <url> — YouTube MP3`,
-    `${prefix}x <url> — X/Twitter videos`,
-    `${prefix}tt <url> — TikTok videos`,
+  const downloads = section("📥 MEDIA DOWNLOADS", [
+    `${prefix}play <song> — Search & download MP3`,
+    `${prefix}song <song> — Song with lyrics & video`,
+    `${prefix}download <url> — TikTok, Instagram, Facebook, YouTube, etc.`,
     `${prefix}spotify <url> — Spotify tracks`,
     `${prefix}sc <url> — SoundCloud tracks`,
-    `${prefix}ig <url> — Instagram photos/reels`,
-    `${prefix}fbdl <url> — Facebook videos`,
-    `${prefix}dub <url> — AI dub a video`,
+    `${prefix}dub <url> — AI voice dub for videos`,
   ])
-  const search = section("🔎 SEARCH", [
-    `${prefix}lyrics <song> — Song lyrics`,
-    `${prefix}pinterest <query> — Images`,
+  const search = section("🔎 SEARCH & CONTENT", [
+    `${prefix}lyrics <song> — Song lyrics (professional format)`,
+    `${prefix}quote — Random inspirational quote`,
+    `${prefix}pinterest <query> — Image search`,
     `${prefix}yts <query> — YouTube search`,
   ])
-  const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text>`])
-  const ai = section("🤖 AI", [
-    `${prefix}ai <text> — Ask the AI`,
+  const create = section("✨ CREATE & EDIT", [
+    `${prefix}edit <image-url | prompt> — Edit image with AI (nano-banana2)`,
+    `${prefix}img <prompt> — Generate image with Flux AI`,
     `${prefix}suno <description> — Create music with AI`,
-    `${prefix}img <prompt> [hd] — Generate images with Flux AI`,
   ])
-  const tools = section("🛡️ TOOLS", [
-    `${prefix}vv — Unlock a view-once media`,
-    `${prefix}sr — React to status update`,
+  const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text> — Translate text`])
+  const ai = section("🤖 AI & CHAT", [
+    `${prefix}ai <text> — Ask the AI assistant`,
+    `${prefix}gpt <text> — ChatGPT-style responses`,
   ])
-  const groups = section("👥 GROUP MANAGEMENT", [
-    `${prefix}gstatus — Set group status (text or image)`,
-    `${prefix}gaccept — Accept pending join requests`,
-    `${prefix}gkick <@user> — Kick non-admin users`,
-    `${prefix}glink — Get/manage group link`,
-    `${prefix}gclose — Auto close group by time`,
-    `${prefix}gopen — Auto open group by time`,
-    `${prefix}gpoll <text> — Send group poll`,
-    `${prefix}tagall — Tag all group members`,
-    `${prefix}gantilink — Anti-link protection system`,
+  const tools = section("🛠️ TOOLS & UTILITIES", [
+    `${prefix}vv — View once message unlocker`,
+    `${prefix}sr — React to status updates`,
+    `${prefix}upload — Upload files to top4top (get link)`,
+    `${prefix}translate <lang> <text> — Multi-language`,
+  ])
+  const groups = section("👥 GROUP COMMANDS (Dashboard)", [
+    `Group management moved to dashboard for easy control`,
+    `Status, accept, kick, link, auto-open, auto-close`,
+    `Anti-link, tag-all, and more available in dashboard`,
   ])
   const owner = section("👑 OWNER", [
     `${prefix}online on/off — Always online`,
@@ -205,7 +203,7 @@ export function menuMessage(
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `> ☬ *${botName.toUpperCase()}* ☬`
 
-  const sections = [header, general, downloads, search, translate, ai, tools, groups, owner, ...pluginSections, credits]
+  const sections = [header, general, downloads, search, create, translate, ai, tools, groups, ...pluginSections, credits]
 
   return sections.join("\n\n")
 }
