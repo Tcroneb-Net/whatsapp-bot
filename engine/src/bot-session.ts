@@ -76,18 +76,23 @@ export class BotSession {
   }
 
   async loadSettings(): Promise<void> {
-    const doc = await bots().findOne({ number: this.number })
-    if (doc?.settings) {
-      this.settings = { ...DEFAULT_SETTINGS, ...doc.settings }
+    try {
+      const doc = await bots().findOne({ number: this.number })
+      this.settings = { ...DEFAULT_SETTINGS, ...doc?.settings }
       logger.debug(
         {
           autoStatusReact: this.settings.autoStatusReact,
           antiViewOnce: this.settings.antiViewOnce,
           botName: this.settings.botName,
         },
-        "Settings loaded",
+        "loaded settings from database",
       )
+      // Note: Do NOT write back settings here - only read from DB.
+      // The dashboard will update MongoDB, and this method just syncs the in-memory cache.
+    } catch (err) {
+      logger.error({ err }, "failed to load settings")
     }
+  }
   }
 
   // Save current settings to MongoDB
