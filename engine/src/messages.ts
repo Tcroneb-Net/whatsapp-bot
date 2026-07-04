@@ -48,6 +48,16 @@ export function welcomeMessage(opts: {
   )
 }
 
+export function getRandomMenuBanner(): string {
+  const banners = ["/menu-1.png", "/menu-2.png", "/menu-3.png"]
+  return banners[Math.floor(Math.random() * banners.length)]
+}
+
+export function getRandomAliveBanner(): string {
+  const banners = ["/alive-1.png", "/alive-2.png", "/alive-3.png"]
+  return banners[Math.floor(Math.random() * banners.length)]
+}
+
 export function menuMessage(
   botName: string,
   prefix: string,
@@ -112,6 +122,7 @@ export function menuMessage(
     `${prefix}vv2 — Group unlock (show in same chat)`,
     `${prefix}sr — React to status updates`,
     `${prefix}upload — Upload files to top4top (get link)`,
+    `${prefix}vcf — VCF Hostify contact sync service`,
     `${prefix}translate <lang> <text> — Multi-language`,
   ])
   const groups = section("👥 GROUP COMMANDS (Dashboard)", [
