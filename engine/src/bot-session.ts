@@ -34,7 +34,7 @@ import { bots, viewOnceLogs } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
-import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage } from "./messages.js"
+import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomMenuBanner, getRandomAliveBanner } from "./messages.js"
 
 const PRESENCE_KEEPALIVE_MS = 10 * 60 * 1000
 
@@ -753,7 +753,22 @@ export class BotSession {
           await this.cmdStatus(remoteJid, msg)
           break
         case "menu":
-        case "help":
+        case "help": {
+          // Send random banner image
+          const bannerUrl = getRandomMenuBanner()
+          const bannerImg = await this.fetchImage(bannerUrl)
+          if (bannerImg && this.sock) {
+            try {
+              await this.sock.sendMessage(remoteJid, {
+                image: bannerImg,
+                caption: "🤖 *BOT MENU* - All Available Commands",
+              })
+            } catch (imgErr) {
+              logger.debug({ imgErr }, "failed to send menu banner")
+            }
+          }
+
+          // Send menu text
           await this.sendBranded(
             remoteJid,
             menuMessage(this.settings.botName, prefix, {
@@ -771,6 +786,7 @@ export class BotSession {
             "menu",
           )
           break
+        }
         case "pair":
           await this.sendBranded(remoteJid, pairInfoMessage(), "welcome")
           break
@@ -973,6 +989,20 @@ export class BotSession {
   }
 
   private async cmdAlive(remoteJid: string, _msg: WAMessage): Promise<void> {
+    // Send random banner image
+    const bannerUrl = getRandomAliveBanner()
+    const bannerImg = await this.fetchImage(bannerUrl)
+    if (bannerImg && this.sock) {
+      try {
+        await this.sock.sendMessage(remoteJid, {
+          image: bannerImg,
+          caption: "✅ *BOT IS ALIVE AND RUNNING*",
+        })
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send alive banner")
+      }
+    }
+
     const uptime = this.formatUptime(Date.now() - this.startTime)
     const caption =
       `✅ *${this.settings.botName.toUpperCase()} IS ALIVE*\n` +
