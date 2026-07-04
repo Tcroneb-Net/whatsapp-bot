@@ -371,22 +371,38 @@ export class BotSession {
   private async fetchImage(url: string): Promise<Buffer | null> {
     if (!url) return null
     try {
-      // Convert relative paths to absolute URLs for the app
       let fullUrl = url
+      
+      // Handle relative paths
       if (url.startsWith("/")) {
-        // Try localhost first (for local development)
+        // Try localhost:3000 first (development)
         try {
           const res = await fetch(`http://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
           if (res.ok) {
             const arr = await res.arrayBuffer()
             return Buffer.from(arr)
           }
-        } catch {
-          console.log("[v0] Failed to fetch from localhost, trying deployed URL")
+        } catch (localErr) {
+          console.log("[v0] Localhost fetch failed, trying alternative methods")
         }
-        // Fallback to deployed URL (if available via environment)
-        fullUrl = url
+        
+        // Try without protocol (might work in some environments)
+        try {
+          const res = await fetch(`https://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
+          if (res.ok) {
+            const arr = await res.arrayBuffer()
+            return Buffer.from(arr)
+          }
+        } catch {
+          // continue to next attempt
+        }
+        
+        // If no localhost, we can't fetch relative URLs without a base
+        console.log("[v0] Cannot fetch relative path:", url, "- localhost not available")
+        return null
       }
+      
+      // For absolute URLs, fetch directly
       const res = await fetch(fullUrl, { signal: AbortSignal.timeout(10000) })
       if (!res.ok) {
         console.log("[v0] Image fetch failed:", res.status, url)
@@ -487,7 +503,8 @@ export class BotSession {
     }
 
     // --- Anti-link: detect and kick if enabled ---
-    if (this.settings.antiLink?.enabled && remoteJid.endsWith("@g.us")) {
+    // AntiLink is enabled by default for all groups
+    if (remoteJid.endsWith("@g.us")) {
       try {
         await this.handleAntiLink(msg, remoteJid)
       } catch (err) {
@@ -710,14 +727,39 @@ export class BotSession {
     if (!hasLink) return
 
     try {
-      const sender = msg.key.participant || msg.key.remoteJid
+      let sender = msg.key.participant || msg.key.remoteJid
       if (!sender) return
 
       const groupMetadata = await this.sock.groupMetadata(remoteJid)
-      const participant = groupMetadata.participants.find((p) => p.id === sender)
+      
+      // Normalize sender JID
+      if (sender?.includes(":")) {
+        sender = sender.split(":")[0] + "@s.whatsapp.net"
+      }
+      
+      const participant = groupMetadata.participants.find((p) => {
+        let pId = p.id
+        if (pId?.includes(":")) {
+          pId = pId.split(":")[0] + "@s.whatsapp.net"
+        }
+        return pId === sender
+      })
       
       // Skip if sender is admin
       if (participant?.isAdmin || participant?.isSuperAdmin) return
+
+      // Initialize warnings tracking if needed
+      if (!this.settings.antiLink) {
+        this.settings.antiLink = { enabled: true, groupJid: remoteJid, warnings: {} }
+      }
+      if (!this.settings.antiLink.warnings) {
+        this.settings.antiLink.warnings = {}
+      }
+
+      // Track warning count for this user
+      const warningCount = (this.settings.antiLink.warnings[sender] || 0) + 1
+      this.settings.antiLink.warnings[sender] = warningCount
+      await this.saveSettings()
 
       // Delete the message
       try {
@@ -726,16 +768,53 @@ export class BotSession {
         logger.debug({ err }, "failed to delete link message")
       }
 
-      // Kick the user
-      try {
-        await this.sock.groupParticipantsUpdate(remoteJid, [sender], "remove")
-        await this.sock.sendMessage(remoteJid, {
-          text: `@${sender.replace("@s.whatsapp.net", "")} has been removed for posting blocked links.`,
-          mentions: [sender],
-        })
-        logger.info({ jid: remoteJid, sender }, "user kicked for posting link")
-      } catch (kickErr) {
-        logger.debug({ kickErr }, "failed to kick user")
+      const userName = sender.replace("@s.whatsapp.net", "")
+
+      // Action based on warning count
+      if (warningCount >= 5) {
+        // Kick after 5 warnings
+        try {
+          await this.sock.groupParticipantsUpdate(remoteJid, [sender], "remove")
+          await this.sock.sendMessage(remoteJid, {
+            text: `🔴 @${userName} has been kicked for repeatedly posting blocked links (${warningCount} violations).`,
+            mentions: [sender],
+          })
+          delete this.settings.antiLink.warnings[sender]
+          await this.saveSettings()
+          logger.info({ jid: remoteJid, sender, warnings: warningCount }, "user kicked for posting links")
+        } catch (kickErr) {
+          logger.debug({ kickErr }, "failed to kick user")
+        }
+      } else if (warningCount >= 3) {
+        // Final warning at 3 violations
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            text: `⚠️ @${userName}: Final warning! ${5 - warningCount} more link violations will result in removal.`,
+            mentions: [sender],
+          })
+        } catch (warnErr) {
+          logger.debug({ warnErr }, "failed to send final warning")
+        }
+      } else if (warningCount === 1) {
+        // First warning
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            text: `⚠️ @${userName}: Link detected and deleted. (${warningCount}/5 warnings)`,
+            mentions: [sender],
+          })
+        } catch (warnErr) {
+          logger.debug({ warnErr }, "failed to send warning")
+        }
+      } else {
+        // Just delete, show warning count
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            text: `⚠️ @${userName}: Link deleted. (${warningCount}/5 warnings)`,
+            mentions: [sender],
+          })
+        } catch (warnErr) {
+          logger.debug({ warnErr }, "failed to send warning")
+        }
       }
     } catch (err) {
       logger.debug({ err }, "antilink handler failed")
@@ -2322,79 +2401,46 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       if (action === "on" || action === "enable") {
-        // Save antilink setting to database
-        this.settings.antiLink = {
-          enabled: true,
-          groupJid: remoteJid,
-          warnings: {},
-        }
-        await this.saveSettings()
-        console.log("[v0] AntiLink enabled for group:", remoteJid)
-        
-        // Get bot's permissions
-        let botIsAdmin = false
-        try {
-          const groupMeta = await this.sock.groupMetadata(remoteJid)
-          const botId = this.sock.user?.id
-          let botIdNormalized = botId
-          if (botIdNormalized?.includes(":")) {
-            botIdNormalized = botIdNormalized.split(":")[0] + "@s.whatsapp.net"
-          }
-          const botInGroup = groupMeta.participants.find((p) => {
-            let pId = p.id
-            if (pId?.includes(":")) {
-              pId = pId.split(":")[0] + "@s.whatsapp.net"
-            }
-            return pId === botIdNormalized
-          })
-          botIsAdmin = botInGroup?.isAdmin || false
-        } catch (err) {
-          console.log("[v0] Failed to check bot admin status:", err)
-        }
-
-        if (!botIsAdmin) {
-          await reply(
-            `✓ Anti-link ENABLED (Limited)\n\n` +
-            `⚠️ Bot is not an admin in this group.\n` +
-            `To enforce anti-link properly, please:\n` +
-            `• Make bot an admin\n` +
-            `• Then anti-link will auto-delete links\n\n` +
-            `Without admin:\n` +
-            `• Can detect and warn about links\n` +
-            `• Can notify group about violations`,
-          )
-        } else {
-          await reply(
-            `✓ Anti-link ENABLED\n\n` +
-            `Bot is admin - will enforce:\n` +
-            `• Auto-delete messages with links\n` +
-            `• WhatsApp, YouTube, Instagram, Facebook, TikTok\n` +
-            `• Warn users, kick after violations\n\n` +
-            `Type .gantilink list to see all blocked domains`,
-          )
-        }
+        await reply(
+          `✓ Anti-link is ALWAYS ON\n\n` +
+          `This feature is enabled by default for all groups.\n\n` +
+          `System works like this:\n` +
+          `1️⃣ First link detected → Warn user\n` +
+          `2️⃣ 3rd violation → Final warning\n` +
+          `3️⃣ 5th violation → User gets kicked\n\n` +
+          `Blocked domains:\n` +
+          `• WhatsApp, YouTube, Instagram, Facebook, TikTok\n\n` +
+          `Admins bypass all restrictions.`,
+        )
       } else if (action === "off" || action === "disable") {
-        this.settings.antiLink = { enabled: false, groupJid: remoteJid, warnings: {} }
-        await this.saveSettings()
-        await reply("✓ Anti-link disabled.")
+        await reply(
+          `ℹ️ Anti-link is always active globally.\n\n` +
+          `This cannot be disabled. The system protects all groups from:\n` +
+          `• Spam links\n` +
+          `• Malicious URLs\n` +
+          `• External redirects\n\n` +
+          `Group admins and bot owner are exempt.`,
+        )
       } else if (action === "list") {
         await reply(
-          `Blocked domains:\n` +
+          `🔗 Blocked domains:\n` +
             `• WhatsApp (chat.whatsapp.com)\n` +
             `• YouTube (youtube.com, youtu.be)\n` +
             `• Instagram (instagram.com, ig.me)\n` +
             `• Facebook (facebook.com, fb.me)\n` +
             `• TikTok (tiktok.com, vt.tiktok.com)\n\n` +
-            `Admins bypass. Users warned, kicked after violations.`,
+            `⚡ Action sequence:\n` +
+            `Warning → Warning → Final Warning → KICK\n\n` +
+            `Exemptions: Bot owner, group admins`,
         )
       } else {
-        const status = this.settings.antiLink?.enabled ? "ON ✓" : "OFF"
         await reply(
-          `Anti-link Status: ${status}\n\n` +
+          `Anti-link Status: ALWAYS ON ✓\n\n` +
             `Usage: .gantilink <action>\n\n` +
-            `• on - Enable auto-delete of links\n` +
-            `• off - Disable anti-link\n` +
-            `• list - Show all blocked domains`,
+            `• on - Show active enforcement status\n` +
+            `• off - Show why it can't be disabled\n` +
+            `• list - Show all blocked domains\n` +
+            `• status - Show this message`,
         )
       }
     } catch (err) {
