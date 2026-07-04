@@ -845,7 +845,7 @@ export class BotSession {
         case "edit":
         case "editimg":
         case "imgmagic":
-          await this.cmdEditImage(args, remoteJid, reply, m)
+          await this.cmdEditImage(args, remoteJid, reply, msg)
           break
         case "img":
         case "image":
@@ -909,7 +909,7 @@ export class BotSession {
         case "upload":
         case "fileupload":
         case "top4top":
-          await this.cmdFileUpload(args, remoteJid, reply, m)
+          await this.cmdFileUpload(args, remoteJid, reply, msg)
           break
         case "gstatus":
           await this.cmdGroupStatus(msg, args, remoteJid, reply)
@@ -1190,7 +1190,7 @@ export class BotSession {
       `⚙�� Mode: ${s.publicMode ? "PUBLIC" : "PRIVATE"}\n` +
       `⚙️ Always online: ${s.alwaysOnline ? "ON" : "OFF"}\n` +
       `⚙️ Auto typing: ${s.autoTyping ? "ON" : "OFF"}\n` +
-      `��️ Prefix: ${s.prefix}`
+      `����� Prefix: ${s.prefix}`
     await this.sock!.sendMessage(remoteJid, { text: status }, { quoted: msg })
   }
 
@@ -1525,7 +1525,7 @@ export class BotSession {
 
       // Add footer to last message
       const footer = `\n━━━━━━━━━━━━━━━━━━━━━\n📝 *Lines:* ${lineCount}\n\nPowered by WhatsBot - World of Technology Team`
-      if (currentMessage + footer.length < 4000) {
+      if (currentMessage.length + footer.length < 4000) {
         currentMessage += footer
       }
       messages.push(currentMessage)
