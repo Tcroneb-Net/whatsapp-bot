@@ -1055,6 +1055,11 @@ export class BotSession {
         case "flux":
           await this.cmdImageGeneration(args, remoteJid, reply)
           break
+        case "aivideo":
+        case "veo":
+        case "genvideo":
+          await this.cmdAiVideo(args, remoteJid, reply)
+          break
         case "ytdl":
           await this.cmdYouTubeDl(args, remoteJid, reply)
           break
@@ -1226,107 +1231,93 @@ export class BotSession {
 
   private async cmdSuno(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     try {
-      // If args provided, use as prompt
-      if (args.trim()) {
-        const prompt = args.trim()
-        await reply("🎵 Creating your Suno music... This may take a moment...")
-
-        const payload = {
-          prompt,
-          model: "chirp-v3-5",
-        }
-
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 90000)
-
-        const res = await fetch("https://apis.davidcyril.name.ng/aimusic/suno/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        })
-        clearTimeout(timeout)
-
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "API error")
-          logger.debug({ status: res.status, err: errText }, "Suno API failed")
-          return void reply("Failed to create music. Please check your prompt and try again.")
-        }
-
-        const result = (await res.json()) as any
-        const music = result.data?.music || result.music || result
-
-        if (!music) {
-          return void reply("No music data received. Please try again.")
-        }
-
-        const musicUrl = music.audio_url || music.audio || music.url || ""
-        const title = music.title || "Untitled Music"
-        const duration = music.duration || "pending"
-        const videoUrl = music.video_url || ""
-
-        if (musicUrl && this.sock) {
-          try {
-            await this.sock.sendMessage(remoteJid, {
-              audio: { url: musicUrl },
-              mimetype: "audio/mpeg",
-              ptt: false,
-            })
-            
-            let caption = `✓ *${title}*\n`
-            caption += `Duration: ${duration}s\n`
-            caption += `Model: Chirp v3.5\n\n`
-            caption += `Credit: Powered by David Cyril`
-            
-            if (videoUrl) {
-              await this.sock.sendMessage(remoteJid, {
-                video: { url: videoUrl },
-                caption,
-              })
-            } else {
-              await reply(caption)
-            }
-            
-            return void reply("✓ Music sent!")
-          } catch (sendErr) {
-            logger.debug({ sendErr }, "failed to send suno audio")
-          }
-        }
-
-        let response = `🎵 *Suno AI Music Created!*\n\n`
-        response += `*Title:* ${title}\n`
-        response += `*Duration:* ${duration}s\n`
-        response += `*Model:* Chirp v3.5\n\n`
-
-        if (musicUrl) {
-          response += `🎧 *Audio:* ${musicUrl}\n`
-        }
-        if (videoUrl) {
-          response += `🎬 *Video:* ${videoUrl}\n`
-        }
-
-        if (!musicUrl && !videoUrl) {
-          response += `⏳ Your music is being processed. Check back shortly!\n`
-        }
-
-        response += `\n_Credit: Powered by David Cyril_`
-
-        return void reply(response)
-      }
+      const prompt = args.trim()
 
       // No args - show help
-      await reply(
-        `🎵 *Suno AI Music Creator*\n\n` +
-          `*Usage:* .suno <your music prompt>\n\n` +
-          `*Examples:*\n` +
-          `• .suno upbeat 80s synthwave with neon vibes\n` +
-          `• .suno sad piano ballad about lost love\n` +
-          `• .suno epic orchestral movie trailer music\n\n` +
-          `*Tips:*\n` +
-          `- Be descriptive about genre, mood, and style\n` +
-          `- Include tempo, instruments if desired\n` +
-          `- Model: Chirp v3.5 (best quality)`,
-      )
+      if (!prompt) {
+        return void reply(
+          `🎵 *AI Music Creator*\n\n` +
+            `*Usage:* .suno <your music prompt>\n\n` +
+            `*Examples:*\n` +
+            `• .suno upbeat 80s synthwave with neon vibes\n` +
+            `• .suno sad piano ballad about lost love\n` +
+            `• .suno hiphop rap song and say pro\n\n` +
+            `*Tips:*\n` +
+            `- Be descriptive about genre, mood, and style\n` +
+            `- Include tempo and instruments if desired`,
+        )
+      }
+
+      if (!this.sock) return
+
+      await reply("🎵 Composing your song... This can take up to a minute...")
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 120000)
+
+      const apiUrl = `https://omegatech-api.dixonomega.tech/api/ai/sonu3?action=full&prompt=${encodeURIComponent(prompt)}`
+      const res = await fetch(apiUrl, { signal: controller.signal })
+      clearTimeout(timeout)
+
+      if (!res.ok) {
+        logger.debug({ status: res.status }, "OmegaTech suno API failed")
+        return void reply("Failed to create music. Please try again with a different prompt.")
+      }
+
+      const data = (await res.json()) as any
+
+      if (!data?.success || !data?.url) {
+        console.log("[v0] Suno response:", JSON.stringify(data).substring(0, 300))
+        return void reply("No music was generated. Please try again.")
+      }
+
+      const title = data.title || "Untitled"
+      const tags = data.tags || ""
+      const duration = data.duration ? `${Math.floor(data.duration / 60)}:${String(data.duration % 60).padStart(2, "0")}` : "Unknown"
+      const thumbnail = data.thumbnail || ""
+      const audioUrl = data.url
+      const lyrics = data.lyrics || ""
+
+      // 1. Send thumbnail + song info (download bytes for reliability).
+      const info =
+        `🎵 *${title}*\n\n` +
+        (tags ? `🎼 *Genre:* ${tags}\n` : "") +
+        `⏱️ *Duration:* ${duration}\n` +
+        `📝 *Prompt:* ${prompt}\n\n` +
+        `⏳ Uploading your song...`
+
+      const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
+      try {
+        if (thumbBuf) {
+          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: info })
+        } else {
+          await this.sock.sendMessage(remoteJid, { text: info })
+        }
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send suno thumbnail")
+      }
+
+      // 2. Send the audio as a real MP3 file.
+      await this.sock.sendMessage(remoteJid, {
+        audio: { url: audioUrl },
+        mimetype: "audio/mpeg",
+        fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
+        ptt: false,
+      })
+
+      // 3. Send lyrics if available (split if too long for one message).
+      if (lyrics) {
+        const header = `📜 *Lyrics — ${title}*\n\n`
+        const full = header + lyrics
+        if (full.length <= 4000) {
+          await this.sock.sendMessage(remoteJid, { text: full })
+        } else {
+          await this.sock.sendMessage(remoteJid, { text: header + lyrics.slice(0, 3900) + "\n\n_(continued...)_" })
+          await this.sock.sendMessage(remoteJid, { text: lyrics.slice(3900) })
+        }
+      }
+
+      await reply("✅ Your song is ready! Powered by WhatsBot - World of Technology Team")
     } catch (err) {
       logger.debug({ err }, "suno command failed")
       await reply("Failed to create music. Please try again later.")
@@ -1348,7 +1339,7 @@ export class BotSession {
       `⚙�� Mode: ${s.publicMode ? "PUBLIC" : "PRIVATE"}\n` +
       `⚙️ Always online: ${s.alwaysOnline ? "ON" : "OFF"}\n` +
       `⚙️ Auto typing: ${s.autoTyping ? "ON" : "OFF"}\n` +
-      `⚙️ Prefix: ${s.prefix}`
+      `��️ Prefix: ${s.prefix}`
     await this.sock!.sendMessage(remoteJid, { text: status }, { quoted: msg })
   }
 
@@ -2314,163 +2305,127 @@ export class BotSession {
 
   private async cmdImageGeneration(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .img <prompt> [model]\n\nModels: standard (default), hd, flux\n\nExample: .img beautiful sunset over ocean hd")
+      return void reply(
+        "Usage: .img <prompt>\n\n" +
+          "Example: .img cyberpunk city with neon lights, realistic style",
+      )
     }
 
     if (!this.sock) return
 
     try {
-      const parts = args.split(" ")
-      const lastPart = parts[parts.length - 1]?.toLowerCase()
-      const model = ["hd", "flux", "standard"].includes(lastPart) ? lastPart : "standard"
-      const prompt = ["hd", "flux", "standard"].includes(lastPart) ? parts.slice(0, -1).join(" ") : args
-
-      if (!prompt.trim()) {
+      const prompt = args.trim()
+      if (!prompt) {
         return void reply("Please provide a prompt for image generation.")
       }
 
-      await reply("🎨 Generating image with " + model + " model...\n⏳ This may take 30-60 seconds...")
+      await reply("🎨 Generating your image...\n⏳ This may take up to a minute...")
 
-      let imageUrl: string | null = null
-      let imageBuffer: Buffer | null = null
+      const model = "photorealistic"
+      const apiUrl =
+        `https://omegatech-api.dixonomega.tech/api/ai/Ai-gen-image?prompt=${encodeURIComponent(prompt)}` +
+        `&model=${model}&ratio=square&resolution=512x512`
 
-      // Try multiple image generation APIs
-      const apis = [
-        { 
-          url: "https://www.puruboy.kozow.com/api/ai/flux-v2", 
-          name: "Flux v2",
-          method: "POST",
-          getUrl: (data: any) => data.image_url || data.url || data.image || data.result?.url || data.result?.image
-        },
-        { 
-          url: "https://www.puruboy.kozow.com/api/ai/flux", 
-          name: "Flux",
-          method: "POST",
-          getUrl: (data: any) => data.image_url || data.url || data.image
-        },
-        { 
-          url: "https://www.puruboy.kozow.com/api/ai/text2image", 
-          name: "Text2Image",
-          method: "POST",
-          getUrl: (data: any) => data.image || data.url || data.image_url
-        },
-      ]
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 120000)
+      const response = await fetch(apiUrl, { signal: controller.signal })
+      clearTimeout(timeout)
 
-      for (const api of apis) {
-        try {
-          console.log("[v0] Trying image generation API:", api.name)
-          
-          const response = await fetch(api.url, {
-            method: api.method,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: prompt.trim(), model }),
-          })
-
-          if (!response.ok) {
-            console.log("[v0]", api.name, "failed with status:", response.status)
-            continue
-          }
-
-          const contentType = response.headers.get("content-type") || ""
-
-          if (contentType.startsWith("image/")) {
-            // API returned raw image bytes directly.
-            const arr = await response.arrayBuffer()
-            if (arr.byteLength > 0) {
-              imageBuffer = Buffer.from(arr)
-              console.log("[v0] Raw image bytes received from", api.name)
-              break
-            }
-            continue
-          }
-
-          if (contentType.includes("application/json")) {
-            // JSON response
-            const data = await response.json()
-            console.log("[v0]", api.name, "response:", JSON.stringify(data).substring(0, 300))
-            
-            imageUrl = api.getUrl(data)
-            if (imageUrl && imageUrl.startsWith("http")) {
-              console.log("[v0] Image URL found from", api.name)
-              break
-            }
-          } else if (response.body) {
-            // Streaming response
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
-            let fullText = ""
-
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              fullText += decoder.decode(value)
-
-              if (fullText.length > 10000) break // Limit to prevent memory issues
-            }
-
-            console.log("[v0]", api.name, "streaming response:", fullText.substring(0, 300))
-
-            // Try to extract URL from streaming response
-            if (fullText.includes("http")) {
-              const urlMatch = fullText.match(/https?:\/\/[^\s"<>{}|\\^`\[\]]+/)
-              if (urlMatch) {
-                imageUrl = urlMatch[0]
-                console.log("[v0] Image URL extracted from streaming response")
-                break
-              }
-            }
-
-            // Try JSON parsing
-            try {
-              const jsonMatch = fullText.match(/\{[\s\S]*\}/)
-              if (jsonMatch) {
-                const jsonData = JSON.parse(jsonMatch[0])
-                imageUrl = api.getUrl(jsonData)
-                if (imageUrl && imageUrl.startsWith("http")) {
-                  console.log("[v0] Image URL found from JSON in streaming response")
-                  break
-                }
-              }
-            } catch (e) {
-              console.log("[v0] JSON parsing failed")
-            }
-          }
-        } catch (apiErr) {
-          console.log("[v0]", api.name, "API error:", apiErr)
-          continue
-        }
+      if (!response.ok) {
+        console.log("[v0] OmegaTech image API failed:", response.status)
+        return void reply("❌ Could not generate image. Please try again in a moment.")
       }
 
-      // Prefer raw bytes; otherwise download the URL into a buffer so WhatsApp
-      // never has to fetch a third-party URL itself (the usual cause of images
-      // that "don't open").
-      if (!imageBuffer && imageUrl) {
-        imageBuffer = await this.fetchImage(imageUrl)
+      const data = (await response.json()) as any
+      const imageUrl: string | null =
+        data?.imageUrl || (Array.isArray(data?.allImages) ? data.allImages[0] : null)
+
+      if (!data?.success || !imageUrl) {
+        console.log("[v0] Image response:", JSON.stringify(data).substring(0, 300))
+        return void reply("❌ No image was generated. Try a different prompt.")
       }
+
+      // Download the bytes ourselves so WhatsApp never has to fetch the URL
+      // (the usual cause of images that "don't open").
+      const imageBuffer = await this.fetchImage(imageUrl)
 
       if (!imageBuffer) {
-        if (imageUrl) {
-          // As a last resort, share the link so the user still gets something.
-          return void reply(`✓ Image generated (open the link):\n${imageUrl}`)
-        }
-        return void reply("❌ Could not generate image. Try:\n• A different prompt\n• A shorter description\n• Again in a moment")
+        return void reply(`✓ Image generated (open the link):\n${imageUrl}`)
       }
 
-      // Send the generated image as downloaded bytes.
       try {
         await this.sock.sendMessage(remoteJid, {
           image: imageBuffer,
-          caption: `✨ Generated with ${model} model\n\nPrompt: ${prompt.trim()}\n\nPowered by WhatsBot - World of Technology Team`,
+          caption: `✨ *AI Generated Image*\n\nPrompt: ${prompt}\n\nPowered by WhatsBot - World of Technology Team`,
         })
         return void reply("✓ Image generated and sent!")
       } catch (sendErr) {
         logger.debug({ sendErr }, "failed to send generated image")
-        await reply(imageUrl ? `✓ Image generated:\n${imageUrl}` : "❌ Failed to send the image.")
+        await reply(`✓ Image generated:\n${imageUrl}`)
       }
     } catch (err) {
       logger.debug({ err }, "image generation failed")
       console.log("[v0] Image generation error:", err)
       await reply("❌ Failed to generate image. Please try again with a different prompt.")
+    }
+  }
+
+  private async cmdAiVideo(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply(
+        "Usage: .aivideo <prompt>\n\n" +
+          "Example: .aivideo cyberpunk city with neon lights, realistic style",
+      )
+    }
+
+    if (!this.sock) return
+
+    try {
+      const prompt = args.trim()
+      if (!prompt) {
+        return void reply("Please provide a prompt for video generation.")
+      }
+
+      await reply("🎬 Generating your AI video...\n⏳ This can take a minute or two...")
+
+      const apiUrl = `https://omegatech-api.dixonomega.tech/api/ai/veo3?prompt=${encodeURIComponent(prompt)}`
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 180000)
+      const response = await fetch(apiUrl, { signal: controller.signal })
+      clearTimeout(timeout)
+
+      if (!response.ok) {
+        console.log("[v0] OmegaTech veo3 API failed:", response.status)
+        return void reply("❌ Could not generate video. Please try again in a moment.")
+      }
+
+      const data = (await response.json()) as any
+      const videoUrl: string | null = data?.videoUrl || null
+
+      if (!data?.success || !videoUrl) {
+        console.log("[v0] Video response:", JSON.stringify(data).substring(0, 300))
+        return void reply("❌ No video was generated. Try a different prompt.")
+      }
+
+      const caption = `🎬 *AI Generated Video*\n\nPrompt: ${prompt}\n\nPowered by WhatsBot - World of Technology Team`
+
+      try {
+        // Try streaming from the URL first (video files are large).
+        await this.sock.sendMessage(remoteJid, { video: { url: videoUrl }, caption })
+        return void reply("✓ Video generated and sent!")
+      } catch (sendErr) {
+        logger.debug({ sendErr }, "video url send failed, retrying with bytes")
+        // Fallback: download the bytes ourselves, then send.
+        const buf = await this.fetchImage(videoUrl)
+        if (!buf) return void reply(`✓ Video generated (open the link):\n${videoUrl}`)
+        await this.sock.sendMessage(remoteJid, { video: buf, caption })
+        return void reply("✓ Video generated and sent!")
+      }
+    } catch (err) {
+      logger.debug({ err }, "ai video generation failed")
+      console.log("[v0] AI video generation error:", err)
+      await reply("❌ Failed to generate video. Please try again with a different prompt.")
     }
   }
 
