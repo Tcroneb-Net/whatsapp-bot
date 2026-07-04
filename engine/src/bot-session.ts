@@ -76,17 +76,21 @@ export class BotSession {
   }
 
   async loadSettings(): Promise<void> {
-    const doc = await bots().findOne({ number: this.number })
-    if (doc?.settings) {
-      this.settings = { ...DEFAULT_SETTINGS, ...doc.settings }
+    try {
+      const doc = await bots().findOne({ number: this.number })
+      this.settings = { ...DEFAULT_SETTINGS, ...doc?.settings }
       logger.debug(
         {
           autoStatusReact: this.settings.autoStatusReact,
           antiViewOnce: this.settings.antiViewOnce,
           botName: this.settings.botName,
         },
-        "Settings loaded",
+        "loaded settings from database",
       )
+      // Note: Do NOT write back settings here - only read from DB.
+      // The dashboard will update MongoDB, and this method just syncs the in-memory cache.
+    } catch (err) {
+      logger.error({ err }, "failed to load settings")
     }
   }
 
@@ -838,6 +842,11 @@ export class BotSession {
         case "ytmp4":
           await this.cmdYouTubeVideo(args, remoteJid, reply)
           break
+        case "edit":
+        case "editimg":
+        case "imgmagic":
+          await this.cmdEditImage(args, remoteJid, reply)
+          break
         case "img":
         case "image":
         case "flux":
@@ -1357,6 +1366,115 @@ export class BotSession {
     }
   }
 
+  private async cmdEditImage(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!args) {
+      return void reply(
+        "🎨 *Nano Banana Image Editor*\n\n" +
+          "Edit images with AI prompts!\n\n" +
+          "*Usage:*\n" +
+          "1. Reply to an image with: .edit <your prompt>\n" +
+          "2. Or send: .edit <image-url> | <your prompt>\n\n" +
+          "*Examples:*\n" +
+          "• Remove background and make it blurred\n" +
+          "• Add a sunset in the background\n" +
+          "• Change the colors to cyberpunk style\n\n" +
+          "_Processing takes 30-60 seconds..._",
+      )
+    }
+
+    if (!this.sock) return
+
+    try {
+      // Check if message is a reply to an image
+      const repliedMsg = (this as any).lastRepliedTo
+      let imageUrl: string | null = null
+      let prompt = args.trim()
+
+      // If user provided image-url | prompt format
+      if (args.includes("|")) {
+        const [imgPart, promptPart] = args.split("|").map((s) => s.trim())
+        imageUrl = imgPart.startsWith("http") ? imgPart : null
+        prompt = promptPart || imgPart
+      }
+
+      // If no image URL from args, check for quoted/replied image
+      if (!imageUrl) {
+        // This is simplified - in production you'd check msg.message.imageMessage
+        return void reply("Please provide an image URL or reply to an image with your prompt.\n\nFormat: .edit <image-url> | <prompt>")
+      }
+
+      if (!prompt) {
+        return void reply("Please provide a prompt for image editing.\n\nFormat: .edit <image-url> | <prompt>")
+      }
+
+      await reply("🎨 Processing your image with nano-banana2...\n⏳ This takes 30-60 seconds...")
+
+      // Step 1: Submit the image and prompt to start processing
+      const submitUrl =
+        `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
+
+      const submitRes = await fetch(submitUrl, { signal: AbortSignal.timeout(30000) })
+      if (!submitRes.ok) {
+        console.log("[v0] Nano banana2 submit failed:", submitRes.status)
+        return void reply("Failed to start image processing. Please try again.")
+      }
+
+      const submitData = (await submitRes.json()) as any
+      console.log("[v0] Nano banana2 submit:", JSON.stringify(submitData).substring(0, 200))
+
+      if (!submitData?.success || !submitData?.task_id || !submitData?.fp) {
+        return void reply("Failed to start image processing. Please try again.")
+      }
+
+      const taskId = submitData.task_id
+      const fp = submitData.fp
+
+      // Step 2: Poll for results (with retries)
+      let resultData: any = null
+      let attempts = 0
+      const maxAttempts = 120 // 2 minutes with 1s intervals
+
+      while (attempts < maxAttempts) {
+        attempts++
+        const resultUrl = `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2-result?task_id=${taskId}&fp=${fp}`
+        const resultRes = await fetch(resultUrl, { signal: AbortSignal.timeout(10000) })
+
+        if (resultRes.ok) {
+          resultData = (await resultRes.json()) as any
+          if (resultData?.success && resultData?.status === "completed" && resultData?.image_url) {
+            break
+          }
+        }
+
+        // Wait before retrying
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
+      }
+
+      if (!resultData?.image_url) {
+        return void reply("Image processing timed out. Please try with a simpler prompt.")
+      }
+
+      // Step 3: Send the edited image
+      const editedImage = await this.fetchImage(resultData.image_url)
+      if (!editedImage) {
+        return void reply(`✨ Image edited successfully!\n\n${resultData.image_url}`)
+      }
+
+      await this.sock.sendMessage(remoteJid, {
+        image: editedImage,
+        caption: `✨ *Image Edited*\n\n*Prompt:* ${prompt}\n\nPowered by WhatsBot - World of Technology Team`,
+      })
+
+      await reply("✅ Image editing complete!")
+    } catch (err) {
+      logger.debug({ err }, "image editing failed")
+      console.log("[v0] Image edit error:", err)
+      await reply("Failed to edit image. Please try again with a different image or prompt.")
+    }
+  }
+
   private async cmdPlay(
     args: string,
     remoteJid: string,
@@ -1371,10 +1489,16 @@ export class BotSession {
       const apiUrl = `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(args)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
 
-      if (!response.ok) return void reply("Search failed. Please try again.")
+      if (!response.ok) {
+        console.log("[v0] Play API failed:", response.status)
+        return void reply("Search failed. Please try again.")
+      }
 
       const data = (await response.json()) as any
-      if (!data?.success || !data?.result) return void reply("No results found. Try a different search.")
+      console.log("[v0] Play API response:", JSON.stringify(data).substring(0, 300))
+      if (!data?.success || !data?.result) {
+        return void reply("No results found. Try a different search.")
+      }
 
       const result = data.result
       const title = result.title || "Unknown"
@@ -1441,10 +1565,16 @@ export class BotSession {
       const apiUrl = `https://apis.davidcyril.name.ng/song?query=${encodeURIComponent(args)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
 
-      if (!response.ok) return void reply("Search failed. Please try again.")
+      if (!response.ok) {
+        console.log("[v0] Song API failed:", response.status)
+        return void reply("Search failed. Please try again.")
+      }
 
       const data = (await response.json()) as any
-      if (!data?.success || !data?.result) return void reply("No results found.")
+      console.log("[v0] Song API response:", JSON.stringify(data).substring(0, 300))
+      if (!data?.success || !data?.result) {
+        return void reply("No results found.")
+      }
 
       const result = data.result
       const title = result.title || "Unknown"
