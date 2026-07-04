@@ -25,15 +25,8 @@ const downloadMediaMessage: typeof import("@whiskeysockets/baileys").downloadMed
 const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchLatestBaileysVersion =
   baileys.fetchLatestBaileysVersion
 const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
-// Poll votes are encrypted; Baileys 7.x no longer auto-decrypts them, so we
-// decrypt manually with these helpers.
-const decryptPollVote: typeof import("@whiskeysockets/baileys").decryptPollVote =
-  baileys.decryptPollVote
-const jidNormalizedUser: typeof import("@whiskeysockets/baileys").jidNormalizedUser =
-  baileys.jidNormalizedUser
 import bcrypt from "bcryptjs"
 import os from "os"
-import { createHash } from "crypto"
 import { readFile } from "fs/promises"
 import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
@@ -72,19 +65,6 @@ export class BotSession {
   private settingsRefreshTimer: ReturnType<typeof setInterval> | null = null
   // Cache for search results (for .download command)
   private searchCache: Record<string, any> = {}
-  // Poll sessions keyed by poll message id, used to decrypt & map poll votes
-  // back to a song. Poll votes are encrypted, so we keep the enc key + options.
-  private pollSessions: Record<
-    string,
-    {
-      pollEncKey: Uint8Array
-      pollCreatorJid: string
-      options: string[]
-      results: any[]
-      remoteJid: string
-      createdAt: number
-    }
-  > = {}
 
   constructor(number: string) {
     this.number = number
@@ -491,14 +471,7 @@ export class BotSession {
       }
     }
 
-    // --- Poll responses: handle music search selections ---
-    if (msg.message?.pollUpdateMessage || (msg.message as any)?.pollCreationMessage) {
-      try {
-        await this.handlePollResponse(msg, remoteJid)
-      } catch (err) {
-        logger.debug({ err }, "poll response handler error")
-      }
-    }
+
 
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
@@ -687,194 +660,9 @@ export class BotSession {
     )
   }
 
-  private async handlePollResponse(msg: WAMessage, remoteJid: string): Promise<void> {
-    if (!this.sock) return
 
-    try {
-      const pollUpdate = msg.message?.pollUpdateMessage
-      if (!pollUpdate || !pollUpdate.vote) return
 
-      // The creation message key tells us which poll was voted on.
-      const creationKey = pollUpdate.pollCreationMessageKey
-      const pollMsgId = creationKey?.id
-      if (!pollMsgId) {
-        console.log("[v0] Poll vote missing creation key")
-        return
-      }
 
-      const session = this.pollSessions[pollMsgId]
-      if (!session) {
-        console.log("[v0] No stored poll session for", pollMsgId)
-        return
-      }
-
-      // Who voted (normalized). fromMe votes are ignored.
-      const rawVoter = msg.key.fromMe
-        ? this.ownJid() || this.sock.user?.id || ""
-        : msg.key.participant || msg.key.remoteJid || ""
-      if (msg.key.fromMe) return
-      const voterJid = jidNormalizedUser(rawVoter)
-
-      // Decrypt the encrypted vote payload.
-      let decrypted: any
-      try {
-        decrypted = decryptPollVote(pollUpdate.vote as any, {
-          pollEncKey: session.pollEncKey,
-          pollCreatorJid: session.pollCreatorJid,
-          pollMsgId,
-          voterJid,
-        })
-      } catch (decErr) {
-        console.log("[v0] Poll vote decryption failed:", decErr)
-        return
-      }
-
-      const selectedOptions: Uint8Array[] = decrypted?.selectedOptions || []
-      if (selectedOptions.length === 0) {
-        // An empty vote means the user DESELECTED their choice — ignore silently.
-        console.log("[v0] Empty poll vote (deselect) — ignoring")
-        return
-      }
-
-      // Selected options are SHA-256 hashes of the option text. Hash each stored
-      // option and match to find which index the user picked.
-      const selectedHexes = selectedOptions.map((o) => Buffer.from(o).toString("hex"))
-      const sha256hex = (s: string) => createHash("sha256").update(Buffer.from(s)).digest("hex")
-
-      let matchedIndex = -1
-      for (let i = 0; i < session.options.length; i++) {
-        if (selectedHexes.includes(sha256hex(session.options[i]))) {
-          matchedIndex = i
-          break
-        }
-      }
-
-      if (matchedIndex < 0 || matchedIndex >= session.results.length) {
-        console.log("[v0] Could not match poll vote to an option", { selectedHexes })
-        return
-      }
-
-      const selectedResult = session.results[matchedIndex]
-      const videoUrl = selectedResult?.url
-      if (!videoUrl) {
-        console.log("[v0] Matched option has no URL:", selectedResult)
-        return
-      }
-
-      console.log("[v0] Poll vote matched index", matchedIndex, "->", videoUrl)
-      // Silently take the URL, download, and send the full song, tagging voter.
-      await this.downloadAndSendSong(videoUrl, selectedResult, session.remoteJid, voterJid)
-    } catch (err) {
-      logger.debug({ err }, "poll response handling failed")
-      console.log("[v0] Poll response error:", err)
-    }
-  }
-
-  private async downloadAndSendSong(
-    videoUrl: string,
-    metadata: any,
-    remoteJid: string,
-    voterJid?: string,
-  ): Promise<void> {
-    if (!this.sock) return
-
-    // Helper to tag the requester if we know who they are.
-    const mentions = voterJid ? [voterJid] : undefined
-    const tag = voterJid ? `@${voterJid.split("@")[0]} ` : ""
-
-    try {
-      // Send thumbnail image with song info first
-      const thumbnailUrl =
-        metadata.thumbnail ||
-        metadata.image ||
-        `https://img.youtube.com/vi/${this.extractVideoId(videoUrl)}/hqdefault.jpg`
-
-      const songInfo =
-        `🎵 *${metadata.title || "Unknown Song"}*\n\n` +
-        `🎤 *Channel:* ${metadata.channel || "Unknown Artist"}\n` +
-        `⏱️ *Duration:* ${metadata.duration || "Unknown"}\n` +
-        `👁️ *Views:* ${metadata.views || "N/A"}\n\n` +
-        `⏳ ${tag}Downloading your song, please wait...`
-
-      // Send image with song info (download bytes for reliability).
-      const thumbBuf = await this.fetchImage(thumbnailUrl)
-      try {
-        if (thumbBuf) {
-          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: songInfo, mentions })
-        } else {
-          await this.sock.sendMessage(remoteJid, { text: songInfo, mentions })
-        }
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send thumbnail")
-        await this.sock.sendMessage(remoteJid, { text: songInfo, mentions })
-      }
-
-      // Download as MP3, trying multiple endpoints for reliability.
-      const endpoints = [
-        "https://www.puruboy.kozow.com/api/downloader/ytmp3",
-        "https://www.puruboy.kozow.com/api/play/ytmp3",
-      ]
-      let audioUrl: string | null = null
-      for (const ep of endpoints) {
-        try {
-          const dlRes = await fetch(ep, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: videoUrl }),
-          })
-          if (!dlRes.ok) continue
-          const dlData = (await dlRes.json()) as any
-          audioUrl =
-            dlData.audio ||
-            dlData.result?.audio ||
-            dlData.result?.url ||
-            dlData.url ||
-            dlData.download_url ||
-            dlData.data?.url ||
-            null
-          if (audioUrl) break
-        } catch {
-          continue
-        }
-      }
-
-      if (!audioUrl) {
-        await this.sock.sendMessage(remoteJid, {
-          text: `❌ ${tag}Could not download that song. Please try another one.`,
-          mentions,
-        })
-        return
-      }
-
-      // Send the audio file as a real MP3.
-      await this.sock.sendMessage(remoteJid, {
-        audio: { url: audioUrl },
-        mimetype: "audio/mpeg",
-        fileName: `${(metadata.title || "song").replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
-        ptt: false,
-      })
-
-      // Success message tagging the requester.
-      const successMsg =
-        `✅ ${tag}here is your song!\n\n` +
-        `🎵 *${metadata.title || "Song"}*\n` +
-        `🎤 ${metadata.channel || "Unknown"}\n\n` +
-        `Powered by WhatsBot - World of Technology Team`
-
-      await this.sock.sendMessage(remoteJid, { text: successMsg, mentions })
-    } catch (err) {
-      logger.debug({ err }, "download and send song failed")
-      await this.sock.sendMessage(remoteJid, {
-        text: `❌ ${tag}Failed to download song. Please try again.`,
-        mentions,
-      })
-    }
-  }
-
-  private extractVideoId(url: string): string {
-    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
-    return match ? match[1] : "default"
-  }
 
   private async handleAntiLink(msg: WAMessage, remoteJid: string): Promise<void> {
     if (!this.sock) return
@@ -1040,11 +828,11 @@ export class BotSession {
           break
         case "play":
         case "search":
-          await this.cmdMusicSearch(args, remoteJid, reply)
+          await this.cmdPlay(args, remoteJid, reply)
           break
         case "song":
         case "ytmp3":
-          await this.cmdYtMp3(args, remoteJid, reply)
+          await this.cmdSong(args, remoteJid, reply)
           break
         case "video":
         case "ytmp4":
@@ -1068,8 +856,16 @@ export class BotSession {
           await this.cmdXDownload(args, remoteJid, reply)
           break
         case "tiktok":
-        case "tt":
-          await this.cmdTikTokDownload(args, remoteJid, reply)
+        case "tk":
+        case "ttdl":
+        case "tts":
+        case "instagram":
+        case "ig":
+        case "igdl":
+        case "download":
+        case "dl":
+        case "get":
+          await this.cmdDownloadSocial(args, remoteJid, reply)
           break
         case "spotify":
         case "spot":
@@ -1566,33 +1362,141 @@ export class BotSession {
     remoteJid: string,
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
-    if (!this.aiGuard(reply)) return
-    if (!args) return void reply("Usage: play <song name>")
-    await reply(`Searching SoundCloud for "${args}"...`)
-    const res = await safeHostify(() => hostify.soundcloud(args))
-    if (!res?.url) return void reply("Could not find that track.")
-    await this.sock!.sendMessage(remoteJid, {
-      audio: { url: res.url },
-      mimetype: "audio/mpeg",
-      fileName: `${res.title || args}.mp3`,
-    })
+    if (!args) return void reply("Usage: .play <song name or artist>\n\nExample: .play Faded Alan Walker")
+    if (!this.sock) return
+
+    try {
+      await reply("🎵 Searching for your song...")
+
+      const apiUrl = `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(args)}`
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
+
+      if (!response.ok) return void reply("Search failed. Please try again.")
+
+      const data = (await response.json()) as any
+      if (!data?.success || !data?.result) return void reply("No results found. Try a different search.")
+
+      const result = data.result
+      const title = result.title || "Unknown"
+      const duration = result.duration || "Unknown"
+      const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
+      const thumbnail = result.thumbnail || ""
+      const downloadUrl = result.download_url || ""
+
+      // Send thumbnail with song info
+      const info =
+        `🎵 *${title}*\n\n` +
+        `⏱️ *Duration:* ${duration}\n` +
+        `👁️ *Views:* ${views}\n` +
+        `📅 *Published:* ${result.published || "Unknown"}\n\n` +
+        `⏳ Preparing your download...`
+
+      const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
+      try {
+        if (thumbBuf) {
+          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: info })
+        } else {
+          await this.sock.sendMessage(remoteJid, { text: info })
+        }
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send thumbnail")
+      }
+
+      if (downloadUrl) {
+        // Send the audio file
+        await this.sock.sendMessage(remoteJid, {
+          audio: { url: downloadUrl },
+          mimetype: "audio/mpeg",
+          fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
+          ptt: false,
+        })
+
+        const successMsg =
+          `✅ *${title}* ready!\n\n` +
+          `🎤 ${result.published || ""}\n` +
+          `🎧 Enjoy!\n\n` +
+          `Powered by WhatsBot - World of Technology Team`
+
+        await this.sock.sendMessage(remoteJid, { text: successMsg })
+      } else {
+        await reply("Could not extract download link. Please try another song.")
+      }
+    } catch (err) {
+      logger.debug({ err }, "play command failed")
+      await reply("Search failed. Please try again.")
+    }
   }
 
-  private async cmdYtMp3(
+  private async cmdSong(
     args: string,
     remoteJid: string,
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
-    if (!this.aiGuard(reply)) return
-    if (!args) return void reply("Usage: song <youtube url>")
-    await reply("Downloading audio, please wait...")
-    const res = await safeHostify(() => hostify.ytmp3(args))
-    if (!res?.url) return void reply("Download failed. Check the URL and try again.")
-    await this.sock!.sendMessage(remoteJid, {
-      audio: { url: res.url },
-      mimetype: "audio/mpeg",
-      fileName: `${res.title || "audio"}.mp3`,
-    })
+    if (!args) return void reply("Usage: .song <song name or artist>\n\nExample: .song Faded Alan Walker")
+    if (!this.sock) return
+
+    try {
+      await reply("🎵 Getting your song with lyrics and video...")
+
+      const apiUrl = `https://apis.davidcyril.name.ng/song?query=${encodeURIComponent(args)}`
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
+
+      if (!response.ok) return void reply("Search failed. Please try again.")
+
+      const data = (await response.json()) as any
+      if (!data?.success || !data?.result) return void reply("No results found.")
+
+      const result = data.result
+      const title = result.title || "Unknown"
+      const duration = result.duration || "Unknown"
+      const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
+      const thumbnail = result.thumbnail || ""
+      const audioUrl = result.audio?.download_url || ""
+      const videoUrl = result.video?.download_url || ""
+
+      // Send thumbnail with song info
+      const info =
+        `🎵 *${title}*\n\n` +
+        `⏱️ *Duration:* ${duration}\n` +
+        `👁️ *Views:* ${views}\n` +
+        `📅 *Published:* ${result.published || "Unknown"}\n\n` +
+        `⏳ Preparing downloads...`
+
+      const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
+      try {
+        if (thumbBuf) {
+          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: info })
+        } else {
+          await this.sock.sendMessage(remoteJid, { text: info })
+        }
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send thumbnail")
+      }
+
+      // Send audio if available
+      if (audioUrl) {
+        await this.sock.sendMessage(remoteJid, {
+          audio: { url: audioUrl },
+          mimetype: "audio/mpeg",
+          fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
+          ptt: false,
+        })
+      }
+
+      // Send video if available
+      if (videoUrl) {
+        await this.sock.sendMessage(remoteJid, {
+          video: { url: videoUrl },
+          caption: `🎬 *${title}* (720p)`,
+        })
+      }
+
+      const successMsg = `✅ *${title}* ready!\n\nPowered by WhatsBot - World of Technology Team`
+      await this.sock.sendMessage(remoteJid, { text: successMsg })
+    } catch (err) {
+      logger.debug({ err }, "song command failed")
+      await reply("Failed to get song. Please try again.")
+    }
   }
 
   private async cmdYouTubeVideo(
@@ -2197,111 +2101,64 @@ export class BotSession {
     }
   }
 
-  private async cmdMusicSearch(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+  // Unified downloader for TikTok, Instagram, Facebook, and other social media using aiov2 API
+  private async cmdDownloadSocial(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
-      return void reply("Usage: .play <song name or YouTube URL>\n\nSearches for songs and shows results as poll. Tap poll option to download as MP3!")
+      return void reply(
+        "Usage: .download <social media URL>\n\n" +
+          "Supports: TikTok, Instagram, Facebook, YouTube, Twitter, and more\n\n" +
+          "Example: .download https://vm.tiktok.com/...",
+      )
     }
 
     if (!this.sock) return
 
     try {
-      await reply("🔍 Searching: " + args)
+      const url = args.trim()
+      if (!url.startsWith("http")) return void reply("Please provide a valid URL")
 
-      // Check if input is a YouTube URL
-      const youtubeUrlRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/
-      let videoUrl: string | null = null
-      let videoId: string | null = null
-      
-      const urlMatch = args.match(youtubeUrlRegex)
-      if (urlMatch) {
-        videoId = urlMatch[1]
-        videoUrl = `https://www.youtube.com/watch?v=${videoId}`
+      await reply("📥 Downloading from social media...")
+
+      const apiUrl = `https://apis.davidcyril.name.ng/download/aiov2?url=${encodeURIComponent(url)}`
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) })
+
+      if (!response.ok) return void reply("❌ Download failed. Please check the URL and try again.")
+
+      const data = (await response.json()) as any
+      if (!data?.success || !Array.isArray(data?.result) || data.result.length === 0) {
+        return void reply("❌ Could not download from this URL. Try another link.")
       }
 
-      let results: any[] = []
-      
-      if (videoUrl) {
-        // If URL provided, get that single video info
-        results = [{ url: videoUrl, videoId, title: "Selected Video", channel: "YouTube" }]
-      } else {
-        // Search for songs
-        const searchRes = await fetch(`https://www.puruboy.kozow.com/api/search/youtube?q=${encodeURIComponent(args)}`)
+      const item = data.result[0]
+      const title = item.title || "Download"
+      const thumbnail = item.thumbnail || item.video_preview || ""
+      const videoUrl = item.video_download || item.video || ""
 
-        if (!searchRes.ok) {
-          console.log("[v0] YouTube search failed with status:", searchRes.status)
-          return void reply("Search failed. Please try another song name.")
-        }
+      if (!videoUrl) return void reply("❌ No video found in this link.")
 
-        const searchData = (await searchRes.json()) as any
-        results = searchData.result || searchData.results || searchData.data || []
-
-        if (!results || results.length === 0) {
-          console.log("[v0] YouTube search returned no results:", searchData)
-          return void reply("No songs found. Try a different search.")
-        }
-      }
-
-      const topResults = results.slice(0, 5)
-
-      // Store results for later download when user selects (also used by .download)
-      const searchKey = `search_${remoteJid}_${Date.now()}`
-      this.searchCache = this.searchCache || {}
-      this.searchCache[searchKey] = topResults
-
-      // Create poll options from the top results. Option text MUST exactly match
-      // what we store, because vote decryption matches by SHA-256 of the text.
-      const pollResults = topResults.map((r: any, i: number) => {
-        const title = r.title || `Result ${i + 1}`
-        // Prefix with number to keep options unique (WhatsApp rejects duplicates).
-        const label = `${i + 1}. ${title}`
-        return label.length > 100 ? label.substring(0, 97) + "..." : label
-      })
-
-      if (this.sock && remoteJid) {
-        // Send as a single-select WhatsApp poll and capture the enc key so we
-        // can decrypt the vote when the user taps an option.
-        const sent = await this.sock.sendMessage(remoteJid, {
-          poll: {
-            name: `🎵 Tap a song to download — "${args}"`,
-            values: pollResults,
-            selectableCount: 1,
-          },
-        })
-
-        const pollMsgId = sent?.key?.id
-        const pollEncKey = (sent?.message as any)?.messageContextInfo?.messageSecret
-        const creatorJid = jidNormalizedUser(this.ownJid() || this.sock.user?.id || "")
-
-        if (pollMsgId && pollEncKey) {
-          this.pollSessions[pollMsgId] = {
-            pollEncKey,
-            pollCreatorJid: creatorJid,
-            options: pollResults,
-            results: topResults,
-            remoteJid,
-            createdAt: Date.now(),
-          }
-          // Prune old sessions (keep last 20) to avoid unbounded growth.
-          const keys = Object.keys(this.pollSessions)
-          if (keys.length > 20) {
-            keys
-              .sort((a, b) => this.pollSessions[a].createdAt - this.pollSessions[b].createdAt)
-              .slice(0, keys.length - 20)
-              .forEach((k) => delete this.pollSessions[k])
-          }
-          console.log("[v0] Poll session stored:", pollMsgId, "options:", pollResults.length)
+      // Send thumbnail with info
+      const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
+      const info = `📥 *${title.substring(0, 100)}*\n\n⏳ Processing...`
+      try {
+        if (thumbBuf) {
+          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: info })
         } else {
-          console.log("[v0] WARNING: poll enc key missing; votes won't decrypt", { pollMsgId, hasKey: !!pollEncKey })
+          await this.sock.sendMessage(remoteJid, { text: info })
         }
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send thumbnail")
       }
 
-      await reply(`✓ Sent ${pollResults.length} results as a poll. Tap your choice and I'll send the full song automatically!`)
+      // Send the video
+      await this.sock.sendMessage(remoteJid, { video: { url: videoUrl }, caption: `✅ ${title.substring(0, 100)}` })
+      await reply("✅ Download complete!")
     } catch (err) {
-      logger.debug({ err }, "music search failed")
-      console.log("[v0] Music search error:", err)
-      await reply("Failed to search for songs. Please try again.")
+      logger.debug({ err }, "social download failed")
+      await reply("❌ Download failed. Please try again.")
     }
   }
+
+
 
   private async cmdImageGeneration(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
