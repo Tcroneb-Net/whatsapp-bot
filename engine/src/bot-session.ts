@@ -737,6 +737,14 @@ export class BotSession {
     if (!hasLink) return
 
     try {
+      // Check if sender is the bot owner (fromMe === true)
+      const isOwner = msg.key.fromMe === true
+      console.log("[v0] AntiLink check - isOwner:", isOwner, "fromMe:", msg.key.fromMe)
+      if (isOwner) {
+        console.log("[v0] Owner detected - skipping antilink")
+        return // Bot owner is completely exempt from antilink
+      }
+
       let sender = msg.key.participant || msg.key.remoteJid
       if (!sender) return
 
@@ -755,9 +763,8 @@ export class BotSession {
         return pId === sender
       })
       
-      // Skip if sender is admin or the bot owner
-      const ownerJid = this.ownJid()
-      if (participant?.isAdmin || participant?.isSuperAdmin || sender === ownerJid) return
+      // Skip if sender is group admin or super admin (admins bypass antilink)
+      if (participant?.isAdmin || participant?.isSuperAdmin) return
 
       // Initialize warnings tracking if needed
       if (!this.settings.antiLink) {
