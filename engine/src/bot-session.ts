@@ -34,7 +34,7 @@ import { bots, viewOnceLogs } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
-import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomMenuBanner, getRandomAliveBanner } from "./messages.js"
+import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomMenuBanner, getRandomAliveBanner, getRandomPingBanner } from "./messages.js"
 
 const PRESENCE_KEEPALIVE_MS = 10 * 60 * 1000
 
@@ -1148,6 +1148,21 @@ export class BotSession {
     await this.sendTyping(remoteJid)
     const sent = await this.sock!.sendMessage(remoteJid, { text: "🏓 Pinging..." }, { quoted: msg })
     const latency = Date.now() - start
+    
+    // Send ping banner image
+    const bannerUrl = getRandomPingBanner()
+    const bannerImg = await this.fetchImage(bannerUrl)
+    if (bannerImg && this.sock) {
+      try {
+        await this.sock.sendMessage(remoteJid, {
+          image: bannerImg,
+          caption: `🏓 *PING RESPONSE*\nSpeed: *${latency}ms*`,
+        })
+      } catch (imgErr) {
+        logger.debug({ imgErr }, "failed to send ping banner")
+      }
+    }
+    
     if (sent?.key) {
       await this.sock!.sendMessage(remoteJid, {
         text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
