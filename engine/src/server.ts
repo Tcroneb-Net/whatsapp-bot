@@ -19,7 +19,7 @@ export function createServer() {
     next()
   })
 
-  app.get("/health", (_req, res) => {
+  app.get("/health", (_req: Request, res: Response) => {
     res.json({ ok: true })
   })
 
