@@ -711,8 +711,9 @@ export class BotSession {
     const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ""
     if (!text) return
 
-    // Regex patterns for blocked links
+    // Regex patterns for blocked links (social media + download services)
     const linkPatterns = [
+      // Social media
       /https?:\/\/(www\.)?chat\.whatsapp\.com/i,
       /https?:\/\/(www\.)?(youtube\.com|youtu\.be)/i,
       /https?:\/\/(www\.)?instagram\.com/i,
@@ -721,6 +722,15 @@ export class BotSession {
       /https?:\/\/(vt\.tiktok\.com)/i,
       /https?:\/\/(www\.)?ig\.me/i,
       /https?:\/\/(www\.)?fb\.me/i,
+      // Download/file sharing services
+      /https?:\/\/(www\.)?download\./i,
+      /https?:\/\/(www\.)?mega\.nz/i,
+      /https?:\/\/(www\.)?mediafire\.com/i,
+      /https?:\/\/(www\.)?zippyshare\.com/i,
+      /https?:\/\/(www\.)?sendspace\.com/i,
+      /https?:\/\/(www\.)?dropbox\.com/i,
+      /https?:\/\/(www\.)?drive\.google\.com/i,
+      /https?:\/\/(www\.)?1fichier\.com/i,
     ]
 
     const hasLink = linkPatterns.some((pattern) => pattern.test(text))
@@ -745,8 +755,9 @@ export class BotSession {
         return pId === sender
       })
       
-      // Skip if sender is admin
-      if (participant?.isAdmin || participant?.isSuperAdmin) return
+      // Skip if sender is admin or the bot owner
+      const ownerJid = this.ownJid()
+      if (participant?.isAdmin || participant?.isSuperAdmin || sender === ownerJid) return
 
       // Initialize warnings tracking if needed
       if (!this.settings.antiLink) {
@@ -768,16 +779,13 @@ export class BotSession {
         logger.debug({ err }, "failed to delete link message")
       }
 
-      const userName = sender.replace("@s.whatsapp.net", "")
-
       // Action based on warning count
       if (warningCount >= 5) {
         // Kick after 5 warnings
         try {
           await this.sock.groupParticipantsUpdate(remoteJid, [sender], "remove")
           await this.sock.sendMessage(remoteJid, {
-            text: `🔴 @${userName} has been kicked for repeatedly posting blocked links (${warningCount} violations).`,
-            mentions: [sender],
+            text: `🔴 *Link Violation Alert*\n\nUser has been removed for repeatedly posting blocked links.\n\nViolations: ${warningCount}\n\nBanned domains: WhatsApp, YouTube, Instagram, Facebook, TikTok`,
           })
           delete this.settings.antiLink.warnings[sender]
           await this.saveSettings()
@@ -789,8 +797,7 @@ export class BotSession {
         // Final warning at 3 violations
         try {
           await this.sock.sendMessage(remoteJid, {
-            text: `⚠️ @${userName}: Final warning! ${5 - warningCount} more link violations will result in removal.`,
-            mentions: [sender],
+            text: `⚠️ *Final Warning*\n\nLink detected and deleted.\n\nWarnings: ${warningCount}/5\n\n${5 - warningCount} more violations = removal from group`,
           })
         } catch (warnErr) {
           logger.debug({ warnErr }, "failed to send final warning")
@@ -799,8 +806,7 @@ export class BotSession {
         // First warning
         try {
           await this.sock.sendMessage(remoteJid, {
-            text: `⚠️ @${userName}: Link detected and deleted. (${warningCount}/5 warnings)`,
-            mentions: [sender],
+            text: `⚠️ *Link Detected*\n\nMessage deleted. No sharing of:\n• WhatsApp links\n• YouTube/Instagram\n• Facebook/TikTok\n\nWarnings: ${warningCount}/5`,
           })
         } catch (warnErr) {
           logger.debug({ warnErr }, "failed to send warning")
@@ -809,8 +815,7 @@ export class BotSession {
         // Just delete, show warning count
         try {
           await this.sock.sendMessage(remoteJid, {
-            text: `⚠️ @${userName}: Link deleted. (${warningCount}/5 warnings)`,
-            mentions: [sender],
+            text: `⚠️ *Link Removed*\n\nWarnings: ${warningCount}/5\n\nContinue and risk removal.`,
           })
         } catch (warnErr) {
           logger.debug({ warnErr }, "failed to send warning")
@@ -2423,15 +2428,20 @@ Powered by WhatsBot - World of Technology Team`
         )
       } else if (action === "list") {
         await reply(
-          `🔗 Blocked domains:\n` +
+          `🔗 *Blocked Domains*\n\n` +
+            `SOCIAL MEDIA:\n` +
             `• WhatsApp (chat.whatsapp.com)\n` +
             `• YouTube (youtube.com, youtu.be)\n` +
             `• Instagram (instagram.com, ig.me)\n` +
             `• Facebook (facebook.com, fb.me)\n` +
             `• TikTok (tiktok.com, vt.tiktok.com)\n\n` +
-            `⚡ Action sequence:\n` +
-            `Warning → Warning → Final Warning → KICK\n\n` +
-            `Exemptions: Bot owner, group admins`,
+            `FILE DOWNLOAD SERVICES:\n` +
+            `• MEGA, MediaFire, Zippyshare\n` +
+            `• SendSpace, Dropbox, Google Drive\n` +
+            `• 1Fichier, and other download sites\n\n` +
+            `⚡ *Action Sequence*:\n` +
+            `1st → 2nd → Final Warning → KICK\n\n` +
+            `✅ *Exemptions*: Bot owner, group admins`,
         )
       } else {
         await reply(
