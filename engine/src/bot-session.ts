@@ -711,8 +711,9 @@ export class BotSession {
     const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ""
     if (!text) return
 
-    // Regex patterns for blocked links
+    // Regex patterns for blocked links (social media + download services)
     const linkPatterns = [
+      // Social media
       /https?:\/\/(www\.)?chat\.whatsapp\.com/i,
       /https?:\/\/(www\.)?(youtube\.com|youtu\.be)/i,
       /https?:\/\/(www\.)?instagram\.com/i,
@@ -721,6 +722,15 @@ export class BotSession {
       /https?:\/\/(vt\.tiktok\.com)/i,
       /https?:\/\/(www\.)?ig\.me/i,
       /https?:\/\/(www\.)?fb\.me/i,
+      // Download/file sharing services
+      /https?:\/\/(www\.)?download\./i,
+      /https?:\/\/(www\.)?mega\.nz/i,
+      /https?:\/\/(www\.)?mediafire\.com/i,
+      /https?:\/\/(www\.)?zippyshare\.com/i,
+      /https?:\/\/(www\.)?sendspace\.com/i,
+      /https?:\/\/(www\.)?dropbox\.com/i,
+      /https?:\/\/(www\.)?drive\.google\.com/i,
+      /https?:\/\/(www\.)?1fichier\.com/i,
     ]
 
     const hasLink = linkPatterns.some((pattern) => pattern.test(text))
@@ -2418,15 +2428,20 @@ Powered by WhatsBot - World of Technology Team`
         )
       } else if (action === "list") {
         await reply(
-          `🔗 Blocked domains:\n` +
+          `🔗 *Blocked Domains*\n\n` +
+            `SOCIAL MEDIA:\n` +
             `• WhatsApp (chat.whatsapp.com)\n` +
             `• YouTube (youtube.com, youtu.be)\n` +
             `• Instagram (instagram.com, ig.me)\n` +
             `• Facebook (facebook.com, fb.me)\n` +
             `• TikTok (tiktok.com, vt.tiktok.com)\n\n` +
-            `⚡ Action sequence:\n` +
-            `Warning → Warning → Final Warning → KICK\n\n` +
-            `Exemptions: Bot owner, group admins`,
+            `FILE DOWNLOAD SERVICES:\n` +
+            `• MEGA, MediaFire, Zippyshare\n` +
+            `• SendSpace, Dropbox, Google Drive\n` +
+            `• 1Fichier, and other download sites\n\n` +
+            `⚡ *Action Sequence*:\n` +
+            `1st → 2nd → Final Warning → KICK\n\n` +
+            `✅ *Exemptions*: Bot owner, group admins`,
         )
       } else {
         await reply(
