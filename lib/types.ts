@@ -33,6 +33,18 @@ export interface BotSettings {
   publicMode: boolean
   // Custom emojis used for reacting to status updates (comma-separated).
   statusReactEmojis: string
+  // Delay in seconds before auto viewing status (0 = instant).
+  autoStatusViewDelay: number
+  // Delay in seconds before auto reacting to status (0 = instant).
+  autoStatusReactDelay: number
+  // Auto-like status reactions (auto heart/like when viewing).
+  autoLikeStatus: boolean
+  // Delay in seconds before auto-liking status.
+  autoLikeDelay: number
+  // Auto-clear cache every N hours (0 = disabled).
+  autoClearCacheHours: number
+  // Last time cache was cleared.
+  lastCacheClear?: Date
 }
 
 export interface BotDoc {
@@ -65,6 +77,11 @@ export const DEFAULT_SETTINGS: BotSettings = {
   aiPersona: "",
   publicMode: true,
   statusReactEmojis: "❤️,🔥,😍,👍,🎉",
+  autoStatusViewDelay: 0,
+  autoStatusReactDelay: 0,
+  autoLikeStatus: false,
+  autoLikeDelay: 2,
+  autoClearCacheHours: 6,
 }
 
 // Settings the dashboard is allowed to update.
@@ -101,4 +118,9 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "aiPersona",
   "publicMode",
   "statusReactEmojis",
+  "autoStatusViewDelay",
+  "autoStatusReactDelay",
+  "autoLikeStatus",
+  "autoLikeDelay",
+  "autoClearCacheHours",
 ]
