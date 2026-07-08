@@ -63,6 +63,8 @@ export class BotSession {
   private presenceTimer: ReturnType<typeof setInterval> | null = null
   // Periodic settings refresh from MongoDB (auto-sync dashboard changes).
   private settingsRefreshTimer: ReturnType<typeof setInterval> | null = null
+  // Auto-clear cache timer for performance optimization.
+  private cacheCleanTimer: ReturnType<typeof setInterval> | null = null
   // Cache for search results (for .download command)
   private searchCache: Record<string, any> = {}
 
@@ -143,12 +145,51 @@ export class BotSession {
         logger.debug({ err }, "periodic settings refresh failed")
       }
     }, 30000)
+
+    // Start auto-clear cache timer if configured
+    this.startCacheClearTimer()
   }
 
   private clearSettingsRefreshTimer(): void {
     if (this.settingsRefreshTimer) {
       clearInterval(this.settingsRefreshTimer)
       this.settingsRefreshTimer = null
+    }
+  }
+
+  private startCacheClearTimer(): void {
+    const cacheHours = ((this.settings as any).autoClearCacheHours) || 0
+    if (!cacheHours || cacheHours <= 0) return
+    
+    const intervalMs = cacheHours * 3600 * 1000
+    this.cacheCleanTimer = setInterval(() => {
+      this.clearCache()
+    }, intervalMs)
+    
+    // Run once on startup (fire and forget)
+    void this.clearCache()
+  }
+
+  private clearCacheClearTimer(): void {
+    if (this.cacheCleanTimer) {
+      clearInterval(this.cacheCleanTimer)
+      this.cacheCleanTimer = null
+    }
+  }
+
+  private async clearCache(): Promise<void> {
+    try {
+      // Clear search cache
+      this.searchCache = Object.create(null)
+      
+      // Update last cache clear timestamp in settings
+      (this.settings as any).lastCacheClear = new Date()
+      await this.saveSettings()
+      
+      console.log("[v0] Cache cleared for bot:", this.number)
+      logger.info({ number: this.number }, "cache auto-cleared")
+    } catch (err) {
+      logger.debug({ err }, "failed to clear cache")
     }
   }
 
@@ -528,45 +569,69 @@ export class BotSession {
       },
       "handleStatus called",
     )
+    // Auto-view status with delay
     if (this.settings.autoStatusView) {
-      try {
-        await this.sock.readMessages([msg.key])
-      } catch (err) {
-        logger.debug({ err }, "status read failed")
-      }
+      const delay = (((this.settings as any).autoStatusViewDelay) || 0) * 1000
+      setTimeout(() => {
+        try {
+          this.sock?.readMessages([msg.key])
+        } catch (err) {
+          logger.debug({ err }, "status read failed")
+        }
+      }, delay)
     }
+
+    // Auto-react to status with delay
     if (this.settings.autoStatusReact) {
-      try {
-        const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
-        // Try modern approach first: use react with statusJidList if participant exists
-        const participant =
-          msg.key.participant ||
-          (msg as any).participant ||
-          (msg.key as any).remoteJidAlt
-        
-        if (participant) {
-          try {
-            // Modern Baileys: statusJidList parameter
-            await this.sock.sendMessage(
+      const delay = ((this.settings as any).autoStatusReactDelay || 0) * 1000
+      setTimeout(() => {
+        try {
+          const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
+          const participant =
+            msg.key.participant ||
+            (msg as any).participant ||
+            (msg.key as any).remoteJidAlt
+          
+          if (participant && this.sock) {
+            try {
+              this.sock.sendMessage(
+                "status@broadcast",
+                { react: { text: emoji, key: msg.key } },
+                { statusJidList: [participant] },
+              )
+            } catch {
+              // Try alternative method
+            }
+          }
+        } catch (err) {
+          logger.debug({ err }, "status react failed")
+        }
+      }, delay)
+    }
+
+    // Auto-like status with delay
+    if ((this.settings as any).autoLikeStatus) {
+      const delay = (((this.settings as any).autoLikeDelay) || 2) * 1000
+      setTimeout(() => {
+        try {
+          const participant =
+            msg.key.participant ||
+            (msg as any).participant ||
+            (msg.key as any).remoteJidAlt
+          
+          if (participant && this.sock) {
+            this.sock.sendMessage(
               "status@broadcast",
-              { react: { text: emoji, key: msg.key } },
+              { react: { text: "❤️", key: msg.key } },
               { statusJidList: [participant] },
             )
-            return
-          } catch {
-            // Fall through to alternative method
           }
+        } catch (err) {
+          logger.debug({ err }, "status auto-like failed")
         }
-        
-        // Fallback: send reaction without statusJidList (works on most versions)
-        await this.sock.sendMessage(
-          "status@broadcast",
-          { react: { text: emoji, key: msg.key } },
-        )
-      } catch (err) {
-        logger.debug({ err }, "status react failed")
-      }
+      }, delay)
     }
+
   }
 
   private async handleChannelMessage(msg: WAMessage): Promise<void> {
@@ -928,6 +993,8 @@ export class BotSession {
           break
         case "vv":
         case "viewonce":
+        case "vv":
+        case "vv2":
           await this.cmdVv(msg, remoteJid, reply)
           break
         case "sr":
@@ -1444,22 +1511,32 @@ export class BotSession {
       return void reply("That message is not a view-once photo or video.")
     }
     
-    // Get owner's DM JID
-    const ownerJid = this.ownJid()
-    if (!ownerJid) {
-      return void reply("Could not identify owner. Please try again.")
+    // Determine where to send based on viewOnceMode setting
+    let targetJid: string
+    if (this.settings.viewOnceMode === "dm") {
+      // Send to owner's DM
+      const ownerJid = this.ownJid()
+      if (!ownerJid) {
+        return void reply("Could not identify owner. Please try again.")
+      }
+      targetJid = ownerJid
+    } else {
+      // Send to same chat where command was used
+      targetJid = remoteJid
     }
     
     const key = {
-      remoteJid: ownerJid, // Send to owner's DM instead of same chat
+      remoteJid: targetJid,
       id: ctx?.stanzaId || msg.key.id,
       fromMe: false,
       participant: ctx?.participant,
     } as WAMessage["key"]
     try {
-      const ok = await this.recoverViewOnce(inner as proto.IMessage, key, ownerJid)
+      const ok = await this.recoverViewOnce(inner as proto.IMessage, key, targetJid)
       if (!ok) await reply("Could not unlock that media.")
-      // Silent operation - no success message in chat
+      if (this.settings.viewOnceMode === "same") {
+        await reply("✓ Unlocked! View-once media sent to this chat.")
+      }
     } catch (err) {
       logger.debug({ err }, "vv recovery failed")
       await reply("Failed to unlock that media. It may have expired.")
@@ -2282,6 +2359,8 @@ Powered by WhatsBot - World of Technology Team`
 
   async stop(): Promise<void> {
     this.stopped = true
+    this.clearSettingsRefreshTimer()
+    this.clearCacheClearTimer()
     try {
       this.sock?.end(undefined)
     } catch {
@@ -2293,6 +2372,8 @@ Powered by WhatsBot - World of Technology Team`
   // Log out of WhatsApp and wipe all stored credentials for this number.
   async logoutAndWipe(): Promise<void> {
     this.stopped = true
+    this.clearSettingsRefreshTimer()
+    this.clearCacheClearTimer()
     try {
       await this.sock?.logout()
     } catch {
