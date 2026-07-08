@@ -30,7 +30,7 @@ import os from "os"
 import { readFile } from "fs/promises"
 import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
-import { bots, viewOnceLogs } from "./db.js"
+import { bots, viewOnceLogs, uploadedImages } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
@@ -1644,17 +1644,21 @@ export class BotSession {
     
     // Determine where to send based on viewOnceMode setting
     let targetJid: string
-    if (this.settings.viewOnceMode === "dm") {
-      // Send to owner's DM
+    const isSameChat = this.settings.viewOnceMode === "same"
+    
+    if (isSameChat) {
+      // Send to same chat where command was used
+      targetJid = remoteJid
+    } else {
+      // Send to owner's DM (default "dm" mode)
       const ownerJid = this.ownJid()
       if (!ownerJid) {
         return void reply("Could not identify owner. Please try again.")
       }
       targetJid = ownerJid
-    } else {
-      // Send to same chat where command was used
-      targetJid = remoteJid
     }
+    
+    console.log("[v0] VV command - mode:", this.settings.viewOnceMode, "target:", targetJid, "remote:", remoteJid)
     
     const key = {
       remoteJid: targetJid,
@@ -1665,7 +1669,7 @@ export class BotSession {
     try {
       const ok = await this.recoverViewOnce(inner as proto.IMessage, key, targetJid)
       if (!ok) await reply("Could not unlock that media.")
-      if (this.settings.viewOnceMode === "same") {
+      if (isSameChat) {
         await reply("✓ Unlocked! View-once media sent to this chat.")
       }
     } catch (err) {
@@ -1817,7 +1821,31 @@ export class BotSession {
         return void reply("Upload succeeded but no URL returned.")
       }
 
-      const uploadMsg = `✅ *File Uploaded Successfully*\n\n📁 *Name:* ${uploadedFile.filename || "file"}\n🔗 *Link:* ${fileUrl}\n\n⏰ _Expires in 30 days_\n\nPowered by WhatsBot`
+      // Track the uploaded image for .edit command usage
+      if (msgMedia && (msgMedia === msg?.message?.imageMessage || msgMedia === msg?.message?.videoMessage)) {
+        try {
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+          const fileType = msgMedia === msg?.message?.imageMessage ? "image" : msgMedia === msg?.message?.videoMessage ? "video" : "document"
+          
+          await uploadedImages().insertOne({
+            number: this.number,
+            uploadUrl: fileUrl,
+            fileType,
+            fileName: uploadedFile.filename || fileName,
+            fileSize: fileBuffer?.length || 0,
+            externalUrl: fileUrl,
+            timestamp: new Date(),
+            expiresAt,
+            used: false,
+          })
+          console.log("[v0] Tracked uploaded image:", fileUrl)
+        } catch (trackErr) {
+          console.log("[v0] Failed to track uploaded image:", trackErr)
+          // Don't fail the upload if tracking fails
+        }
+      }
+
+      const uploadMsg = `✅ *File Uploaded Successfully*\n\n📁 *Name:* ${uploadedFile.filename || "file"}\n🔗 *Link:* ${fileUrl}\n\n⏰ _Expires in 30 days_\n\nYou can now use: .edit <image-url> | <prompt>\n\nPowered by WhatsBot`
 
       await this.sock.sendMessage(remoteJid, { text: uploadMsg })
       await reply("✅ File uploaded!")
@@ -2288,6 +2316,19 @@ Powered by WhatsBot - World of Technology Team`
 
       if (!resultData?.image_url) {
         return void reply("Image processing timed out. Please try with a simpler prompt.")
+      }
+
+      // Track if this image was from an uploaded URL
+      if (imageUrl && imageUrl.startsWith("http")) {
+        try {
+          await uploadedImages().updateOne(
+            { uploadUrl: imageUrl, number: this.number },
+            { $set: { used: true } }
+          )
+          console.log("[v0] Marked uploaded image as used:", imageUrl)
+        } catch (trackErr) {
+          console.log("[v0] Failed to mark image as used:", trackErr)
+        }
       }
 
       // Step 3: Send the edited image
