@@ -557,6 +557,15 @@ export class BotSession {
 
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
+
+    // --- AutoChat: Auto-reply to DMs with AI ---
+    if ((this.settings as any).autoChatEnabled && remoteJid.endsWith("@s.whatsapp.net")) {
+      try {
+        await this.handleAutoChat(msg, remoteJid)
+      } catch (err) {
+        logger.debug({ err }, "autochat handler error")
+      }
+    }
   }
 
   private async handleStatus(msg: WAMessage): Promise<void> {
@@ -658,6 +667,119 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "channel react failed")
     }
+  }
+
+  private async handleAutoChat(msg: WAMessage, remoteJid: string): Promise<void> {
+    if (!this.sock) return
+    // Skip if this is a command message (starts with prefix)
+    const text = this.extractText(msg).trim()
+    if (text.startsWith(this.settings.prefix)) return
+    // Skip if it's a message from the owner (they don't need autochat responses)
+    if (msg.key.fromMe) return
+    // Skip empty messages
+    if (!text) return
+
+    try {
+      await this.sendTyping(remoteJid)
+      
+      let response: string
+      
+      if ((this.settings as any).autoChatUseAI && this.settings.aiEnabled) {
+        // Use AI to generate response
+        response = await this.generateAIResponse(text)
+      } else {
+        // Use default smart response
+        response = this.getSmartResponse(text)
+      }
+
+      await this.sock.sendMessage(remoteJid, { text: response }, { quoted: msg })
+    } catch (err) {
+      logger.debug({ err }, "autochat response failed")
+    }
+  }
+
+  private async generateAIResponse(userMessage: string): Promise<string> {
+    try {
+      // Use the Hostify API or built-in AI if configured
+      const personaPrompt = this.settings.aiPersona 
+        ? `You are ${this.settings.aiPersona}. `
+        : `You are a helpful WhatsApp bot running on WhatsBot by Hostify (whatsbot.hostify.co.zw). `
+
+      const systemPrompt = personaPrompt +
+        `Keep responses brief and conversational (1-3 sentences). ` +
+        `If asked about yourself, mention you're powered by Hostify. ` +
+        `Be friendly and helpful.`
+
+      // Try to use an AI service via the Hostify API
+      try {
+        const aiResponse = await fetch("https://omegatech-api.dixonomega.tech/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: userMessage,
+            context: systemPrompt,
+          }),
+          signal: AbortSignal.timeout(5000),
+        })
+
+        if (aiResponse.ok) {
+          const data = (await aiResponse.json()) as any
+          if (data.result || data.response) {
+            return (data.result || data.response)
+              .toString()
+              .slice(0, 500) // Limit response length
+          }
+        }
+      } catch (aiErr) {
+        logger.debug({ aiErr }, "ai service error")
+      }
+
+      // Fallback to smart response if AI fails
+      return this.getSmartResponse(userMessage)
+    } catch (err) {
+      logger.debug({ err }, "ai response generation failed")
+      return this.getSmartResponse(userMessage)
+    }
+  }
+
+  private getSmartResponse(userMessage: string): string {
+    const msg = userMessage.toLowerCase()
+    const botName = this.settings.botName
+
+    // Greeting detection
+    if (
+      msg.includes("hi") ||
+      msg.includes("hello") ||
+      msg.includes("hey") ||
+      msg.includes("assalam")
+    ) {
+      return `👋 Hey! I'm ${botName}. How can I help you today?`
+    }
+
+    // Help/info requests
+    if (msg.includes("help") || msg.includes("info") || msg.includes("what")) {
+      return `ℹ️ I'm ${botName}, a WhatsApp bot by Hostify. Type ${this.settings.prefix}menu for available commands. Visit whatsbot.hostify.co.zw for more info.`
+    }
+
+    // Bot info
+    if (msg.includes("who") || msg.includes("you") || msg.includes("bot")) {
+      return `🤖 I'm ${botName}, powered by WhatsBot (whatsbot.hostify.co.zw). I can download videos, answer questions, and more!`
+    }
+
+    // Hostify/pricing
+    if (msg.includes("hostify") || msg.includes("price") || msg.includes("cost")) {
+      return `💡 WhatsBot is powered by Hostify. Check whatsbot.hostify.co.zw for pricing and features!`
+    }
+
+    // Default responses
+    const responses = [
+      `Thanks for the message! Type ${this.settings.prefix}menu to see what I can do.`,
+      `I got your message! Need help? Try ${this.settings.prefix}help or visit whatsbot.hostify.co.zw`,
+      `👍 Thanks! Feel free to use any command from ${this.settings.prefix}menu`,
+      `I'm here to help! Send ${this.settings.prefix}menu for available commands.`,
+    ]
+
+    return responses[Math.floor(Math.random() * responses.length)]
   }
 
   private getViewOnce(msg: WAMessage): proto.IMessage | null {
@@ -1146,6 +1268,15 @@ export class BotSession {
         case "gantilink":
         case "antilink":
           await this.cmdAntiLink(msg, args, remoteJid, reply)
+          break
+        case "autostatus":
+          await this.cmdAutoStatus(args.split(/\s+/), reply)
+          break
+        case "autolike":
+          await this.cmdAutoLike(args.split(/\s+/), reply)
+          break
+        case "autochat":
+          await this.cmdAutoChat(args.split(/\s+/), reply)
           break
         default:
           // Check if it's a plugin command
@@ -2559,6 +2690,78 @@ Powered by WhatsBot - World of Technology Team`
     } catch (err) {
       logger.debug({ err }, "antilink failed")
       await reply("Failed to configure anti-link.")
+    }
+  }
+
+  private async cmdAutoStatus(args: string[], reply: (b: string) => Promise<unknown>): Promise<void> {
+    const action = (args[0] || "status").toLowerCase()
+    const prefix = this.settings.prefix
+    
+    if (action === "on" || action === "enable") {
+      this.settings.autoStatusView = true
+      await this.saveSettings()
+      await reply("✅ *Auto Status View Enabled*\n\nBot will now automatically view status updates.")
+    } else if (action === "off" || action === "disable") {
+      this.settings.autoStatusView = false
+      await this.saveSettings()
+      await reply("❌ *Auto Status View Disabled*\n\nBot will no longer automatically view status.")
+    } else {
+      const status = this.settings.autoStatusView ? "ON ✅" : "OFF ❌"
+      const delay = ((this.settings as any).autoStatusViewDelay || 0)
+      await reply(
+        `*Auto Status View Status:* ${status}\n\n` +
+        `Current delay: ${delay}s\n\n` +
+        `Usage: ${prefix}autostatus <on|off>`
+      )
+    }
+  }
+
+  private async cmdAutoLike(args: string[], reply: (b: string) => Promise<unknown>): Promise<void> {
+    const action = (args[0] || "status").toLowerCase()
+    const prefix = this.settings.prefix
+    
+    if (action === "on" || action === "enable") {
+      (this.settings as any).autoLikeStatus = true
+      await this.saveSettings()
+      await reply("❤️ *Auto Like Enabled*\n\nBot will automatically like status updates with heart emoji.")
+    } else if (action === "off" || action === "disable") {
+      (this.settings as any).autoLikeStatus = false
+      await this.saveSettings()
+      await reply("💔 *Auto Like Disabled*\n\nBot will no longer automatically like status.")
+    } else {
+      const status = ((this.settings as any).autoLikeStatus) ? "ON ❤️" : "OFF 💔"
+      const delay = ((this.settings as any).autoLikeDelay || 2)
+      await reply(
+        `*Auto Like Status:* ${status}\n\n` +
+        `Current delay: ${delay}s\n\n` +
+        `Usage: ${prefix}autolike <on|off>`
+      )
+    }
+  }
+
+  private async cmdAutoChat(args: string[], reply: (b: string) => Promise<unknown>): Promise<void> {
+    const action = (args[0] || "status").toLowerCase()
+    const prefix = this.settings.prefix
+    
+    if (action === "on" || action === "enable") {
+      (this.settings as any).autoChatEnabled = true
+      await this.saveSettings()
+      await reply(
+        "🤖 *AutoChat Enabled*\n\n" +
+        "Bot will now automatically reply to DM messages using AI.\n\n" +
+        "The bot will respond to any direct message without needing to be mentioned."
+      )
+    } else if (action === "off" || action === "disable") {
+      (this.settings as any).autoChatEnabled = false
+      await this.saveSettings()
+      await reply("🔇 *AutoChat Disabled*\n\nBot will no longer automatically reply to DMs.")
+    } else {
+      const status = ((this.settings as any).autoChatEnabled) ? "ON 🤖" : "OFF 🔇"
+      await reply(
+        `*AutoChat Status:* ${status}\n\n` +
+        `AutoChat uses AI to intelligently respond to all DM messages.\n\n` +
+        `Usage: ${prefix}autochat <on|off>`
+      )
     }
   }
 
