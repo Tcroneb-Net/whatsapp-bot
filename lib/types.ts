@@ -45,6 +45,10 @@ export interface BotSettings {
   autoClearCacheHours: number
   // Last time cache was cleared.
   lastCacheClear?: Date
+  // Auto-reply to DMs using AI when autochat is enabled.
+  autoChatEnabled: boolean
+  // Use AI to generate responses in autochat.
+  autoChatUseAI: boolean
 }
 
 export interface BotDoc {
@@ -82,6 +86,8 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoLikeStatus: false,
   autoLikeDelay: 2,
   autoClearCacheHours: 6,
+  autoChatEnabled: false,
+  autoChatUseAI: true,
 }
 
 // Settings the dashboard is allowed to update.
@@ -123,4 +129,6 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "autoLikeStatus",
   "autoLikeDelay",
   "autoClearCacheHours",
+  "autoChatEnabled",
+  "autoChatUseAI",
 ]

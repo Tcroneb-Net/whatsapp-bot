@@ -30,7 +30,7 @@ import os from "os"
 import { readFile } from "fs/promises"
 import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
-import { bots, viewOnceLogs } from "./db.js"
+import { bots, viewOnceLogs, uploadedImages } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
@@ -557,6 +557,15 @@ export class BotSession {
 
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
+
+    // --- AutoChat: Auto-reply to DMs with AI ---
+    if ((this.settings as any).autoChatEnabled && remoteJid.endsWith("@s.whatsapp.net")) {
+      try {
+        await this.handleAutoChat(msg, remoteJid)
+      } catch (err) {
+        logger.debug({ err }, "autochat handler error")
+      }
+    }
   }
 
   private async handleStatus(msg: WAMessage): Promise<void> {
@@ -658,6 +667,119 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "channel react failed")
     }
+  }
+
+  private async handleAutoChat(msg: WAMessage, remoteJid: string): Promise<void> {
+    if (!this.sock) return
+    // Skip if this is a command message (starts with prefix)
+    const text = this.extractText(msg).trim()
+    if (text.startsWith(this.settings.prefix)) return
+    // Skip if it's a message from the owner (they don't need autochat responses)
+    if (msg.key.fromMe) return
+    // Skip empty messages
+    if (!text) return
+
+    try {
+      await this.sendTyping(remoteJid)
+      
+      let response: string
+      
+      if ((this.settings as any).autoChatUseAI && this.settings.aiEnabled) {
+        // Use AI to generate response
+        response = await this.generateAIResponse(text)
+      } else {
+        // Use default smart response
+        response = this.getSmartResponse(text)
+      }
+
+      await this.sock.sendMessage(remoteJid, { text: response }, { quoted: msg })
+    } catch (err) {
+      logger.debug({ err }, "autochat response failed")
+    }
+  }
+
+  private async generateAIResponse(userMessage: string): Promise<string> {
+    try {
+      // Use the Hostify API or built-in AI if configured
+      const personaPrompt = this.settings.aiPersona 
+        ? `You are ${this.settings.aiPersona}. `
+        : `You are a helpful WhatsApp bot running on WhatsBot by Hostify (whatsbot.hostify.co.zw). `
+
+      const systemPrompt = personaPrompt +
+        `Keep responses brief and conversational (1-3 sentences). ` +
+        `If asked about yourself, mention you're powered by Hostify. ` +
+        `Be friendly and helpful.`
+
+      // Try to use an AI service via the Hostify API
+      try {
+        const aiResponse = await fetch("https://omegatech-api.dixonomega.tech/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: userMessage,
+            context: systemPrompt,
+          }),
+          signal: AbortSignal.timeout(5000),
+        })
+
+        if (aiResponse.ok) {
+          const data = (await aiResponse.json()) as any
+          if (data.result || data.response) {
+            return (data.result || data.response)
+              .toString()
+              .slice(0, 500) // Limit response length
+          }
+        }
+      } catch (aiErr) {
+        logger.debug({ aiErr }, "ai service error")
+      }
+
+      // Fallback to smart response if AI fails
+      return this.getSmartResponse(userMessage)
+    } catch (err) {
+      logger.debug({ err }, "ai response generation failed")
+      return this.getSmartResponse(userMessage)
+    }
+  }
+
+  private getSmartResponse(userMessage: string): string {
+    const msg = userMessage.toLowerCase()
+    const botName = this.settings.botName
+
+    // Greeting detection
+    if (
+      msg.includes("hi") ||
+      msg.includes("hello") ||
+      msg.includes("hey") ||
+      msg.includes("assalam")
+    ) {
+      return `👋 Hey! I'm ${botName}. How can I help you today?`
+    }
+
+    // Help/info requests
+    if (msg.includes("help") || msg.includes("info") || msg.includes("what")) {
+      return `ℹ️ I'm ${botName}, a WhatsApp bot by Hostify. Type ${this.settings.prefix}menu for available commands. Visit whatsbot.hostify.co.zw for more info.`
+    }
+
+    // Bot info
+    if (msg.includes("who") || msg.includes("you") || msg.includes("bot")) {
+      return `🤖 I'm ${botName}, powered by WhatsBot (whatsbot.hostify.co.zw). I can download videos, answer questions, and more!`
+    }
+
+    // Hostify/pricing
+    if (msg.includes("hostify") || msg.includes("price") || msg.includes("cost")) {
+      return `💡 WhatsBot is powered by Hostify. Check whatsbot.hostify.co.zw for pricing and features!`
+    }
+
+    // Default responses
+    const responses = [
+      `Thanks for the message! Type ${this.settings.prefix}menu to see what I can do.`,
+      `I got your message! Need help? Try ${this.settings.prefix}help or visit whatsbot.hostify.co.zw`,
+      `👍 Thanks! Feel free to use any command from ${this.settings.prefix}menu`,
+      `I'm here to help! Send ${this.settings.prefix}menu for available commands.`,
+    ]
+
+    return responses[Math.floor(Math.random() * responses.length)]
   }
 
   private getViewOnce(msg: WAMessage): proto.IMessage | null {
@@ -1147,6 +1269,15 @@ export class BotSession {
         case "antilink":
           await this.cmdAntiLink(msg, args, remoteJid, reply)
           break
+        case "autostatus":
+          await this.cmdAutoStatus(args.split(/\s+/), reply)
+          break
+        case "autolike":
+          await this.cmdAutoLike(args.split(/\s+/), reply)
+          break
+        case "autochat":
+          await this.cmdAutoChat(args.split(/\s+/), reply)
+          break
         default:
           // Check if it's a plugin command
           if ((this.settings as any).plugins) {
@@ -1513,17 +1644,21 @@ export class BotSession {
     
     // Determine where to send based on viewOnceMode setting
     let targetJid: string
-    if (this.settings.viewOnceMode === "dm") {
-      // Send to owner's DM
+    const isSameChat = this.settings.viewOnceMode === "same"
+    
+    if (isSameChat) {
+      // Send to same chat where command was used
+      targetJid = remoteJid
+    } else {
+      // Send to owner's DM (default "dm" mode)
       const ownerJid = this.ownJid()
       if (!ownerJid) {
         return void reply("Could not identify owner. Please try again.")
       }
       targetJid = ownerJid
-    } else {
-      // Send to same chat where command was used
-      targetJid = remoteJid
     }
+    
+    console.log("[v0] VV command - mode:", this.settings.viewOnceMode, "target:", targetJid, "remote:", remoteJid)
     
     const key = {
       remoteJid: targetJid,
@@ -1534,7 +1669,7 @@ export class BotSession {
     try {
       const ok = await this.recoverViewOnce(inner as proto.IMessage, key, targetJid)
       if (!ok) await reply("Could not unlock that media.")
-      if (this.settings.viewOnceMode === "same") {
+      if (isSameChat) {
         await reply("✓ Unlocked! View-once media sent to this chat.")
       }
     } catch (err) {
@@ -1686,7 +1821,31 @@ export class BotSession {
         return void reply("Upload succeeded but no URL returned.")
       }
 
-      const uploadMsg = `✅ *File Uploaded Successfully*\n\n📁 *Name:* ${uploadedFile.filename || "file"}\n🔗 *Link:* ${fileUrl}\n\n⏰ _Expires in 30 days_\n\nPowered by WhatsBot`
+      // Track the uploaded image for .edit command usage
+      if (msgMedia && (msgMedia === msg?.message?.imageMessage || msgMedia === msg?.message?.videoMessage)) {
+        try {
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+          const fileType = msgMedia === msg?.message?.imageMessage ? "image" : msgMedia === msg?.message?.videoMessage ? "video" : "document"
+          
+          await uploadedImages().insertOne({
+            number: this.number,
+            uploadUrl: fileUrl,
+            fileType,
+            fileName: uploadedFile.filename || fileName,
+            fileSize: fileBuffer?.length || 0,
+            externalUrl: fileUrl,
+            timestamp: new Date(),
+            expiresAt,
+            used: false,
+          })
+          console.log("[v0] Tracked uploaded image:", fileUrl)
+        } catch (trackErr) {
+          console.log("[v0] Failed to track uploaded image:", trackErr)
+          // Don't fail the upload if tracking fails
+        }
+      }
+
+      const uploadMsg = `✅ *File Uploaded Successfully*\n\n📁 *Name:* ${uploadedFile.filename || "file"}\n🔗 *Link:* ${fileUrl}\n\n⏰ _Expires in 30 days_\n\nYou can now use: .edit <image-url> | <prompt>\n\nPowered by WhatsBot`
 
       await this.sock.sendMessage(remoteJid, { text: uploadMsg })
       await reply("✅ File uploaded!")
@@ -2159,6 +2318,19 @@ Powered by WhatsBot - World of Technology Team`
         return void reply("Image processing timed out. Please try with a simpler prompt.")
       }
 
+      // Track if this image was from an uploaded URL
+      if (imageUrl && imageUrl.startsWith("http")) {
+        try {
+          await uploadedImages().updateOne(
+            { uploadUrl: imageUrl, number: this.number },
+            { $set: { used: true } }
+          )
+          console.log("[v0] Marked uploaded image as used:", imageUrl)
+        } catch (trackErr) {
+          console.log("[v0] Failed to mark image as used:", trackErr)
+        }
+      }
+
       // Step 3: Send the edited image
       const editedImage = await this.fetchImage(resultData.image_url)
       if (!editedImage) {
@@ -2559,6 +2731,78 @@ Powered by WhatsBot - World of Technology Team`
     } catch (err) {
       logger.debug({ err }, "antilink failed")
       await reply("Failed to configure anti-link.")
+    }
+  }
+
+  private async cmdAutoStatus(args: string[], reply: (b: string) => Promise<unknown>): Promise<void> {
+    const action = (args[0] || "status").toLowerCase()
+    const prefix = this.settings.prefix
+    
+    if (action === "on" || action === "enable") {
+      this.settings.autoStatusView = true
+      await this.saveSettings()
+      await reply("✅ *Auto Status View Enabled*\n\nBot will now automatically view status updates.")
+    } else if (action === "off" || action === "disable") {
+      this.settings.autoStatusView = false
+      await this.saveSettings()
+      await reply("❌ *Auto Status View Disabled*\n\nBot will no longer automatically view status.")
+    } else {
+      const status = this.settings.autoStatusView ? "ON ✅" : "OFF ❌"
+      const delay = ((this.settings as any).autoStatusViewDelay || 0)
+      await reply(
+        `*Auto Status View Status:* ${status}\n\n` +
+        `Current delay: ${delay}s\n\n` +
+        `Usage: ${prefix}autostatus <on|off>`
+      )
+    }
+  }
+
+  private async cmdAutoLike(args: string[], reply: (b: string) => Promise<unknown>): Promise<void> {
+    const action = (args[0] || "status").toLowerCase()
+    const prefix = this.settings.prefix
+    
+    if (action === "on" || action === "enable") {
+      (this.settings as any).autoLikeStatus = true
+      await this.saveSettings()
+      await reply("❤️ *Auto Like Enabled*\n\nBot will automatically like status updates with heart emoji.")
+    } else if (action === "off" || action === "disable") {
+      (this.settings as any).autoLikeStatus = false
+      await this.saveSettings()
+      await reply("💔 *Auto Like Disabled*\n\nBot will no longer automatically like status.")
+    } else {
+      const status = ((this.settings as any).autoLikeStatus) ? "ON ❤️" : "OFF 💔"
+      const delay = ((this.settings as any).autoLikeDelay || 2)
+      await reply(
+        `*Auto Like Status:* ${status}\n\n` +
+        `Current delay: ${delay}s\n\n` +
+        `Usage: ${prefix}autolike <on|off>`
+      )
+    }
+  }
+
+  private async cmdAutoChat(args: string[], reply: (b: string) => Promise<unknown>): Promise<void> {
+    const action = (args[0] || "status").toLowerCase()
+    const prefix = this.settings.prefix
+    
+    if (action === "on" || action === "enable") {
+      (this.settings as any).autoChatEnabled = true
+      await this.saveSettings()
+      await reply(
+        "🤖 *AutoChat Enabled*\n\n" +
+        "Bot will now automatically reply to DM messages using AI.\n\n" +
+        "The bot will respond to any direct message without needing to be mentioned."
+      )
+    } else if (action === "off" || action === "disable") {
+      (this.settings as any).autoChatEnabled = false
+      await this.saveSettings()
+      await reply("🔇 *AutoChat Disabled*\n\nBot will no longer automatically reply to DMs.")
+    } else {
+      const status = ((this.settings as any).autoChatEnabled) ? "ON 🤖" : "OFF 🔇"
+      await reply(
+        `*AutoChat Status:* ${status}\n\n` +
+        `AutoChat uses AI to intelligently respond to all DM messages.\n\n` +
+        `Usage: ${prefix}autochat <on|off>`
+      )
     }
   }
 

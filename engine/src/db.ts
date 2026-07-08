@@ -38,6 +38,20 @@ export interface GroupDoc {
   updatedAt: Date
 }
 
+// Uploaded image tracking for .edit and .upload commands.
+export interface UploadedImageDoc {
+  _id?: string
+  number: string // Bot owner number
+  uploadUrl: string // URL where image can be accessed for edit/operations
+  fileType: "image" | "video" | "audio" | "document"
+  fileName: string
+  fileSize: number
+  externalUrl?: string // URL from upload service (top4top, etc)
+  timestamp: Date
+  expiresAt: Date // TTL: links expire after 30 days
+  used: boolean // True if image was already used in .edit command
+}
+
 let client: MongoClient | null = null
 let db: Db | null = null
 
@@ -58,6 +72,12 @@ export async function connectDb(): Promise<Db> {
     .collection<ViewOnceLogDoc>("viewonce_logs")
     .createIndex({ number: 1, timestamp: -1 })
   await db.collection<GroupDoc>("groups").createIndex({ groupId: 1, number: 1 }, { unique: true })
+  await db
+    .collection<UploadedImageDoc>("uploaded_images")
+    .createIndex({ number: 1, timestamp: -1 })
+  await db
+    .collection<UploadedImageDoc>("uploaded_images")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }) // TTL index
 
   return db
 }
@@ -80,6 +100,11 @@ export function viewOnceLogs(): Collection<ViewOnceLogDoc> {
 export function groups(): Collection<GroupDoc> {
   if (!db) throw new Error("DB not connected")
   return db.collection<GroupDoc>("groups")
+}
+
+export function uploadedImages(): Collection<UploadedImageDoc> {
+  if (!db) throw new Error("DB not connected")
+  return db.collection<UploadedImageDoc>("uploaded_images")
 }
 
 export async function closeDb(): Promise<void> {
