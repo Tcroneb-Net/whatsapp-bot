@@ -16,8 +16,7 @@ function ensureConfig() {
       "1. Go to Project Settings > Vars\n" +
       "2. Add ENGINE_URL with your engine URL (e.g., https://your-engine.railway.app/)\n" +
       "3. Add ENGINE_API_KEY (optional, for security)\n" +
-      "4. Redeploy the project\n" +
-      `Current value: ${url || "not set"}`
+      "4. Redeploy the project"
     )
   }
 }
@@ -34,6 +33,7 @@ async function engineFetch(path: string, init?: RequestInit) {
     },
     cache: "no-store",
   })
+  
   const text = await res.text()
   let data: unknown = null
   try {
