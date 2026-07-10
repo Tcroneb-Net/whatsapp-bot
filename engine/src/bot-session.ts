@@ -4,7 +4,6 @@ import type {
   WAMessage,
   proto,
 } from "@whiskeysockets/baileys"
-import { Boom } from "@hapi/boom"
 
 // Baileys ships as CommonJS. Under Node's ESM interop, `import makeWASocket from
 // "@whiskeysockets/baileys"` resolves to `module.exports` (the namespace object,
@@ -328,7 +327,7 @@ export class BotSession {
 
       if (connection === "close") {
         this.clearSettingsRefreshTimer()
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
         const loggedOut = statusCode === DisconnectReason.loggedOut
 
         await this.setStatus("disconnected")

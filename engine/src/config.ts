@@ -1,12 +1,37 @@
-import "dotenv/config"
+import dotenv from "dotenv"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
 import { existsSync } from "fs"
 
+// Load .env from multiple locations in order of priority
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const envPaths = [
+  join(__dirname, "..", "..", ".env.local"),
+  join(__dirname, "..", "..", ".env.development.local"),
+  join(__dirname, "..", "..", ".env"),
+  join(process.cwd(), ".env.local"),
+  join(process.cwd(), ".env.development.local"),
+  join(process.cwd(), ".env"),
+]
+
+for (const envPath of envPaths) {
+  if (existsSync(envPath)) {
+    console.log(`[v0] Loading .env from: ${envPath}`)
+    dotenv.config({ path: envPath })
+    break
+  }
+}
+
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback
   if (value === undefined) {
-    throw new Error(`Missing required environment variable: ${name}`)
+    const envNames = Object.keys(process.env).filter(k => !k.startsWith('npm_')).join(', ')
+    throw new Error(
+      `Missing required environment variable: ${name}\n` +
+      `Make sure it's set in .env file or environment.\n` +
+      `Loaded env vars: ${envNames.substring(0, 200)}...`
+    )
   }
   return value
 }
