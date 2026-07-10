@@ -27,6 +27,7 @@ import {
   Sparkles,
   Trash2,
   Save,
+  Lock,
   Smile,
 } from "lucide-react"
 import Link from "next/link"
@@ -625,6 +626,69 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                     Set to 0 to disable. Auto-clears search cache to improve performance on free tier hosting.
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Group Control */}
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Lock className="size-5 text-primary" />
+                  </div>
+                  Group Work Mode
+                </CardTitle>
+                <CardDescription>Control message counting and group locking.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <ToggleRow
+                  icon={Lock}
+                  label="Enable Group Work"
+                  desc="Automatically count messages and lock group at threshold."
+                  checked={(settings as any).groupWorkEnabled}
+                  onChange={(v) => update("groupWorkEnabled" as any, v)}
+                />
+                {(settings as any).groupWorkEnabled && (
+                  <>
+                    <Separator />
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="groupThreshold" className="text-sm">
+                        Message Threshold: {(settings as any).groupWorkThreshold || 50}
+                      </Label>
+                      <input
+                        id="groupThreshold"
+                        type="range"
+                        min="10"
+                        max="500"
+                        step="10"
+                        value={(settings as any).groupWorkThreshold || 50}
+                        onChange={(e) => update("groupWorkThreshold" as any, parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Group locks after this many messages are sent
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="autoUnlock" className="text-sm">
+                        Auto-Unlock (minutes): {(settings as any).groupAutoUnlockMinutes || "Manual"}
+                      </Label>
+                      <input
+                        id="autoUnlock"
+                        type="number"
+                        min="0"
+                        max="1440"
+                        placeholder="0 for manual"
+                        value={(settings as any).groupAutoUnlockMinutes || 0}
+                        onChange={(e) => update("groupAutoUnlockMinutes" as any, parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-border rounded-md"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Set to 0 to require manual unlock with .gunlock command
+                      </p>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
