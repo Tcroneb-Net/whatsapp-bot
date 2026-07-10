@@ -70,15 +70,14 @@ export function createServer() {
     const number = normalizeNumber(String(req.params.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
     
-    const session = manager.getSession(number)
+    const session = manager.get(number)
     if (!session) {
       return res.status(404).json({ error: "Session not found" })
     }
 
     res.json({
       number,
-      connected: session.isConnected,
-      settings: session.settings,
+      connected: session.isConnected?.() ?? false,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     })
