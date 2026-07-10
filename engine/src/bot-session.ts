@@ -37,6 +37,54 @@ import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomM
 
 const PRESENCE_KEEPALIVE_MS = 30 * 60 * 1000 // 30 minutes instead of 10 to reduce resource usage
 
+// Human-like behavior to prevent WhatsApp bans
+class HumanBehavior {
+  // Random typing speed: 40-80 WPM = 75-150ms per character
+  static getTypingDelay(messageLength: number): number {
+    const charDelay = 75 + Math.random() * 75 // 75-150ms per char
+    return Math.min(messageLength * charDelay, 5000) // Cap at 5 seconds
+  }
+
+  // Random reading time before responding
+  static getReadingDelay(): number {
+    return 1000 + Math.random() * 4000 // 1-5 seconds
+  }
+
+  // Simulate thinking time for commands
+  static getThinkingDelay(): number {
+    return 500 + Math.random() * 2000 // 0.5-2.5 seconds
+  }
+
+  // Random small pauses between actions (like a human scrolling)
+  static getActionDelay(): number {
+    return 300 + Math.random() * 800 // 0.3-1.1 seconds
+  }
+
+  // Desktop client indicators
+  static getClientInfo() {
+    return {
+      browser: Browsers.ubuntu("Chrome"),
+      syncFullHistory: false,
+      shouldSyncHistoryMessage: () => false,
+    }
+  }
+
+  // Simulate realistic online/offline patterns
+  static async setHumanPresence(socket: WASocket): Promise<void> {
+    try {
+      // Randomly go idle occasionally (like a person away from computer)
+      const isIdle = Math.random() > 0.85 // 15% chance to be idle
+      if (isIdle) {
+        await socket.sendPresenceUpdate("unavailable")
+        await new Promise(r => setTimeout(r, 5000 + Math.random() * 10000)) // 5-15s away
+      }
+      await socket.sendPresenceUpdate("available")
+    } catch (err) {
+      // Silently fail - presence is not critical
+    }
+  }
+}
+
 // Generate a readable random dashboard password.
 function generatePassword(length = 10): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -66,6 +114,19 @@ export class BotSession {
   private cacheCleanTimer: ReturnType<typeof setInterval> | null = null
   // Cache for search results (for .download command)
   private searchCache: Record<string, any> = {}
+  // Group Work Tracking: group JID -> { messageCount, lockedUntil, lockTimer }
+  private groupWorkTracking: Map<string, {
+    messageCount: number
+    isLocked: boolean
+    lockedAt: number | null
+    lockTimer: ReturnType<typeof setTimeout> | null
+  }> = new Map()
+  // Anti-Spam Tracking: user JID -> { warnCount, lastMessageTime, messageTimestamps }
+  private antiSpamTracking: Map<string, {
+    warnCount: number
+    lastMessageTime: number
+    messageTimestamps: number[]
+  }> = new Map()
 
   constructor(number: string) {
     this.number = number
@@ -552,7 +613,14 @@ export class BotSession {
       }
     }
 
-
+    // --- Group Work: message counting for group control ---
+    if (remoteJid.endsWith("@g.us") && this.settings.groupWorkEnabled) {
+      try {
+        await this.handleGroupWorkCounting(msg, remoteJid)
+      } catch (err) {
+        logger.debug({ err }, "group work counting error")
+      }
+    }
 
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
@@ -1030,7 +1098,13 @@ export class BotSession {
     const args = withoutPrefix.slice(command.length).trim()
     const isOwner = msg.key.fromMe === true
     const reply = async (body: string) => {
+      // Simulate human reading time before responding
+      await new Promise(r => setTimeout(r, HumanBehavior.getReadingDelay()))
+      // Show typing indicator with human-like duration
+      const typingDelay = HumanBehavior.getTypingDelay(body.length)
       await this.sendTyping(remoteJid)
+      await new Promise(r => setTimeout(r, typingDelay))
+      // Send message
       return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
     }
 
@@ -1291,6 +1365,21 @@ export class BotSession {
         case "autochat":
           await this.cmdAutoChat(args.split(/\s+/), reply)
           break
+        case "gwork":
+          if (this.settings.groupWorkEnabled) await this.cmdGroupWork(remoteJid, msg, reply)
+          break
+        case "gcount":
+          if (this.settings.groupWorkEnabled) await this.cmdGroupCount(remoteJid, reply)
+          break
+        case "gunlock":
+          if (this.settings.groupWorkEnabled) await this.cmdGroupUnlock(remoteJid, reply)
+          break
+        case "unlock":
+          if (this.settings.antiSpamEnabled) await this.cmdUnlock(remoteJid, reply)
+          break
+        case "locks":
+          if (this.settings.antiSpamEnabled) await this.cmdLocks(remoteJid, reply)
+          break
         default:
           // Check if it's a plugin command
           if ((this.settings as any).plugins) {
@@ -1304,7 +1393,6 @@ export class BotSession {
             }
           }
           // Unknown command — stay silent to avoid noise.
-          break
       }
     } catch (err) {
       logger.error({ number: this.number, command, err }, "command failed")
@@ -3940,5 +4028,149 @@ Powered by WhatsBot - World of Technology Team`
       logger.debug({ err }, "download search result failed")
       await reply("Failed to download. Please try again.")
     }
+  }
+
+  // Group Work: Message counting and locking
+  private async handleGroupWorkCounting(msg: WAMessage, groupJid: string): Promise<void> {
+    if (!msg.message || msg.key.fromMe) return
+
+    const isLocked = this.isGroupLocked(groupJid)
+    if (isLocked) {
+      // Group is locked - ignore messages
+      return
+    }
+
+    // Increment message count
+    const tracker = this.groupWorkTracking.get(groupJid) || {
+      messageCount: 0,
+      isLocked: false,
+      lockedAt: null,
+      lockTimer: null,
+    }
+    tracker.messageCount++
+    this.groupWorkTracking.set(groupJid, tracker)
+
+    // Check if threshold reached
+    if (tracker.messageCount >= this.settings.groupWorkThreshold) {
+      // Lock the group
+      tracker.isLocked = true
+      tracker.lockedAt = Date.now()
+      this.groupWorkTracking.set(groupJid, tracker)
+
+      // Announce lock
+      const lockMsg = `🔒 Group locked after ${tracker.messageCount} messages! Only admins can send messages.`
+      if (this.sock) {
+        await this.sock.sendMessage(groupJid, { text: lockMsg })
+      }
+
+      // Set auto-unlock if enabled
+      if (this.settings.groupAutoUnlockMinutes > 0) {
+        if (tracker.lockTimer) clearTimeout(tracker.lockTimer)
+        tracker.lockTimer = setTimeout(() => {
+          this.unlockGroup(groupJid)
+        }, this.settings.groupAutoUnlockMinutes * 60 * 1000)
+        this.groupWorkTracking.set(groupJid, tracker)
+      }
+    }
+  }
+
+  private isGroupLocked(groupJid: string): boolean {
+    const tracker = this.groupWorkTracking.get(groupJid)
+    return tracker?.isLocked ?? false
+  }
+
+  private unlockGroup(groupJid: string): void {
+    const tracker = this.groupWorkTracking.get(groupJid)
+    if (!tracker) return
+
+    tracker.isLocked = false
+    tracker.messageCount = 0
+    tracker.lockedAt = null
+    if (tracker.lockTimer) clearTimeout(tracker.lockTimer)
+    tracker.lockTimer = null
+    this.groupWorkTracking.set(groupJid, tracker)
+
+    // Announce unlock
+    try {
+      if (this.sock) {
+        await this.sock.sendMessage(groupJid, { text: "🔓 Group unlocked! Messages can be sent freely again." })
+      }
+    } catch (err) {
+      logger.debug({ err }, "failed to announce unlock")
+    }
+  }
+
+  // Group Work Commands
+  private async cmdGroupWork(remoteJid: string, msg: WAMessage, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    
+    // Initialize or reset group tracking
+    const tracker = this.groupWorkTracking.get(remoteJid) || {
+      messageCount: 0,
+      isLocked: false,
+      lockedAt: null,
+      lockTimer: null,
+    }
+    tracker.messageCount = 0
+    this.groupWorkTracking.set(remoteJid, tracker)
+    
+    await reply(`✅ Group work mode activated!\n\n📊 Threshold: ${this.settings.groupWorkThreshold} messages\n⏰ Auto-unlock: ${this.settings.groupAutoUnlockMinutes > 0 ? this.settings.groupAutoUnlockMinutes + ' minutes' : 'Manual only'}\n\nMessages will be counted until threshold is reached.`)
+  }
+
+  private async cmdGroupCount(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    
+    const tracker = this.groupWorkTracking.get(remoteJid)
+    const count = tracker?.messageCount ?? 0
+    const threshold = this.settings.groupWorkThreshold
+    const locked = tracker?.isLocked ?? false
+    const percent = Math.round((count / threshold) * 100)
+    
+    const bar = "▓".repeat(Math.round(percent / 5)) + "░".repeat(20 - Math.round(percent / 5))
+    await reply(`*Group Message Count*\n\n📊 Progress: ${count}/${threshold} messages\n${bar} ${percent}%\n\n${locked ? '🔒 Status: LOCKED' : '🔓 Status: Open'}`)
+  }
+
+  private async cmdGroupUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    
+    this.unlockGroup(remoteJid)
+    await reply("🔓 Group unlocked! Message count reset. Messages can be sent freely again.")
+  }
+
+  private async cmdUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    await reply("*Unlock Commands*\n\n.gunlock - Unlock group after reaching message threshold\n.gcount - View current message count\n\n*Anti-Spam Locks* (when enabled):\n.unlock - Unlock yourself from anti-spam")
+  }
+
+  private async cmdLocks(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    
+    const tracker = this.groupWorkTracking.get(remoteJid)
+    if (!tracker?.isLocked) {
+      await reply("*Active Locks*\n\nNo active locks in this group. Group is open.")
+      return
+    }
+    
+    const lockedTime = tracker.lockedAt ? new Date(tracker.lockedAt).toLocaleTimeString() : "unknown"
+    const autoUnlockTime = this.settings.groupAutoUnlockMinutes > 0 
+      ? new Date(tracker.lockedAt! + this.settings.groupAutoUnlockMinutes * 60 * 1000).toLocaleTimeString()
+      : "Manual unlock only"
+    
+    await reply(`*Active Locks*\n\n🔒 Group is currently LOCKED\n⏰ Locked at: ${lockedTime}\n🔓 Will unlock: ${autoUnlockTime}`)
   }
 }

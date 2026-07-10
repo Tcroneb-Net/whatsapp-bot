@@ -49,6 +49,22 @@ export interface BotSettings {
   autoChatEnabled: boolean
   // Use AI to generate responses in autochat.
   autoChatUseAI: boolean
+  // Group Work Mode: enable message counting and locking in groups.
+  groupWorkEnabled: boolean
+  // Message counting threshold to trigger lock.
+  groupWorkThreshold: number
+  // Auto-unlock group after N minutes (0 = manual only).
+  groupAutoUnlockMinutes: number
+  // Whitelist of group JIDs that group work applies to (empty = all groups).
+  groupWorkWhitelist: string[]
+  // Anti-spam: enable spam detection and enforcement.
+  antiSpamEnabled: boolean
+  // Maximum messages per minute before considering as spam.
+  antiSpamMessagesPerMinute: number
+  // Action to take on spam: "warn" or "kick".
+  antiSpamAction: "warn" | "kick"
+  // Number of warnings before taking action.
+  antiSpamWarnings: number
 }
 
 export interface BotDoc {
@@ -88,6 +104,14 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoClearCacheHours: 6,
   autoChatEnabled: false,
   autoChatUseAI: true,
+  groupWorkEnabled: false,
+  groupWorkThreshold: 50,
+  groupAutoUnlockMinutes: 0,
+  groupWorkWhitelist: [],
+  antiSpamEnabled: false,
+  antiSpamMessagesPerMinute: 10,
+  antiSpamAction: "warn",
+  antiSpamWarnings: 3,
 }
 
 // Settings the dashboard is allowed to update.
@@ -131,4 +155,12 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "autoClearCacheHours",
   "autoChatEnabled",
   "autoChatUseAI",
+  "groupWorkEnabled",
+  "groupWorkThreshold",
+  "groupAutoUnlockMinutes",
+  "groupWorkWhitelist",
+  "antiSpamEnabled",
+  "antiSpamMessagesPerMinute",
+  "antiSpamAction",
+  "antiSpamWarnings",
 ]

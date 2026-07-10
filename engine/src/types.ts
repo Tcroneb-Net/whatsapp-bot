@@ -26,6 +26,21 @@ export interface BotSettings {
   aiPersona: string
   publicMode: boolean
   statusReactEmojis: string
+  autoStatusViewDelay: number
+  autoStatusReactDelay: number
+  autoLikeStatus: boolean
+  autoLikeDelay: number
+  autoClearCacheHours: number
+  autoChatEnabled: boolean
+  autoChatUseAI: boolean
+  groupWorkEnabled: boolean
+  groupWorkThreshold: number
+  groupAutoUnlockMinutes: number
+  groupWorkWhitelist: string[]
+  antiSpamEnabled: boolean
+  antiSpamMessagesPerMinute: number
+  antiSpamAction: "warn" | "kick"
+  antiSpamWarnings: number
 }
 
 export interface BotDoc {
@@ -54,4 +69,19 @@ export const DEFAULT_SETTINGS: BotSettings = {
   aiPersona: "",
   publicMode: true,
   statusReactEmojis: "❤️,🔥,😍,👍,🎉",
+  autoStatusViewDelay: 0,
+  autoStatusReactDelay: 0,
+  autoLikeStatus: false,
+  autoLikeDelay: 2,
+  autoClearCacheHours: 6,
+  autoChatEnabled: false,
+  autoChatUseAI: true,
+  groupWorkEnabled: false,
+  groupWorkThreshold: 50,
+  groupAutoUnlockMinutes: 0,
+  groupWorkWhitelist: [],
+  antiSpamEnabled: false,
+  antiSpamMessagesPerMinute: 10,
+  antiSpamAction: "warn",
+  antiSpamWarnings: 3,
 }
