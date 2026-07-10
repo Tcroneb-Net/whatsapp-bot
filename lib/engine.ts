@@ -1,22 +1,35 @@
 // Thin client used by the dashboard to talk to the long-running bot engine.
 // The engine runs as a separate persistent Node process (see /engine).
 
-const ENGINE_URL = process.env.ENGINE_URL
-const ENGINE_API_KEY = process.env.ENGINE_API_KEY
+function getEngineConfig() {
+  const url = process.env.ENGINE_URL
+  const key = process.env.ENGINE_API_KEY
+  
+  return { url, key }
+}
 
 function ensureConfig() {
-  if (!ENGINE_URL) {
-    throw new Error("ENGINE_URL is not configured. Add it in Project Settings > Vars.")
+  const { url } = getEngineConfig()
+  if (!url || url.trim() === "") {
+    throw new Error(
+      "ENGINE_URL is not configured.\n" +
+      "1. Go to Project Settings > Vars\n" +
+      "2. Add ENGINE_URL with your engine URL (e.g., https://your-engine.railway.app/)\n" +
+      "3. Add ENGINE_API_KEY (optional, for security)\n" +
+      "4. Redeploy the project\n" +
+      `Current value: ${url || "not set"}`
+    )
   }
 }
 
 async function engineFetch(path: string, init?: RequestInit) {
   ensureConfig()
-  const res = await fetch(`${ENGINE_URL}${path}`, {
+  const { url, key } = getEngineConfig()
+  const res = await fetch(`${url}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": ENGINE_API_KEY || "",
+      "x-api-key": key || "",
       ...(init?.headers || {}),
     },
     cache: "no-store",
