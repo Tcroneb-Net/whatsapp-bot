@@ -65,5 +65,24 @@ export function createServer() {
     }
   })
 
+  // Get live session status and current settings
+  app.get("/session/:number/status", (req: Request, res: Response) => {
+    const number = normalizeNumber(String(req.params.number || ""))
+    if (!number) return res.status(400).json({ error: "Invalid number" })
+    
+    const session = manager.getSession(number)
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" })
+    }
+
+    res.json({
+      number,
+      connected: session.isConnected,
+      settings: session.settings,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    })
+  })
+
   return app
 }

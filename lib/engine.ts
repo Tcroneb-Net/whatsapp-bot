@@ -68,10 +68,41 @@ export async function deleteBotSession(number: string): Promise<void> {
 }
 
 export async function refreshBotSettings(number: string): Promise<void> {
-  await engineFetch("/refresh", {
-    method: "POST",
-    body: JSON.stringify({ number }),
-  })
+  ensureConfig()
+  const { url, key } = getEngineConfig()
+  try {
+    await fetch(`${url}/session/${number}/refresh-settings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key || "",
+      },
+    })
+  } catch (err) {
+    logger.error({ err, number }, "failed to refresh bot settings on engine")
+    throw err
+  }
+}
+
+export async function requestBotStatus(number: string): Promise<Record<string, unknown>> {
+  ensureConfig()
+  const { url, key } = getEngineConfig()
+  try {
+    const res = await fetch(`${url}/session/${number}/status`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key || "",
+      },
+    })
+    if (!res.ok) {
+      throw new Error(`Status request failed: ${res.status}`)
+    }
+    return res.json()
+  } catch (err) {
+    logger.error({ err, number }, "failed to get bot status from engine")
+    throw err
+  }
 }
 
 export async function getBotStatus(number: string): Promise<{ status: string; connected: boolean }> {

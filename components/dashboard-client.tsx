@@ -42,6 +42,7 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { DEFAULT_SETTINGS, type BotSettings, type ViewOnceMode, type Plugin } from "@/lib/types"
 import { formatNumber } from "@/lib/phone"
+import { SettingsSyncStatus } from "@/components/settings-sync-status"
 
 interface SettingsResponse {
   number: string
@@ -221,6 +222,9 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
           </div>
         ) : (
           <>
+            {/* Settings Sync Status */}
+            <SettingsSyncStatus />
+
             {/* Identity */}
             <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow animate-fade-in-up" style={{animationDelay: '0.1s'}}>
               <CardHeader className="pb-4">
