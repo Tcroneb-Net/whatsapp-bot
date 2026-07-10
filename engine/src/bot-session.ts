@@ -4079,7 +4079,7 @@ Powered by WhatsBot - World of Technology Team`
     return tracker?.isLocked ?? false
   }
 
-  private unlockGroup(groupJid: string): void {
+  private async unlockGroup(groupJid: string): Promise<void> {
     const tracker = this.groupWorkTracking.get(groupJid)
     if (!tracker) return
 
