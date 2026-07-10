@@ -37,6 +37,54 @@ import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomM
 
 const PRESENCE_KEEPALIVE_MS = 30 * 60 * 1000 // 30 minutes instead of 10 to reduce resource usage
 
+// Human-like behavior to prevent WhatsApp bans
+class HumanBehavior {
+  // Random typing speed: 40-80 WPM = 75-150ms per character
+  static getTypingDelay(messageLength: number): number {
+    const charDelay = 75 + Math.random() * 75 // 75-150ms per char
+    return Math.min(messageLength * charDelay, 5000) // Cap at 5 seconds
+  }
+
+  // Random reading time before responding
+  static getReadingDelay(): number {
+    return 1000 + Math.random() * 4000 // 1-5 seconds
+  }
+
+  // Simulate thinking time for commands
+  static getThinkingDelay(): number {
+    return 500 + Math.random() * 2000 // 0.5-2.5 seconds
+  }
+
+  // Random small pauses between actions (like a human scrolling)
+  static getActionDelay(): number {
+    return 300 + Math.random() * 800 // 0.3-1.1 seconds
+  }
+
+  // Desktop client indicators
+  static getClientInfo() {
+    return {
+      browser: Browsers.ubuntu("Chrome"),
+      syncFullHistory: false,
+      shouldSyncHistoryMessage: () => false,
+    }
+  }
+
+  // Simulate realistic online/offline patterns
+  static async setHumanPresence(socket: WASocket): Promise<void> {
+    try {
+      // Randomly go idle occasionally (like a person away from computer)
+      const isIdle = Math.random() > 0.85 // 15% chance to be idle
+      if (isIdle) {
+        await socket.sendPresenceUpdate("unavailable")
+        await new Promise(r => setTimeout(r, 5000 + Math.random() * 10000)) // 5-15s away
+      }
+      await socket.sendPresenceUpdate("available")
+    } catch (err) {
+      // Silently fail - presence is not critical
+    }
+  }
+}
+
 // Generate a readable random dashboard password.
 function generatePassword(length = 10): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -1030,7 +1078,13 @@ export class BotSession {
     const args = withoutPrefix.slice(command.length).trim()
     const isOwner = msg.key.fromMe === true
     const reply = async (body: string) => {
+      // Simulate human reading time before responding
+      await new Promise(r => setTimeout(r, HumanBehavior.getReadingDelay()))
+      // Show typing indicator with human-like duration
+      const typingDelay = HumanBehavior.getTypingDelay(body.length)
       await this.sendTyping(remoteJid)
+      await new Promise(r => setTimeout(r, typingDelay))
+      // Send message
       return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
     }
 
