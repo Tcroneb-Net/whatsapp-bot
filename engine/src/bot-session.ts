@@ -171,7 +171,24 @@ export class BotSession {
 
   // Re-read settings from MongoDB so dashboard changes take effect live.
   async refreshSettings(): Promise<void> {
+    const oldSettings = { ...this.settings }
     await this.loadSettings()
+    
+    // Log what changed
+    const changes: Record<string, { old: unknown; new: unknown }> = {}
+    for (const key in this.settings) {
+      const k = key as keyof typeof this.settings
+      const oldVal = oldSettings[k]
+      const newVal = this.settings[k]
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        changes[key] = { old: oldVal, new: newVal }
+      }
+    }
+    
+    if (Object.keys(changes).length > 0) {
+      logger.info({ changes }, "settings updated from dashboard")
+    }
+    
     // Re-apply presence in case "always online" was toggled from the dashboard.
     this.applyPresence()
   }
@@ -1640,18 +1657,27 @@ export class BotSession {
     const s = this.settings
     const status =
       `📊 *${this.settings.botName.toUpperCase()} STATUS*\n\n` +
-      `*Features:*\n` +
-      `✓ Alive: ${s.aliveEnabled ? "ON" : "OFF"}\n` +
-      `✓ Ping: ${s.pingEnabled ? "ON" : "OFF"}\n` +
-      `✓ AI: ${s.aiEnabled ? "ON" : "OFF"}\n` +
-      `✓ Status view: ${s.autoStatusView ? "ON" : "OFF"}\n` +
-      `✓ Status react: ${s.autoStatusReact ? "ON" : "OFF"}\n` +
-      `✓ View-once save: ${s.antiViewOnce ? "ON" : "OFF"}\n\n` +
+      `*Core Features:*\n` +
+      `${s.aliveEnabled ? "✅" : "❌"} Alive: ${s.aliveEnabled ? "ON" : "OFF"}\n` +
+      `${s.pingEnabled ? "✅" : "❌"} Ping: ${s.pingEnabled ? "ON" : "OFF"}\n` +
+      `${s.aiEnabled ? "✅" : "❌"} AI: ${s.aiEnabled ? "ON" : "OFF"}\n` +
+      `${s.autoStatusView ? "✅" : "❌"} Status view: ${s.autoStatusView ? "ON" : "OFF"}\n` +
+      `${s.autoStatusReact ? "✅" : "❌"} Status react: ${s.autoStatusReact ? "ON" : "OFF"}\n` +
+      `${s.antiViewOnce ? "✅" : "❌"} View-once save: ${s.antiViewOnce ? "ON" : "OFF"}\n` +
+      `${s.autoLikeStatus ? "✅" : "❌"} Auto-like status: ${s.autoLikeStatus ? "ON" : "OFF"}\n\n` +
+      `*Group Control:*\n` +
+      `${s.groupWorkEnabled ? "✅" : "❌"} Group work mode: ${s.groupWorkEnabled ? "ON" : "OFF"}\n` +
+      (s.groupWorkEnabled ? `  Threshold: ${s.groupWorkThreshold} messages\n` : "") +
+      (s.groupWorkEnabled ? `  Auto-unlock: ${s.groupAutoUnlockMinutes > 0 ? s.groupAutoUnlockMinutes + " min" : "Manual"}\n\n` : "\n") +
+      `*Anti-Spam:*\n` +
+      `${s.antiSpamEnabled ? "✅" : "❌"} Anti-spam: ${s.antiSpamEnabled ? "ON" : "OFF"}\n` +
+      (s.antiSpamEnabled ? `  Rate: ${s.antiSpamMessagesPerMinute} msgs/min\n` : "") +
+      (s.antiSpamEnabled ? `  Action: ${s.antiSpamAction}\n\n` : "\n") +
       `*Settings:*\n` +
-      `⚙�� Mode: ${s.publicMode ? "PUBLIC" : "PRIVATE"}\n` +
-      `⚙️ Always online: ${s.alwaysOnline ? "ON" : "OFF"}\n` +
-      `⚙️ Auto typing: ${s.autoTyping ? "ON" : "OFF"}\n` +
-      `����� Prefix: ${s.prefix}`
+      `🔒 Mode: ${s.publicMode ? "PUBLIC" : "PRIVATE"}\n` +
+      `⚡ Always online: ${s.alwaysOnline ? "ON" : "OFF"}\n` +
+      `⌨️ Auto typing: ${s.autoTyping ? "ON" : "OFF"}\n` +
+      `🔧 Prefix: ${s.prefix}`
     await this.sock!.sendMessage(remoteJid, { text: status }, { quoted: msg })
   }
 

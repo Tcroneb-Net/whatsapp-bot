@@ -36,22 +36,24 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Invalid settings payload" }, { status: 400 })
   }
 
-  // Whitelist + validate each editable field.
+  // Whitelist + validate each editable field with generic type checking
   const update: Record<string, unknown> = {}
   for (const key of EDITABLE_SETTING_KEYS) {
     if (!(key in incoming)) continue
     const value = incoming[key]
+
+    // Field-specific validation
     if (key === "botName") {
       if (typeof value !== "string") continue
       const trimmed = value.trim().slice(0, 40)
       if (trimmed.length === 0) continue
-      update["settings.botName"] = trimmed
+      update[`settings.${key}`] = trimmed
     } else if (key === "prefix") {
       if (typeof value !== "string") continue
       const p = value.trim().slice(0, 3) || "."
-      update["settings.prefix"] = p
+      update[`settings.${key}`] = p
     } else if (key === "viewOnceMode") {
-      if (value === "same" || value === "dm") update["settings.viewOnceMode"] = value
+      if (value === "same" || value === "dm") update[`settings.${key}`] = value
     } else if (key === "statusReactEmojis") {
       // Validate emoji list: comma-separated, non-empty
       if (typeof value !== "string") continue
@@ -60,28 +62,55 @@ export async function PATCH(req: Request) {
         .map((e) => e.trim())
         .filter(Boolean)
       if (emojis.length > 0) update[`settings.${key}`] = emojis.join(",")
-    } else if (key === "groupSettings") {
-      // Handle group settings object
-      if (typeof value === "object" && value !== null) {
-        const groupSettings = {
-          antiLink: typeof value.antiLink === "boolean" ? value.antiLink : false,
-          antiLinkAction: ["warn", "kick", "mute"].includes(value.antiLinkAction as string)
-            ? (value.antiLinkAction as string)
-            : "warn",
-          autoOpenTime: typeof value.autoOpenTime === "string" ? value.autoOpenTime : undefined,
-          autoCloseTime: typeof value.autoCloseTime === "string" ? value.autoCloseTime : undefined,
-          autoAcceptJoin: typeof value.autoAcceptJoin === "boolean" ? value.autoAcceptJoin : false,
-          autoAcceptRequests:
-            typeof value.autoAcceptRequests === "boolean" ? value.autoAcceptRequests : false,
-          allowTagAll: typeof value.allowTagAll === "boolean" ? value.allowTagAll : true,
-        }
-        update["settings.groupSettings"] = groupSettings
+    } else if (key === "groupWorkWhitelist") {
+      // Handle string arrays
+      if (Array.isArray(value)) {
+        update[`settings.${key}`] = value.filter(v => typeof v === "string")
+      } else if (value === "" || value === null) {
+        update[`settings.${key}`] = []
       }
-    } else if (key === "viewOnceAutoUnlock") {
-      // Handle boolean toggle
+    } else if (
+      // Boolean fields
+      key === "autoStatusView" ||
+      key === "autoStatusReact" ||
+      key === "antiViewOnce" ||
+      key === "aliveEnabled" ||
+      key === "pingEnabled" ||
+      key === "aiEnabled" ||
+      key === "alwaysOnline" ||
+      key === "autoTyping" ||
+      key === "publicMode" ||
+      key === "autoLikeStatus" ||
+      key === "autoChatEnabled" ||
+      key === "autoChatUseAI" ||
+      key === "groupWorkEnabled" ||
+      key === "antiSpamEnabled"
+    ) {
       if (typeof value === "boolean") update[`settings.${key}`] = value
+    } else if (
+      // Numeric fields
+      key === "autoStatusViewDelay" ||
+      key === "autoStatusReactDelay" ||
+      key === "autoLikeDelay" ||
+      key === "autoClearCacheHours" ||
+      key === "groupWorkThreshold" ||
+      key === "groupAutoUnlockMinutes" ||
+      key === "antiSpamMessagesPerMinute" ||
+      key === "antiSpamWarnings"
+    ) {
+      const num = typeof value === "number" ? value : parseInt(String(value), 10)
+      if (!isNaN(num) && num >= 0) update[`settings.${key}`] = Math.max(0, num)
+    } else if (
+      // String fields
+      key === "aiPersona" ||
+      key === "welcomeImageUrl"
+    ) {
+      if (typeof value === "string") update[`settings.${key}`] = value.slice(0, 500)
+    } else if (key === "antiSpamAction") {
+      // Enum validation
+      if (value === "warn" || value === "kick") update[`settings.${key}`] = value
     } else {
-      // boolean toggles + strings (aiPersona, welcomeImageUrl)
+      // Fallback: accept boolean or string
       if (typeof value === "boolean" || typeof value === "string") update[`settings.${key}`] = value
     }
   }
