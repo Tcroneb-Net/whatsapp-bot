@@ -19,6 +19,22 @@ async function main() {
   // 3. Crash auto-restore: bring every previously paired number back online.
   await manager.restoreAll()
   logger.info("startup restore complete")
+
+  // 4. Memory optimization: periodic cleanup and garbage collection
+  setInterval(() => {
+    if (global.gc) {
+      global.gc()
+    }
+  }, 5 * 60 * 1000) // Every 5 minutes
+
+  // Monitor memory usage
+  setInterval(() => {
+    const memUsage = process.memoryUsage()
+    logger.debug({
+      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+    }, "memory usage")
+  }, 10 * 60 * 1000) // Every 10 minutes
 }
 
 main().catch((err) => {
