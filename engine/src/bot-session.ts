@@ -36,7 +36,7 @@ import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
 import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomMenuBanner, getRandomAliveBanner, getRandomPingBanner } from "./messages.js"
 
-const PRESENCE_KEEPALIVE_MS = 10 * 60 * 1000
+const PRESENCE_KEEPALIVE_MS = 30 * 60 * 1000 // 30 minutes instead of 10 to reduce resource usage
 
 // Generate a readable random dashboard password.
 function generatePassword(length = 10): string {
@@ -137,14 +137,14 @@ export class BotSession {
   // Periodically re-sync settings from MongoDB so dashboard changes take effect.
   private startSettingsRefresh(): void {
     if (this.settingsRefreshTimer) clearInterval(this.settingsRefreshTimer)
-    // Refresh every 30 seconds while connected
+    // Refresh every 60 seconds while connected (reduced from 30s to save resources)
     this.settingsRefreshTimer = setInterval(async () => {
       try {
         await this.refreshSettings()
       } catch (err) {
         logger.debug({ err }, "periodic settings refresh failed")
       }
-    }, 30000)
+    }, 60000)
 
     // Start auto-clear cache timer if configured
     this.startCacheClearTimer()

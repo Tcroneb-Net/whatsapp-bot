@@ -20,21 +20,41 @@ async function main() {
   await manager.restoreAll()
   logger.info("startup restore complete")
 
-  // 4. Memory optimization: periodic cleanup and garbage collection
+  // 4. Aggressive memory optimization to prevent resource exhaustion
   setInterval(() => {
     if (global.gc) {
       global.gc()
+      const memUsage = process.memoryUsage()
+      const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024)
+      logger.info({
+        heapUsed: heapUsedMB,
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+      }, `GC cleanup complete (${heapUsedMB}MB)`)
+      
+      // Warn if memory usage is high
+      if (heapUsedMB > 400) {
+        logger.warn({ heapUsedMB }, "high memory usage detected")
+      }
     }
-  }, 5 * 60 * 1000) // Every 5 minutes
+  }, 2 * 60 * 1000) // Every 2 minutes for aggressive cleanup
 
-  // Monitor memory usage
+  // Periodically disconnect idle sessions to free memory
   setInterval(() => {
-    const memUsage = process.memoryUsage()
-    logger.debug({
-      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
-      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
-    }, "memory usage")
-  }, 10 * 60 * 1000) // Every 10 minutes
+    let disconnected = 0
+    for (const [number, session] of manager.sessions) {
+      const lastActivity = (session as any).lastActivity || Date.now()
+      const idleMs = Date.now() - lastActivity
+      // Disconnect sessions idle for 90+ minutes
+      if (idleMs > 90 * 60 * 1000) {
+        logger.info({ number, idleMin: Math.round(idleMs / 1000 / 60) }, "disconnecting idle session")
+        void session.disconnect("idle timeout")
+        disconnected++
+      }
+    }
+    if (disconnected > 0) {
+      logger.info({ disconnected }, "cleaned up idle sessions")
+    }
+  }, 15 * 60 * 1000) // Check every 15 minutes
 }
 
 main().catch((err) => {
