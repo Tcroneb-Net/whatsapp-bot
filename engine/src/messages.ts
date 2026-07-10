@@ -79,13 +79,15 @@ export function menuMessage(
   const plugins = meta?.plugins || []
 
   const header =
-    `╭━〔 ☬ PREMIUM BOT ☬ 〕━⬣\n` +
-    `┃ ${botName.toUpperCase()}\n` +
+    `╭━〔 🤖 WHATSBOT PRO 🤖 〕━⬣\n` +
+    `┃ ${botName.toUpperCase()} • POWERED BY HOSTIFY\n` +
     `┃ ⚙️ Prefix : [ ${prefix} ]\n` +
     `┃ 🌐 Mode   : ${mode}\n` +
     `┃ ⏱️ Uptime : ${uptime}\n` +
     `┃ 💾 RAM    : ${ram}\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━⬣`
+    `┃ ⚡ WhatsBot.Hostify.co.zw\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
+    `\n🐐 GOAT Mode: Messi 10 Activated ⚽`
 
   const section = (title: string, items: string[]) =>
     `╭━━〔 ${title} 〕━━⬣\n` +

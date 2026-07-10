@@ -1052,17 +1052,31 @@ export class BotSession {
           break
         case "menu":
         case "help": {
-          // Send random banner image
-          const bannerUrl = getRandomMenuBanner()
-          const bannerImg = await this.fetchImage(bannerUrl)
-          if (bannerImg && this.sock) {
+          // Send professional WhatsBot menu animation
+          const proMenuUrl = "./assets/menu-pro.png"
+          const proMenuImg = await this.fetchImage(proMenuUrl)
+          if (proMenuImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
-                image: bannerImg,
-                caption: "🤖 *BOT MENU* - All Available Commands",
+                image: proMenuImg,
+                caption: "🤖 *WHATSBOT PRO MENU*\n\nPowered by Hostify • GOAT Messi 10 Mode Active\n\nWorld of Technology 🚀",
               })
             } catch (imgErr) {
-              logger.debug({ imgErr }, "failed to send menu banner")
+              logger.debug({ imgErr }, "failed to send pro menu banner")
+            }
+          }
+          
+          // Also send random additional banner for variety
+          const randomBannerUrl = getRandomMenuBanner()
+          const randomBannerImg = await this.fetchImage(randomBannerUrl)
+          if (randomBannerImg && this.sock) {
+            try {
+              await this.sock.sendMessage(remoteJid, {
+                image: randomBannerImg,
+                caption: "Featured: Today's Bot Animation",
+              })
+            } catch (imgErr) {
+              logger.debug({ imgErr }, "failed to send random menu banner")
             }
           }
 
