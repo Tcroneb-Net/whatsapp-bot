@@ -1,6 +1,10 @@
 // Thin client used by the dashboard to talk to the long-running bot engine.
 // The engine runs as a separate persistent Node process (see /engine).
 
+import pino from "pino"
+
+const logger = pino()
+
 function getEngineConfig() {
   const url = process.env.ENGINE_URL
   const key = process.env.ENGINE_API_KEY

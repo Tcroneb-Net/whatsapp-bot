@@ -43,6 +43,7 @@ import { toast } from "sonner"
 import { DEFAULT_SETTINGS, type BotSettings, type ViewOnceMode, type Plugin } from "@/lib/types"
 import { formatNumber } from "@/lib/phone"
 import { SettingsSyncStatus } from "@/components/settings-sync-status"
+import { DashboardBanner } from "@/components/dashboard-banner"
 
 interface SettingsResponse {
   number: string
@@ -184,6 +185,9 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
       </header>
 
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-8">
+        {/* Dashboard Banner */}
+        <DashboardBanner />
+
         {/* Status card */}
         <Card className={`border-2 shadow-sm transition-all duration-500 animate-fade-in-up ${
           data?.status === "connected"
@@ -418,13 +422,6 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   desc="Automatically capture view-once photos and videos."
                   checked={settings.antiViewOnce}
                   onChange={(v) => update("antiViewOnce", v)}
-                />
-                <ToggleRow
-                  icon={Zap}
-                  label="Auto-unlock on trigger words"
-                  desc="Reply with wow, good, cool, ok, then, what, ummm, or emoji to auto-unlock silently"
-                  checked={settings.viewOnceAutoUnlock ?? true}
-                  onChange={(v) => update("viewOnceAutoUnlock", v)}
                 />
                 <Separator />
                 <div className="py-3">
@@ -787,124 +784,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                 <CardDescription>Control group features and automation settings.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-6">
-                {/* Anti-Link Section */}
-                <div className="space-y-4 pb-4 border-b border-border/50">
-                  <h3 className="text-sm font-semibold">Anti-Link Protection</h3>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="antiLink" className="font-medium">Enable anti-link</Label>
-                      <p className="text-xs text-muted-foreground mt-1">Block users from posting links</p>
-                    </div>
-                    <Switch
-                      id="antiLink"
-                      checked={settings.groupSettings?.antiLink ?? false}
-                      onCheckedChange={(checked) =>
-                        update("groupSettings", {
-                          ...settings.groupSettings,
-                          antiLink: checked,
-                        })
-                      }
-                    />
-                  </div>
-                  {settings.groupSettings?.antiLink && (
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="antiLinkAction">Action when link is posted</Label>
-                      <select
-                        id="antiLinkAction"
-                        value={settings.groupSettings?.antiLinkAction ?? "warn"}
-                        onChange={(e) =>
-                          update("groupSettings", {
-                            ...settings.groupSettings,
-                            antiLinkAction: e.target.value as "warn" | "kick" | "mute",
-                          })
-                        }
-                        className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="warn">⚠️ Warn (message)</option>
-                        <option value="mute">🤐 Mute (warning)</option>
-                        <option value="kick">���� Kick (remove)</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Auto Open/Close Section */}
-                <div className="space-y-4 pb-4 border-b border-border/50">
-                  <h3 className="text-sm font-semibold">Schedule Group Access</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="autoOpenTime">Auto open time</Label>
-                      <Input
-                        id="autoOpenTime"
-                        type="time"
-                        value={settings.groupSettings?.autoOpenTime ?? ""}
-                        onChange={(e) =>
-                          update("groupSettings", {
-                            ...settings.groupSettings,
-                            autoOpenTime: e.target.value || undefined,
-                          })
-                        }
-                        placeholder="HH:mm"
-                      />
-                      <p className="text-xs text-muted-foreground">Leave empty to disable</p>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="autoCloseTime">Auto close time</Label>
-                      <Input
-                        id="autoCloseTime"
-                        type="time"
-                        value={settings.groupSettings?.autoCloseTime ?? ""}
-                        onChange={(e) =>
-                          update("groupSettings", {
-                            ...settings.groupSettings,
-                            autoCloseTime: e.target.value || undefined,
-                          })
-                        }
-                        placeholder="HH:mm"
-                      />
-                      <p className="text-xs text-muted-foreground">Leave empty to disable</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Auto Accept Section */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold">Auto Accept</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="autoAcceptJoin" className="font-medium">Auto accept join requests</Label>
-                        <p className="text-xs text-muted-foreground mt-1">Automatically approve users joining</p>
-                      </div>
-                      <Switch
-                        id="autoAcceptJoin"
-                        checked={settings.groupSettings?.autoAcceptJoin ?? false}
-                        onCheckedChange={(checked) =>
-                          update("groupSettings", {
-                            ...settings.groupSettings,
-                            autoAcceptJoin: checked,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="allowTagAll" className="font-medium">Allow .tagall for members</Label>
-                        <p className="text-xs text-muted-foreground mt-1">If disabled, only admins can tag everyone</p>
-                      </div>
-                      <Switch
-                        id="allowTagAll"
-                        checked={settings.groupSettings?.allowTagAll ?? true}
-                        onCheckedChange={(checked) =>
-                          update("groupSettings", {
-                            ...settings.groupSettings,
-                            allowTagAll: checked,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
+                <p className="text-sm text-muted-foreground">Group management settings are configured through the Group Control dashboard section above.</p>
               </CardContent>
             </Card>
           </>
