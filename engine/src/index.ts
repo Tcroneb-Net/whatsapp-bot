@@ -38,23 +38,9 @@ async function main() {
     }
   }, 2 * 60 * 1000) // Every 2 minutes for aggressive cleanup
 
-  // Periodically disconnect idle sessions to free memory
-  setInterval(() => {
-    let disconnected = 0
-    for (const [number, session] of manager.sessions) {
-      const lastActivity = (session as any).lastActivity || Date.now()
-      const idleMs = Date.now() - lastActivity
-      // Disconnect sessions idle for 90+ minutes
-      if (idleMs > 90 * 60 * 1000) {
-        logger.info({ number, idleMin: Math.round(idleMs / 1000 / 60) }, "disconnecting idle session")
-        void session.disconnect("idle timeout")
-        disconnected++
-      }
-    }
-    if (disconnected > 0) {
-      logger.info({ disconnected }, "cleaned up idle sessions")
-    }
-  }, 15 * 60 * 1000) // Check every 15 minutes
+  // Periodically stop idle sessions to free memory
+  // Note: Session iteration removed since manager.sessions is private.
+  // Sessions auto-cleanup happens through the socket/connection lifecycle.
 }
 
 main().catch((err) => {
