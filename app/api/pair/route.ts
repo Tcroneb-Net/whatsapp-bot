@@ -39,11 +39,29 @@ export async function POST(req: NextRequest) {
 
     // Ask the engine for a pairing code and hand it the plaintext password so
     // it can DM the user once they connect.
-    const { code } = await requestPairingCode(number, password)
+    let code: string
+    try {
+      const result = await requestPairingCode(number, password)
+      code = result.code
+    } catch (engineErr) {
+      console.error("[v0] Engine pairing error:", engineErr)
+      // Check if it's a connection error
+      if (engineErr instanceof Error && (engineErr.message.includes("404") || engineErr.message.includes("Engine request failed"))) {
+        return NextResponse.json(
+          { 
+            error: "Bot engine is not running. Make sure ENGINE_URL and ENGINE_API_KEY are configured in Project Settings > Vars.",
+            hint: "Engine server must be running separately to handle pairing."
+          },
+          { status: 503 }
+        )
+      }
+      throw engineErr
+    }
 
     return NextResponse.json({ code, number, password })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to request pairing code."
+    console.error("[v0] Pair endpoint error:", message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

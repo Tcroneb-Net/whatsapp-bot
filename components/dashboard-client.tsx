@@ -285,7 +285,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                 </CardTitle>
                 <CardDescription>Control how your bot handles contacts&apos; statuses.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-1">
+              <CardContent className="flex flex-col gap-4">
                 <ToggleRow
                   icon={settings.autoStatusView ? Eye : EyeOff}
                   label="Auto status view"
@@ -293,6 +293,25 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   checked={settings.autoStatusView}
                   onChange={(v) => update("autoStatusView", v)}
                 />
+                {settings.autoStatusView && (
+                  <div className="pl-8 flex flex-col gap-3 border-l-2 border-primary/30">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="autoStatusViewDelay" className="text-sm">
+                        View delay (seconds): {((settings as any).autoStatusViewDelay || 0)}s
+                      </Label>
+                      <input
+                        id="autoStatusViewDelay"
+                        type="range"
+                        min="0"
+                        max="30"
+                        value={(settings as any).autoStatusViewDelay || 0}
+                        onChange={(e) => update("autoStatusViewDelay" as any, parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">Delay before auto-viewing status (0-30 seconds)</p>
+                    </div>
+                  </div>
+                )}
                 <Separator />
                 <ToggleRow
                   icon={Heart}
@@ -301,10 +320,24 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   checked={settings.autoStatusReact}
                   onChange={(v) => update("autoStatusReact", v)}
                 />
-                <Separator />
                 {settings.autoStatusReact && (
-                  <div className="py-4 flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
+                  <div className="pl-8 flex flex-col gap-3 border-l-2 border-primary/30">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="autoStatusReactDelay" className="text-sm">
+                        React delay (seconds): {((settings as any).autoStatusReactDelay || 0)}s
+                      </Label>
+                      <input
+                        id="autoStatusReactDelay"
+                        type="range"
+                        min="0"
+                        max="30"
+                        value={(settings as any).autoStatusReactDelay || 0}
+                        onChange={(e) => update("autoStatusReactDelay" as any, parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">Delay before auto-reacting to status (0-30 seconds)</p>
+                    </div>
+                    <div className="flex items-center gap-2 py-2">
                       <Smile className="size-4 text-primary" />
                       <Label className="text-sm font-medium">Reaction emojis</Label>
                     </div>
@@ -330,6 +363,33 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                     <p className="text-xs text-muted-foreground">
                       Selected: {settings.statusReactEmojis.split(",").filter((e) => e).join(", ") || "None"}
                     </p>
+                  </div>
+                )}
+                <Separator />
+                <ToggleRow
+                  icon={Heart}
+                  label="Auto-like status"
+                  desc="Automatically heart-react with ❤️ to status updates."
+                  checked={(settings as any).autoLikeStatus}
+                  onChange={(v) => update("autoLikeStatus" as any, v)}
+                />
+                {(settings as any).autoLikeStatus && (
+                  <div className="pl-8 flex flex-col gap-3 border-l-2 border-primary/30">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="autoLikeDelay" className="text-sm">
+                        Like delay (seconds): {((settings as any).autoLikeDelay || 2)}s
+                      </Label>
+                      <input
+                        id="autoLikeDelay"
+                        type="range"
+                        min="1"
+                        max="30"
+                        value={(settings as any).autoLikeDelay || 2}
+                        onChange={(e) => update("autoLikeDelay" as any, parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">Delay before auto-liking status (1-30 seconds)</p>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -465,6 +525,40 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
               </CardContent>
             </Card>
 
+            {/* AutoChat */}
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <BrainCircuit className="size-5 text-primary" />
+                  </div>
+                  AutoChat &amp; DM Replies
+                </CardTitle>
+                <CardDescription>Automatically reply to direct messages using AI.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                <ToggleRow
+                  icon={BrainCircuit}
+                  label="Enable AutoChat"
+                  desc="Bot automatically replies to all DM messages without needing to be mentioned."
+                  checked={(settings as any).autoChatEnabled}
+                  onChange={(v) => update("autoChatEnabled" as any, v)}
+                />
+                {(settings as any).autoChatEnabled && (
+                  <>
+                    <Separator className="my-3" />
+                    <ToggleRow
+                      icon={Sparkles}
+                      label="Use AI for responses"
+                      desc="Generate smart AI responses. When disabled, uses template replies."
+                      checked={(settings as any).autoChatUseAI}
+                      onChange={(v) => update("autoChatUseAI" as any, v)}
+                    />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Presence */}
             <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
               <CardHeader className="pb-4">
@@ -491,6 +585,46 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   checked={settings.autoTyping}
                   onChange={(v) => update("autoTyping", v)}
                 />
+              </CardContent>
+            </Card>
+
+            {/* Performance & Pro */}
+            <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Zap className="size-5 text-primary" />
+                  </div>
+                  Performance &amp; Pro Options
+                </CardTitle>
+                <CardDescription>Optimize bot performance and enable advanced features.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="autoClearCache" className="flex items-center gap-2">
+                    <Trash2 className="size-4 text-primary" />
+                    Auto-clear cache (hours)
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="autoClearCache"
+                      type="number"
+                      min="0"
+                      max="24"
+                      value={(settings as any).autoClearCacheHours || 6}
+                      onChange={(e) => update("autoClearCacheHours" as any, parseInt(e.target.value) || 0)}
+                      className="w-24 px-3 py-2 border border-border rounded-md"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {(settings as any).autoClearCacheHours === 0
+                        ? "Disabled"
+                        : `Every ${(settings as any).autoClearCacheHours} hours`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Set to 0 to disable. Auto-clears search cache to improve performance on free tier hosting.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
