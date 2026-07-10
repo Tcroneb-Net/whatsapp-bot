@@ -114,6 +114,19 @@ export class BotSession {
   private cacheCleanTimer: ReturnType<typeof setInterval> | null = null
   // Cache for search results (for .download command)
   private searchCache: Record<string, any> = {}
+  // Group Work Tracking: group JID -> { messageCount, lockedUntil, lockTimer }
+  private groupWorkTracking: Map<string, {
+    messageCount: number
+    isLocked: boolean
+    lockedAt: number | null
+    lockTimer: ReturnType<typeof setTimeout> | null
+  }> = new Map()
+  // Anti-Spam Tracking: user JID -> { warnCount, lastMessageTime, messageTimestamps }
+  private antiSpamTracking: Map<string, {
+    warnCount: number
+    lastMessageTime: number
+    messageTimestamps: number[]
+  }> = new Map()
 
   constructor(number: string) {
     this.number = number
@@ -600,7 +613,14 @@ export class BotSession {
       }
     }
 
-
+    // --- Group Work: message counting for group control ---
+    if (remoteJid.endsWith("@g.us") && this.settings.groupWorkEnabled) {
+      try {
+        await this.handleGroupWorkCounting(msg, remoteJid)
+      } catch (err) {
+        logger.debug({ err }, "group work counting error")
+      }
+    }
 
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
@@ -4010,6 +4030,76 @@ Powered by WhatsBot - World of Technology Team`
     }
   }
 
+  // Group Work: Message counting and locking
+  private async handleGroupWorkCounting(msg: WAMessage, groupJid: string): Promise<void> {
+    if (!msg.message || msg.key.fromMe) return
+
+    const isLocked = this.isGroupLocked(groupJid)
+    if (isLocked) {
+      // Group is locked - ignore messages
+      return
+    }
+
+    // Increment message count
+    const tracker = this.groupWorkTracking.get(groupJid) || {
+      messageCount: 0,
+      isLocked: false,
+      lockedAt: null,
+      lockTimer: null,
+    }
+    tracker.messageCount++
+    this.groupWorkTracking.set(groupJid, tracker)
+
+    // Check if threshold reached
+    if (tracker.messageCount >= this.settings.groupWorkThreshold) {
+      // Lock the group
+      tracker.isLocked = true
+      tracker.lockedAt = Date.now()
+      this.groupWorkTracking.set(groupJid, tracker)
+
+      // Announce lock
+      const lockMsg = `🔒 Group locked after ${tracker.messageCount} messages! Only admins can send messages.`
+      if (this.sock) {
+        await this.sock.sendMessage(groupJid, { text: lockMsg })
+      }
+
+      // Set auto-unlock if enabled
+      if (this.settings.groupAutoUnlockMinutes > 0) {
+        if (tracker.lockTimer) clearTimeout(tracker.lockTimer)
+        tracker.lockTimer = setTimeout(() => {
+          this.unlockGroup(groupJid)
+        }, this.settings.groupAutoUnlockMinutes * 60 * 1000)
+        this.groupWorkTracking.set(groupJid, tracker)
+      }
+    }
+  }
+
+  private isGroupLocked(groupJid: string): boolean {
+    const tracker = this.groupWorkTracking.get(groupJid)
+    return tracker?.isLocked ?? false
+  }
+
+  private unlockGroup(groupJid: string): void {
+    const tracker = this.groupWorkTracking.get(groupJid)
+    if (!tracker) return
+
+    tracker.isLocked = false
+    tracker.messageCount = 0
+    tracker.lockedAt = null
+    if (tracker.lockTimer) clearTimeout(tracker.lockTimer)
+    tracker.lockTimer = null
+    this.groupWorkTracking.set(groupJid, tracker)
+
+    // Announce unlock
+    try {
+      if (this.sock) {
+        await this.sock.sendMessage(groupJid, { text: "🔓 Group unlocked! Messages can be sent freely again." })
+      }
+    } catch (err) {
+      logger.debug({ err }, "failed to announce unlock")
+    }
+  }
+
   // Group Work Commands
   private async cmdGroupWork(remoteJid: string, msg: WAMessage, reply: (text: string) => Promise<any>): Promise<void> {
     const isGroup = remoteJid.endsWith("@g.us")
@@ -4017,8 +4107,18 @@ Powered by WhatsBot - World of Technology Team`
       await reply("This command only works in groups.")
       return
     }
-    // TODO: Implement group work toggle/setup
-    await reply("Group work mode activated. Messages will be counted until threshold is reached.")
+    
+    // Initialize or reset group tracking
+    const tracker = this.groupWorkTracking.get(remoteJid) || {
+      messageCount: 0,
+      isLocked: false,
+      lockedAt: null,
+      lockTimer: null,
+    }
+    tracker.messageCount = 0
+    this.groupWorkTracking.set(remoteJid, tracker)
+    
+    await reply(`✅ Group work mode activated!\n\n📊 Threshold: ${this.settings.groupWorkThreshold} messages\n⏰ Auto-unlock: ${this.settings.groupAutoUnlockMinutes > 0 ? this.settings.groupAutoUnlockMinutes + ' minutes' : 'Manual only'}\n\nMessages will be counted until threshold is reached.`)
   }
 
   private async cmdGroupCount(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
@@ -4027,8 +4127,15 @@ Powered by WhatsBot - World of Technology Team`
       await reply("This command only works in groups.")
       return
     }
-    // TODO: Get current message count for this group
-    await reply("*Group Message Count*\nCurrent: 0 / 50 messages")
+    
+    const tracker = this.groupWorkTracking.get(remoteJid)
+    const count = tracker?.messageCount ?? 0
+    const threshold = this.settings.groupWorkThreshold
+    const locked = tracker?.isLocked ?? false
+    const percent = Math.round((count / threshold) * 100)
+    
+    const bar = "▓".repeat(Math.round(percent / 5)) + "░".repeat(20 - Math.round(percent / 5))
+    await reply(`*Group Message Count*\n\n📊 Progress: ${count}/${threshold} messages\n${bar} ${percent}%\n\n${locked ? '🔒 Status: LOCKED' : '🔓 Status: Open'}`)
   }
 
   private async cmdGroupUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
@@ -4037,13 +4144,13 @@ Powered by WhatsBot - World of Technology Team`
       await reply("This command only works in groups.")
       return
     }
-    // TODO: Unlock group
-    await reply("Group unlocked. Messages will be counted again.")
+    
+    this.unlockGroup(remoteJid)
+    await reply("🔓 Group unlocked! Message count reset. Messages can be sent freely again.")
   }
 
   private async cmdUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
-    // TODO: Show user unlock commands
-    await reply("*Unlock Commands*\n.gunlock - Unlock group mode\n.unlock [user] - Unlock specific user from anti-spam")
+    await reply("*Unlock Commands*\n\n.gunlock - Unlock group after reaching message threshold\n.gcount - View current message count\n\n*Anti-Spam Locks* (when enabled):\n.unlock - Unlock yourself from anti-spam")
   }
 
   private async cmdLocks(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
@@ -4052,7 +4159,18 @@ Powered by WhatsBot - World of Technology Team`
       await reply("This command only works in groups.")
       return
     }
-    // TODO: Show active locks
-    await reply("*Active Locks*\nNo active locks in this group.")
+    
+    const tracker = this.groupWorkTracking.get(remoteJid)
+    if (!tracker?.isLocked) {
+      await reply("*Active Locks*\n\nNo active locks in this group. Group is open.")
+      return
+    }
+    
+    const lockedTime = tracker.lockedAt ? new Date(tracker.lockedAt).toLocaleTimeString() : "unknown"
+    const autoUnlockTime = this.settings.groupAutoUnlockMinutes > 0 
+      ? new Date(tracker.lockedAt! + this.settings.groupAutoUnlockMinutes * 60 * 1000).toLocaleTimeString()
+      : "Manual unlock only"
+    
+    await reply(`*Active Locks*\n\n🔒 Group is currently LOCKED\n⏰ Locked at: ${lockedTime}\n🔓 Will unlock: ${autoUnlockTime}`)
   }
 }
