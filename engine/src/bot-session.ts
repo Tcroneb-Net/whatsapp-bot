@@ -593,23 +593,21 @@ export class BotSession {
     // Auto-react to status with delay
     if (this.settings.autoStatusReact) {
       const delay = ((this.settings as any).autoStatusReactDelay || 0) * 1000
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
           const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
-          const participant =
-            msg.key.participant ||
-            (msg as any).participant ||
-            (msg.key as any).remoteJidAlt
+          const participant = msg.key.participant
           
           if (participant && this.sock) {
             try {
-              this.sock.sendMessage(
+              await this.sock.sendMessage(
                 "status@broadcast",
                 { react: { text: emoji, key: msg.key } },
                 { statusJidList: [participant] },
               )
-            } catch {
-              // Try alternative method
+              console.log("[v0] Status react sent:", emoji)
+            } catch (reactErr) {
+              console.log("[v0] Status react error:", reactErr)
             }
           }
         } catch (err) {
@@ -621,19 +619,21 @@ export class BotSession {
     // Auto-like status with delay
     if ((this.settings as any).autoLikeStatus) {
       const delay = (((this.settings as any).autoLikeDelay) || 2) * 1000
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
-          const participant =
-            msg.key.participant ||
-            (msg as any).participant ||
-            (msg.key as any).remoteJidAlt
+          const participant = msg.key.participant
           
           if (participant && this.sock) {
-            this.sock.sendMessage(
-              "status@broadcast",
-              { react: { text: "❤️", key: msg.key } },
-              { statusJidList: [participant] },
-            )
+            try {
+              await this.sock.sendMessage(
+                "status@broadcast",
+                { react: { text: "❤️", key: msg.key } },
+                { statusJidList: [participant] },
+              )
+              console.log("[v0] Status auto-like sent")
+            } catch (likeErr) {
+              console.log("[v0] Status like error:", likeErr)
+            }
           }
         } catch (err) {
           logger.debug({ err }, "status auto-like failed")
@@ -1052,17 +1052,31 @@ export class BotSession {
           break
         case "menu":
         case "help": {
-          // Send random banner image
-          const bannerUrl = getRandomMenuBanner()
-          const bannerImg = await this.fetchImage(bannerUrl)
-          if (bannerImg && this.sock) {
+          // Send professional WhatsBot menu animation
+          const proMenuUrl = "./assets/menu-pro.png"
+          const proMenuImg = await this.fetchImage(proMenuUrl)
+          if (proMenuImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
-                image: bannerImg,
-                caption: "🤖 *BOT MENU* - All Available Commands",
+                image: proMenuImg,
+                caption: "🤖 *WHATSBOT PRO MENU*\n\nPowered by Hostify • GOAT Messi 10 Mode Active\n\nWorld of Technology 🚀",
               })
             } catch (imgErr) {
-              logger.debug({ imgErr }, "failed to send menu banner")
+              logger.debug({ imgErr }, "failed to send pro menu banner")
+            }
+          }
+          
+          // Also send random additional banner for variety
+          const randomBannerUrl = getRandomMenuBanner()
+          const randomBannerImg = await this.fetchImage(randomBannerUrl)
+          if (randomBannerImg && this.sock) {
+            try {
+              await this.sock.sendMessage(remoteJid, {
+                image: randomBannerImg,
+                caption: "Featured: Today's Bot Animation",
+              })
+            } catch (imgErr) {
+              logger.debug({ imgErr }, "failed to send random menu banner")
             }
           }
 
@@ -1770,14 +1784,16 @@ export class BotSession {
           }
           
           // Get file name from various message types
-          if (msgMedia === msg?.message?.imageMessage) {
+          if (msg?.message?.imageMessage) {
             fileName = `image_${Date.now()}.jpg`
-          } else if (msgMedia === msg?.message?.videoMessage) {
+          } else if (msg?.message?.videoMessage) {
             fileName = `video_${Date.now()}.mp4`
-          } else if (msgMedia === msg?.message?.audioMessage) {
+          } else if (msg?.message?.audioMessage) {
             fileName = `audio_${Date.now()}.mp3`
+          } else if (msg?.message?.documentMessage) {
+            fileName = (msg.message.documentMessage as any).fileName || `document_${Date.now()}.bin`
           } else {
-            fileName = (msgMedia as any).fileName || "file"
+            fileName = (msgMedia as any).fileName || `file_${Date.now()}`
           }
           
           console.log("[v0] Extracted media file for upload, name:", fileName, "size:", fileBuffer.length)
@@ -1822,10 +1838,14 @@ export class BotSession {
       }
 
       // Track the uploaded image for .edit command usage
-      if (msgMedia && (msgMedia === msg?.message?.imageMessage || msgMedia === msg?.message?.videoMessage)) {
+      if (msgMedia) {
         try {
           const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-          const fileType = msgMedia === msg?.message?.imageMessage ? "image" : msgMedia === msg?.message?.videoMessage ? "video" : "document"
+          let fileType: "image" | "video" | "audio" | "document" = "document"
+          
+          if (msg?.message?.imageMessage) fileType = "image"
+          else if (msg?.message?.videoMessage) fileType = "video"
+          else if (msg?.message?.audioMessage) fileType = "audio"
           
           await uploadedImages().insertOne({
             number: this.number,
@@ -1838,7 +1858,7 @@ export class BotSession {
             expiresAt,
             used: false,
           })
-          console.log("[v0] Tracked uploaded image:", fileUrl)
+          console.log("[v0] Tracked uploaded image:", fileUrl, "type:", fileType)
         } catch (trackErr) {
           console.log("[v0] Failed to track uploaded image:", trackErr)
           // Don't fail the upload if tracking fails
@@ -2150,9 +2170,18 @@ Powered by WhatsBot - World of Technology Team`
 
       // Strategy 1: User provided image-url | prompt format
       if (args.includes("|")) {
-        const [imgPart, promptPart] = args.split("|").map((s) => s.trim())
-        imageUrl = imgPart.startsWith("http") ? imgPart : null
-        prompt = promptPart || imgPart
+        const parts = args.split("|")
+        const imgPart = parts[0]?.trim() || ""
+        const promptPart = parts[1]?.trim() || ""
+        
+        if (imgPart.startsWith("http")) {
+          imageUrl = imgPart
+          prompt = promptPart
+        } else {
+          // If first part is not a URL, treat whole thing as prompt
+          prompt = args.trim()
+        }
+        console.log("[v0] Edit with URL - imageUrl:", imageUrl ? "set" : "none", "prompt:", prompt)
       }
 
       // Strategy 2: Check for quoted/replied image
@@ -2275,10 +2304,17 @@ Powered by WhatsBot - World of Technology Team`
       const submitUrl =
         `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
 
-      const submitRes = await fetch(submitUrl, { signal: AbortSignal.timeout(30000) })
+      let submitRes: Response
+      try {
+        submitRes = await fetch(submitUrl, { signal: AbortSignal.timeout(30000) })
+      } catch (fetchErr) {
+        console.log("[v0] Nano banana2 fetch error:", fetchErr)
+        return void reply("Network error. Please check your connection and try again.")
+      }
+      
       if (!submitRes.ok) {
-        console.log("[v0] Nano banana2 submit failed:", submitRes.status)
-        return void reply("Failed to start image processing. Please try again.")
+        console.log("[v0] Nano banana2 submit failed:", submitRes.status, await submitRes.text())
+        return void reply("Image processing service error. Please try again with a different image.")
       }
 
       const submitData = (await submitRes.json()) as any
