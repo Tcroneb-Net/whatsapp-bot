@@ -1291,6 +1291,21 @@ export class BotSession {
         case "autochat":
           await this.cmdAutoChat(args.split(/\s+/), reply)
           break
+        case "gwork":
+          if (this.settings.groupWorkEnabled) await this.cmdGroupWork(remoteJid, msg, reply)
+          break
+        case "gcount":
+          if (this.settings.groupWorkEnabled) await this.cmdGroupCount(remoteJid, reply)
+          break
+        case "gunlock":
+          if (this.settings.groupWorkEnabled) await this.cmdGroupUnlock(remoteJid, reply)
+          break
+        case "unlock":
+          if (this.settings.antiSpamEnabled) await this.cmdUnlock(remoteJid, reply)
+          break
+        case "locks":
+          if (this.settings.antiSpamEnabled) await this.cmdLocks(remoteJid, reply)
+          break
         default:
           // Check if it's a plugin command
           if ((this.settings as any).plugins) {
@@ -1304,7 +1319,6 @@ export class BotSession {
             }
           }
           // Unknown command — stay silent to avoid noise.
-          break
       }
     } catch (err) {
       logger.error({ number: this.number, command, err }, "command failed")
@@ -3940,5 +3954,51 @@ Powered by WhatsBot - World of Technology Team`
       logger.debug({ err }, "download search result failed")
       await reply("Failed to download. Please try again.")
     }
+  }
+
+  // Group Work Commands
+  private async cmdGroupWork(remoteJid: string, msg: WAMessage, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    // TODO: Implement group work toggle/setup
+    await reply("Group work mode activated. Messages will be counted until threshold is reached.")
+  }
+
+  private async cmdGroupCount(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    // TODO: Get current message count for this group
+    await reply("*Group Message Count*\nCurrent: 0 / 50 messages")
+  }
+
+  private async cmdGroupUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    // TODO: Unlock group
+    await reply("Group unlocked. Messages will be counted again.")
+  }
+
+  private async cmdUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    // TODO: Show user unlock commands
+    await reply("*Unlock Commands*\n.gunlock - Unlock group mode\n.unlock [user] - Unlock specific user from anti-spam")
+  }
+
+  private async cmdLocks(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
+    const isGroup = remoteJid.endsWith("@g.us")
+    if (!isGroup) {
+      await reply("This command only works in groups.")
+      return
+    }
+    // TODO: Show active locks
+    await reply("*Active Locks*\nNo active locks in this group.")
   }
 }
