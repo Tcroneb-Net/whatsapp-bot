@@ -6,21 +6,26 @@ import pino from "pino"
 const logger = pino()
 
 function getEngineConfig() {
-  const url = process.env.ENGINE_URL
-  const key = process.env.ENGINE_API_KEY
+  // Use process.env only - this ensures Vercel environment variables are used
+  const url = process.env.ENGINE_URL?.trim()
+  const key = process.env.ENGINE_API_KEY?.trim()
   
   return { url, key }
 }
 
 function ensureConfig() {
   const { url } = getEngineConfig()
-  if (!url || url.trim() === "") {
+  if (!url) {
+    const isDev = process.env.NODE_ENV === 'development'
     throw new Error(
-      "ENGINE_URL is not configured.\n" +
-      "1. Go to Project Settings > Vars\n" +
-      "2. Add ENGINE_URL with your engine URL (e.g., https://whatsbot.hostify.co.zw)\n" +
-      "3. Add ENGINE_API_KEY with your engine API key (optional, for security)\n" +
-      "4. Redeploy the project on Vercel"
+      isDev 
+        ? `ENGINE_URL is not configured for development.\nAdd to .env.development.local: ENGINE_URL=https://whatsbot.hostify.co.zw`
+        : `ENGINE_URL is not configured on Vercel.\n` +
+          `1. Go to https://vercel.com/tcronebhackx-md/whatsapp-bot/settings/environment-variables\n` +
+          `2. Add ENGINE_URL = https://whatsbot.hostify.co.zw\n` +
+          `3. Add ENGINE_API_KEY = JeCPjsPBuIJnpZEWSCqD0uK89UZBqnV68YkaRojtNei\n` +
+          `4. Redeploy the project\n` +
+          `5. Make sure to set it for both Production and Preview environments`
     )
   }
 }
