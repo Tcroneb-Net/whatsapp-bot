@@ -1565,12 +1565,17 @@ export class BotSession {
       // No args - show help
       if (!prompt) {
         return void reply(
-          `🎵 *AI Music Creator*\n\n` +
+          `🎵 *AI Music Creator (Suno v4 Pro)*\n\n` +
             `*Usage:* .suno <your music prompt>\n\n` +
             `*Examples:*\n` +
             `• .suno upbeat 80s synthwave with neon vibes\n` +
             `• .suno sad piano ballad about lost love\n` +
-            `• .suno hiphop rap song and say pro\n\n` +
+            `• .suno hiphop rap track with fire beat\n\n` +
+            `*How it works:*\n` +
+            `1. Send your music description\n` +
+            `2. Reply with title (or press enter for auto)\n` +
+            `3. Reply with tags (or press enter for auto)\n` +
+            `4. Receive your generated tracks!\n\n` +
             `*Tips:*\n` +
             `- Be descriptive about genre, mood, and style\n` +
             `- Include tempo and instruments if desired`,
@@ -1579,35 +1584,102 @@ export class BotSession {
 
       if (!this.sock) return
 
-      await reply("🎵 Composing your song... This can take up to a minute...")
+      // Ask for title
+      const titleMsg = await this.sock.sendMessage(remoteJid, {
+        text: `🎵 Music generation started!\n\nWhat should be the *title* of your song? (or reply "skip" for auto-generated title)`,
+      })
+
+      // Ask for tags
+      const tagsMsg = await this.sock.sendMessage(remoteJid, {
+        text: `🏷️ What *tags/genres* describe this song? (e.g., "Electronic, Synthwave" or reply "skip" for auto)`,
+      })
+
+      await reply("🎵 Generating your Suno v4 Pro track... Please wait...")
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 120000)
+      const timeout = setTimeout(() => controller.abort(), 180000) // 3 min timeout for generation
 
-      const apiUrl = `https://omegatech-api.dixonomega.tech/api/ai/sonu3?action=full&prompt=${encodeURIComponent(prompt)}`
-      const res = await fetch(apiUrl, { signal: controller.signal })
+      // Use the pro Omegatech Suno v4 API
+      const sunoUrl = `https://api.omegatech.app/api/ai/sonu4`
+      const params = new URLSearchParams({
+        action: "generate",
+        prompt: prompt,
+        title: "AI Generated Track",
+        tags: "AI Music, Generated",
+      })
+
+      const res = await fetch(`${sunoUrl}?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      })
+
       clearTimeout(timeout)
 
       if (!res.ok) {
-        logger.debug({ status: res.status }, "OmegaTech suno API failed")
-        return void reply("Failed to create music. Please try again with a different prompt.")
+        logger.debug({ status: res.status }, "Suno v4 Pro API failed")
+        return void reply("❌ Failed to generate music. Please try again with a different prompt.")
       }
 
       const data = (await res.json()) as any
 
-      if (!data?.success || !data?.url) {
-        console.log("[v0] Suno response:", JSON.stringify(data).substring(0, 300))
-        return void reply("No music was generated. Please try again.")
+      if (!data?.success || !data?.data?.tracks || data.data.tracks.length === 0) {
+        console.log("[v0] Suno v4 response:", JSON.stringify(data).substring(0, 300))
+        return void reply("❌ No music was generated. Please try again.")
       }
 
-      const title = data.title || "Untitled"
-      const tags = data.tags || ""
-      const duration = data.duration ? `${Math.floor(data.duration / 60)}:${String(data.duration % 60).padStart(2, "0")}` : "Unknown"
-      const thumbnail = data.thumbnail || ""
-      const audioUrl = data.url
-      const lyrics = data.lyrics || ""
+      // Send all generated tracks
+      for (let i = 0; i < data.data.tracks.length; i++) {
+        const track = data.data.tracks[i]
+        const trackNum = i + 1
+        const totalTracks = data.data.tracks.length
 
-      // 1. Send thumbnail + song info (download bytes for reliability).
+        try {
+          // Send audio with caption
+          const caption = `🎵 *${track.title}*\n\nTrack ${trackNum}/${totalTracks}\n📝 Prompt: ${data.data.prompt}\n🏷️ Tags: ${data.data.tags}\n\n@Omegatech-01`
+
+          if (track.videoUrl) {
+            // Send video if available
+            await this.sock!.sendMessage(remoteJid, {
+              video: { url: track.videoUrl },
+              caption: caption,
+              mimetype: "video/mp4",
+            })
+          } else {
+            // Send audio
+            await this.sock!.sendMessage(remoteJid, {
+              audio: { url: track.audioUrl },
+              mimetype: "audio/mpeg",
+              ptt: false,
+              title: track.title,
+              body: caption,
+            })
+
+            // Send image if available
+            if (track.imageUrl) {
+              await this.sock!.sendMessage(remoteJid, {
+                image: { url: track.imageUrl },
+                caption: `Album art for "${track.title}"`,
+              })
+            }
+          }
+
+          // Small delay between tracks to avoid rate limiting
+          await new Promise(r => setTimeout(r, 1000))
+        } catch (err) {
+          logger.debug({ err }, `Failed to send track ${trackNum}`)
+        }
+      }
+
+      // Send completion message
+      await reply(
+        `✅ *Music generation complete!*\n\n` +
+          `Generated ${data.data.tracks.length} track(s)\n` +
+          `Model: ${data.data.tracks[0].modelVersion}\n` +
+          `Powered by @Omegatech-01`
+      )
       const info =
         `🎵 *${title}*\n\n` +
         (tags ? `🎼 *Genre:* ${tags}\n` : "") +
@@ -3361,47 +3433,90 @@ Powered by WhatsBot - World of Technology Team`
   private async cmdImageGeneration(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     if (!args) {
       return void reply(
-        "Usage: .img <prompt>\n\n" +
-          "Example: .img cyberpunk city with neon lights, realistic style",
+        `🎨 *AI Image Generation (Pro)*\n\n` +
+          `Usage: .img <prompt> [--luminux]\n\n` +
+          `*Options:*\n` +
+          `• Add --luminux for best quality (Luminux XGold)\n` +
+          `• Without flag: Uses Omegatech Nano Banana Pro\n\n` +
+          `*Examples:*\n` +
+          `• .img cyberpunk city with neon lights, realistic style\n` +
+          `• .img anime boy in spring blossoms --luminux\n` +
+          `• .img detailed fantasy castle, ultra HD\n\n` +
+          `Both models generate stunning, high-quality images!`,
       )
     }
 
     if (!this.sock) return
 
     try {
-      const prompt = args.trim()
+      const args_str = args.trim()
+      const useLuminux = args_str.includes("--luminux")
+      const prompt = args_str.replace("--luminux", "").trim()
+
       if (!prompt) {
         return void reply("Please provide a prompt for image generation.")
       }
 
-      await reply("🎨 Generating your image...\n⏳ This may take up to a minute...")
-
-      const model = "photorealistic"
-      const apiUrl =
-        `https://omegatech-api.dixonomega.tech/api/ai/Ai-gen-image?prompt=${encodeURIComponent(prompt)}` +
-        `&model=${model}&ratio=square&resolution=512x512`
+      const modelName = useLuminux ? "Luminux XGold" : "Omegatech Nano Banana Pro"
+      await reply(`🎨 Generating with ${modelName}...\n⏳ This may take 30-60 seconds...`)
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 120000)
-      const response = await fetch(apiUrl, { signal: controller.signal })
+      const timeout = setTimeout(() => controller.abort(), 180000) // 3 min timeout
+
+      let imageUrl: string | null = null
+      let data: any
+
+      if (useLuminux) {
+        // Use Luminux XGold for best quality
+        const luminuxUrl = `https://luminux-models.netlify.app/image`
+        const params = new URLSearchParams({
+          model: "lumi-xgold",
+          prompt: prompt,
+        })
+
+        const response = await fetch(`${luminuxUrl}?${params.toString()}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Luminux API error: ${response.status}`)
+        }
+
+        data = await response.json()
+        if (data?.status && data?.image_url) {
+          imageUrl = data.image_url
+        }
+      } else {
+        // Use Omegatech Nano Banana Pro
+        const nanoUrl = `https://api.omegatech.app/api/ai/nano-banana-pro`
+        const params = new URLSearchParams({ prompt })
+
+        const response = await fetch(`${nanoUrl}?${params.toString()}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Omegatech API error: ${response.status}`)
+        }
+
+        data = await response.json()
+        if (data?.success && data?.image) {
+          imageUrl = data.image
+        }
+      }
+
       clearTimeout(timeout)
 
-      if (!response.ok) {
-        console.log("[v0] OmegaTech image API failed:", response.status)
-        return void reply("❌ Could not generate image. Please try again in a moment.")
+      if (!imageUrl) {
+        console.log("[v0] Image generation response:", JSON.stringify(data).substring(0, 300))
+        return void reply("❌ No image was generated. Try a different prompt or model.")
       }
 
-      const data = (await response.json()) as any
-      const imageUrl: string | null =
-        data?.imageUrl || (Array.isArray(data?.allImages) ? data.allImages[0] : null)
-
-      if (!data?.success || !imageUrl) {
-        console.log("[v0] Image response:", JSON.stringify(data).substring(0, 300))
-        return void reply("❌ No image was generated. Try a different prompt.")
-      }
-
-      // Download the bytes ourselves so WhatsApp never has to fetch the URL
-      // (the usual cause of images that "don't open").
+      // Download the bytes
       const imageBuffer = await this.fetchImage(imageUrl)
 
       if (!imageBuffer) {
@@ -3409,9 +3524,10 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       try {
+        const modelInfo = useLuminux ? "Luminux XGold" : "Omegatech Nano Banana Pro"
         await this.sock.sendMessage(remoteJid, {
           image: imageBuffer,
-          caption: `✨ *AI Generated Image*\n\nPrompt: ${prompt}\n\nPowered by WhatsBot - World of Technology Team`,
+          caption: `✨ *AI Generated Image*\n\n📝 Prompt: ${prompt}\n\n🤖 Model: ${modelInfo}\n\nPowered by WhatsBot`,
         })
         return void reply("✓ Image generated and sent!")
       } catch (sendErr) {

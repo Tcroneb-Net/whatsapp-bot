@@ -113,10 +113,12 @@ export function menuMessage(
     `${prefix}pinterest <query> — Image search`,
     `${prefix}yts <query> — YouTube search`,
   ])
-  const create = section("✨ CREATE & EDIT", [
-    `${prefix}edit <image-url | prompt> — Edit image with AI (nano-banana2)`,
-    `${prefix}img <prompt> — Generate image with Flux AI`,
-    `${prefix}suno <description> — Create music with AI`,
+  const create = section("✨ CREATE & EDIT (PRO AI)", [
+    `${prefix}suno <prompt> — Generate music with Suno v4 Pro`,
+    `${prefix}music <prompt> — Alias for suno`,
+    `${prefix}img <prompt> — Image with Nano Banana Pro`,
+    `${prefix}img <prompt> --luminux — Image with Luminux XGold (best)`,
+    `${prefix}edit <image-url | prompt> — Edit image with AI`,
   ])
   const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text> — Translate text`])
   const ai = section("🤖 AI & CHAT", [
@@ -213,16 +215,26 @@ export function menuMessage(
     )
   }
 
+  const proFeatures = 
+    `╭━━〔 ⭐ PRO FEATURES 2024 ⭐ 〕━━⬣\n` +
+    `┃ 🎵 *Suno v4 Pro Music* — Generate AI songs\n` +
+    `┃ 🎨 *Dual Image AI* — Luminux XGold + Nano Banana\n` +
+    `┃ 🤖 *Smart AI Chat* — GPT-powered responses\n` +
+    `┃ 📥 *Media Downloader* — All platforms supported\n` +
+    `┃ 👥 *Group Control* — Full management dashboard\n` +
+    `┃ 🛡️ *Anti-Spam* — Message counting & auto-lock\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━⬣`
+
   const credits =
     `╭━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `┃   Fast • Smooth • Powerful\n` +
     `> By ${config.teamName}\n` +
     `> Sponsored by ${config.sponsor}\n` +
     `> Pair free at ${config.pairUrl}\n` +
-    `╰━━━━━━━━━━━━━━━━━���━━⬣\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
     `> ☬ *${botName.toUpperCase()}* ☬`
 
-  const sections = [header, general, downloads, search, create, translate, ai, tools, groups, ...pluginSections, credits]
+  const sections = [header, general, downloads, search, create, translate, ai, tools, proFeatures, groups, ...pluginSections, credits]
 
   return sections.join("\n\n")
 }
