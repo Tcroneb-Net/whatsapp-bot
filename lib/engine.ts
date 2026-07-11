@@ -18,9 +18,9 @@ function ensureConfig() {
     throw new Error(
       "ENGINE_URL is not configured.\n" +
       "1. Go to Project Settings > Vars\n" +
-      "2. Add ENGINE_URL with your engine URL (e.g., https://your-engine.railway.app/)\n" +
-      "3. Add ENGINE_API_KEY (optional, for security)\n" +
-      "4. Redeploy the project"
+      "2. Add ENGINE_URL with your engine URL (e.g., https://whatsbot.hostify.co.zw)\n" +
+      "3. Add ENGINE_API_KEY with your engine API key (optional, for security)\n" +
+      "4. Redeploy the project on Vercel"
     )
   }
 }
