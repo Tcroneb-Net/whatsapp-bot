@@ -1648,13 +1648,12 @@ export class BotSession {
               mimetype: "video/mp4",
             })
           } else {
-            // Send audio
+            // Send audio with caption as separate message
+            await this.sock!.sendMessage(remoteJid, { text: caption })
             await this.sock!.sendMessage(remoteJid, {
               audio: { url: track.audioUrl },
               mimetype: "audio/mpeg",
               ptt: false,
-              title: track.title,
-              body: caption,
             })
 
             // Send image if available
@@ -1680,45 +1679,6 @@ export class BotSession {
           `Model: ${data.data.tracks[0].modelVersion}\n` +
           `Powered by @Omegatech-01`
       )
-      const info =
-        `🎵 *${title}*\n\n` +
-        (tags ? `🎼 *Genre:* ${tags}\n` : "") +
-        `⏱️ *Duration:* ${duration}\n` +
-        `📝 *Prompt:* ${prompt}\n\n` +
-        `⏳ Uploading your song...`
-
-      const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
-      try {
-        if (thumbBuf) {
-          await this.sock.sendMessage(remoteJid, { image: thumbBuf, caption: info })
-        } else {
-          await this.sock.sendMessage(remoteJid, { text: info })
-        }
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send suno thumbnail")
-      }
-
-      // 2. Send the audio as a real MP3 file.
-      await this.sock.sendMessage(remoteJid, {
-        audio: { url: audioUrl },
-        mimetype: "audio/mpeg",
-        fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
-        ptt: false,
-      })
-
-      // 3. Send lyrics if available (split if too long for one message).
-      if (lyrics) {
-        const header = `📜 *Lyrics — ${title}*\n\n`
-        const full = header + lyrics
-        if (full.length <= 4000) {
-          await this.sock.sendMessage(remoteJid, { text: full })
-        } else {
-          await this.sock.sendMessage(remoteJid, { text: header + lyrics.slice(0, 3900) + "\n\n_(continued...)_" })
-          await this.sock.sendMessage(remoteJid, { text: lyrics.slice(3900) })
-        }
-      }
-
-      await reply("✅ Your song is ready! Powered by WhatsBot - World of Technology Team")
     } catch (err) {
       logger.debug({ err }, "suno command failed")
       await reply("Failed to create music. Please try again later.")
@@ -2260,7 +2220,7 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       // Format lyrics in a professional WhatsApp-friendly way
-      const header = `🎵 *${title.toUpperCase()}*\n_${artist}_\n\n━━━━━━━━━━━━━━━━━━━━━`
+      const header = `���� *${title.toUpperCase()}*\n_${artist}_\n\n━━━━━━━━━━━━━━━━━━━━━`
       
       // Split lyrics into manageable chunks (WhatsApp has message limits)
       const lyricsLines = lyrics.split("\n")
