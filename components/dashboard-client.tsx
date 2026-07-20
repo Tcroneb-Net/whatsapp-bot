@@ -44,6 +44,7 @@ import { DEFAULT_SETTINGS, type BotSettings, type ViewOnceMode, type Plugin } fr
 import { formatNumber } from "@/lib/phone"
 import { SettingsSyncStatus } from "@/components/settings-sync-status"
 import { DashboardBanner } from "@/components/dashboard-banner"
+import { ProDashboard } from "@/components/pro-dashboard"
 
 interface SettingsResponse {
   number: string
@@ -77,6 +78,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [activeTab, setActiveTab] = useState<"settings" | "pro" | "automation">("pro")
 
   const EMOJI_SUGGESTIONS = ["❤️", "🔥", "😍", "👍", "🎉", "😂", "🤔", "👏", "🙌", "✨", "💯", "🚀", "😍", "🤩"]
 
@@ -188,6 +190,40 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         {/* Dashboard Banner */}
         <DashboardBanner />
 
+        {/* Tab Navigation */}
+        <div className="flex gap-2 border-b border-border/50 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab("pro")}
+            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
+              activeTab === "pro"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Pro Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab("settings")}
+            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
+              activeTab === "settings"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Bot Settings
+          </button>
+          <button
+            onClick={() => setActiveTab("automation")}
+            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
+              activeTab === "automation"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Automation
+          </button>
+        </div>
+
         {/* Status card */}
         <Card className={`border-2 shadow-sm transition-all duration-500 animate-fade-in-up ${
           data?.status === "connected"
@@ -226,8 +262,14 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
           </div>
         ) : (
           <>
-            {/* Settings Sync Status */}
-            <SettingsSyncStatus />
+            {/* Pro Dashboard Tab */}
+            {activeTab === "pro" && <ProDashboard />}
+
+            {/* Settings Tab */}
+            {activeTab === "settings" && (
+              <>
+                {/* Settings Sync Status */}
+                <SettingsSyncStatus />
 
             {/* Identity */}
             <Card className="border-border/80 shadow-sm hover:shadow-md transition-shadow animate-fade-in-up" style={{animationDelay: '0.1s'}}>
@@ -787,27 +829,44 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                 <p className="text-sm text-muted-foreground">Group management settings are configured through the Group Control dashboard section above.</p>
               </CardContent>
             </Card>
+
+                {/* Sticky save bar */}
+                {dirty && (
+                  <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur">
+                    <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
+                      <span className="text-sm text-muted-foreground">You have unsaved changes</span>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setDraft(null)} disabled={saving}>
+                          Discard
+                        </Button>
+                        <Button size="sm" onClick={save} disabled={saving}>
+                          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                          Save changes
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Automation Tab */}
+            {activeTab === "automation" && (
+              <Card className="border-border/80 shadow-sm">
+                <CardHeader>
+                  <CardTitle>Automation Center</CardTitle>
+                  <CardDescription>Coming soon - Advanced automation tools</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Schedule messages, auto-replies, and advanced automation workflows will be available here.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>
-
-      {/* Sticky save bar */}
-      {dirty && (
-        <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
-            <span className="text-sm text-muted-foreground">You have unsaved changes</span>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setDraft(null)} disabled={saving}>
-                Discard
-              </Button>
-              <Button size="sm" onClick={save} disabled={saving}>
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                Save changes
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   )
 }
