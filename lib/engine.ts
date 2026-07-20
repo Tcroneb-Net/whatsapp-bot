@@ -5,10 +5,24 @@ import pino from "pino"
 
 const logger = pino()
 
+function normalizeEngineUrl(url: string): string {
+  // Ensure URL has protocol
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return `https://${url}`
+  }
+  // Ensure no trailing slash
+  return url.endsWith('/') ? url.slice(0, -1) : url
+}
+
 function getEngineConfig() {
   // Use process.env only - this ensures Vercel environment variables are used
-  const url = process.env.ENGINE_URL?.trim()
+  let url = process.env.ENGINE_URL?.trim()
   const key = process.env.ENGINE_API_KEY?.trim()
+  
+  // Normalize URL to ensure it has proper protocol
+  if (url) {
+    url = normalizeEngineUrl(url)
+  }
   
   return { url, key }
 }
@@ -77,15 +91,9 @@ export async function deleteBotSession(number: string): Promise<void> {
 }
 
 export async function refreshBotSettings(number: string): Promise<void> {
-  ensureConfig()
-  const { url, key } = getEngineConfig()
   try {
-    await fetch(`${url}/session/${number}/refresh-settings`, {
+    await engineFetch(`/session/${number}/refresh-settings`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": key || "",
-      },
     })
   } catch (err) {
     logger.error({ err, number }, "failed to refresh bot settings on engine")
