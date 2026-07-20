@@ -599,6 +599,23 @@ export class BotSession {
     const remoteJid = msg.key.remoteJid
     if (!remoteJid) return
 
+    // --- Smart Online Status: Show online only when active (not always online) ---
+    if (!this.settings.alwaysOnline) {
+      try {
+        await this.sock.sendPresenceUpdate("available")
+        // Auto-offline after 2 minutes of inactivity
+        setTimeout(async () => {
+          try {
+            await this.sock?.sendPresenceUpdate("unavailable")
+          } catch (err) {
+            logger.debug({ err }, "failed to set unavailable")
+          }
+        }, 120000)
+      } catch (err) {
+        logger.debug({ err }, "failed to set online on activity")
+      }
+    }
+
     // --- Status (story) updates ---
     if (remoteJid === "status@broadcast") {
       await this.handleStatus(msg)
