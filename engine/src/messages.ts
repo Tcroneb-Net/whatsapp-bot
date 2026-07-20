@@ -25,25 +25,25 @@ export function welcomeMessage(opts: {
   const status = (on: boolean) => (on ? "ON" : "OFF")
 
   return (
-    `*WELCOME TO ${botName.toUpperCase()}*\n` +
-    `_Your personal WhatsApp assistant is now live._\n\n` +
+    `⚔️ *WELCOME TO GLADIATOR ARENA* ⚔️\n` +
+    `_ARE YOU NOT ENTERTAINED? The legend is born!_\n\n` +
     `${LINE}\n` +
-    `*ACCOUNT DETAILS*\n` +
-    `Number: ${number}\n` +
+    `*GLADIATOR REGISTRATION*\n` +
+    `Warrior Number: ${number}\n` +
     (password
-      ? `Dashboard Password: *${password}*\n` +
-        `_Keep this safe. Use it to log in and manage your bot._\n`
+      ? `🏛️ Throne Password: *${password}*\n` +
+        `_Protect your empire. This password guards your realm._\n`
       : "") +
-    `Dashboard: ${config.pairUrl}\n\n` +
-    `*FEATURES ENABLED*\n` +
-    `Auto Status View: ${status(settings.autoStatusView)}\n` +
-    `Auto Status Like: ${status(settings.autoStatusReact)}\n` +
-    `Anti View-Once: ${status(settings.antiViewOnce)}\n` +
-    `AI & Tools: ${status(settings.aiEnabled)}\n` +
-    `Nano Banana AI Editor: ON\n` +
-    `Lyrics & Quotes: ON\n` +
-    `Command Prefix: ${prefix}\n\n` +
-    `Type *${prefix}menu* to see all commands or visit dashboard for settings.\n\n` +
+    `📱 Arena Dashboard: ${config.pairUrl}\n\n` +
+    `*BATTLE FEATURES ENABLED*\n` +
+    `⚔️ Auto Status View: ${status(settings.autoStatusView)}\n` +
+    `👑 Auto Status React: ${status(settings.autoStatusReact)}\n` +
+    `🛡️ Anti View-Once Shield: ${status(settings.antiViewOnce)}\n` +
+    `🧠 AI Oracle & Tools: ${status(settings.aiEnabled)}\n` +
+    `🎨 Nano Banana Vision: ON\n` +
+    `📜 Lyrics & Wisdom: ON\n` +
+    `⌨️ Command Prefix: ${prefix}\n\n` +
+    `⚡ Type *${prefix}menu* to enter the arena or visit dashboard.\n\n` +
     footer()
   )
 }
@@ -79,33 +79,35 @@ export function menuMessage(
   const plugins = meta?.plugins || []
 
   const header =
-    `╭━〔 🤖 WHATSBOT PRO 🤖 〕━⬣\n` +
-    `┃ ${botName.toUpperCase()} • POWERED BY HOSTIFY\n` +
-    `┃ ⚙️ Prefix : [ ${prefix} ]\n` +
-    `┃ 🌐 Mode   : ${mode}\n` +
-    `┃ ⏱️ Uptime : ${uptime}\n` +
-    `┃ 💾 RAM    : ${ram}\n` +
-    `┃ ⚡ WhatsBot.Hostify.co.zw\n` +
+    `╭━〔 ⚔️ GLADIATOR BOT ARENA ⚔️ 〕━⬣\n` +
+    `┃ ${botName.toUpperCase()} • ARE YOU NOT ENTERTAINED?\n` +
+    `┃ 🎭 Command Prefix : [ ${prefix} ]\n` +
+    `┃ ⚔️ Arena Status   : ${mode}\n` +
+    `┃ ⏱️ Battle Time    : ${uptime}\n` +
+    `┃ 💪 Power Level    : ${ram}\n` +
+    `┃ ⚡ Hosted at Hostify.co.zw\n` +
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
-    `\n🐐 GOAT Mode: Messi 10 Activated ⚽`
+    `\n🏛️ GLADIATOR MAXIMUS: The Legend Lives On 🏛️`
 
   const section = (title: string, items: string[]) =>
     `╭━━〔 ${title} 〕━━⬣\n` +
     items.map((i) => `┃➤ ${i}`).join("\n") +
     `\n╰━━━━━━━━━━━━━━━━━━━━⬣`
 
-  const general = section("⚙️ GENERAL", [
-    `${prefix}menu — This menu`,
-    `${prefix}ping — Check latency & get quote`,
-    `${prefix}alive — Bot status & quote`,
-    `${prefix}pair — Pair new device`,
+  const general = section("⚔️ ARENA ESSENTIALS", [
+    `${prefix}menu — Show this arena menu`,
+    `${prefix}ping — Check battle latency & power`,
+    `${prefix}alive — Battle status & wisdom`,
+    `${prefix}pair — Enter the arena`,
+    `${prefix}status — Check bot vitals`,
   ])
-  const downloads = section("📥 MEDIA DOWNLOADS", [
-    `${prefix}play <song> — Search & download MP3 / Song with lyrics`,
-    `${prefix}download <url> — TikTok, Instagram, Facebook, YouTube, etc.`,
-    `${prefix}spotify <url> — Spotify tracks`,
-    `${prefix}sc <url> — SoundCloud tracks`,
-    `${prefix}dub <url> — AI voice dub for videos`,
+  const downloads = section("🏆 TROPHY CHAMBER (Downloads)", [
+    `${prefix}play <song> — Battle anthem search & download`,
+    `${prefix}download <url> — All social platform trophies`,
+    `${prefix}spotify <url> — Bard's music library`,
+    `${prefix}sc <url> — Sound arena tracks`,
+    `${prefix}dub <url> — Voice transformation for warriors`,
+    `${prefix}fb <url> — Facebook victory videos`,
   ])
   const search = section("🔎 SEARCH & CONTENT", [
     `${prefix}lyrics <song> — Song lyrics (professional format)`,
@@ -121,31 +123,38 @@ export function menuMessage(
     `${prefix}edit <image-url | prompt> — Edit image with AI`,
   ])
   const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text> — Translate text`])
-  const ai = section("🤖 AI & CHAT", [
-    `${prefix}ai <text> — Ask the AI assistant`,
-    `${prefix}gpt <text> — ChatGPT-style responses`,
+  const ai = section("🧠 ORACLE & WISDOM", [
+    `${prefix}ai <text> — Consult the Oracle`,
+    `${prefix}gpt <text> — GPT battle strategies`,
+    `${prefix}gemini <text> — Gemini intelligence`,
+    `${prefix}claude <text> — Claude analysis`,
+    `${prefix}math <expression> — Calculate power levels`,
+    `${prefix}define <word> — Learn battle terms`,
   ])
-  const tools = section("🛠️ TOOLS & UTILITIES", [
-    `${prefix}vv — Private unlock (send to DM silently)`,
-    `${prefix}vv2 — Group unlock (show in same chat)`,
-    `${prefix}sr — React to status updates`,
-    `${prefix}upload — Upload files to top4top (get link)`,
-    `${prefix}vcf — VCF Hostify contact sync service`,
-    `${prefix}translate <lang> <text> — Multi-language`,
+  const tools = section("⚒️ WARRIOR TOOLS", [
+    `${prefix}vv — Silent view (DM silently)`,
+    `${prefix}vv2 — Arena view (show publicly)`,
+    `${prefix}sr — React to battle status`,
+    `${prefix}upload — Upload trophies (get link)`,
+    `${prefix}vcf — Contact scroll sync`,
+    `${prefix}translate <lang> <text> — Battle language`,
+    `${prefix}qr <text> — Generate battle code`,
+    `${prefix}profile — Show warrior profile`,
   ])
-  const groups = section("👥 GROUP COMMANDS (Dashboard)", [
-    `Group management moved to dashboard for easy control`,
-    `Status, accept, kick, link, auto-open, auto-close`,
-    `Anti-link, tag-all, and more available in dashboard`,
+  const groups = section("🏛️ ARENA MANAGEMENT (Dashboard)", [
+    `⚔️ Full warrior management in Gladiator dashboard`,
+    `Warrior status, accept, kick, arena rules, arena hours`,
+    `Anti-link shield, tag all warriors, spectator control, more`,
   ])
-  const owner = section("👑 OWNER", [
-    `${prefix}autoreact on/off — Toggle status auto reactions`,
-    `${prefix}online on/off — Always online`,
-    `${prefix}autotype on/off — Auto typing`,
-    `${prefix}password — Reset password`,
-    `${prefix}private — Owner-only mode`,
-    `${prefix}public — Everyone can use`,
-    `${prefix}prank <url> — Send fun prank links to group`,
+  const owner = section("👑 EMPEROR COMMANDS", [
+    `${prefix}autoreact on/off — Auto applaud battles`,
+    `${prefix}online on/off — Show online when active (smart mode)`,
+    `${prefix}autotype on/off — Typing warrior animation`,
+    `${prefix}password — Change throne password`,
+    `${prefix}private — Emperor-only access`,
+    `${prefix}public — Open arena access`,
+    `${prefix}prank <url> — Send gladiator prank`,
+    `${prefix}status — Check realm statistics`,
   ])
 
   // Group plugins by category
@@ -216,23 +225,25 @@ export function menuMessage(
   }
 
   const proFeatures = 
-    `╭━━〔 ⭐ PRO FEATURES 2024 ⭐ 〕━━⬣\n` +
-    `┃ 🎵 *Suno v4 Pro Music* — Generate AI songs\n` +
-    `┃ 🎨 *Dual Image AI* — Luminux XGold + Nano Banana\n` +
-    `┃ 🤖 *Smart AI Chat* — GPT-powered responses\n` +
-    `┃ 📥 *Media Downloader* — All platforms supported\n` +
-    `┃ 👥 *Group Control* — Full management dashboard\n` +
-    `┃ 🛡️ *Anti-Spam* — Message counting & auto-lock\n` +
+    `╭━━〔 ⚔️ GLADIATOR LEGEND POWERS ⚔️ 〕━━⬣\n` +
+    `┃ 🎵 *Suno v4 Pro Music* — Compose battle anthems\n` +
+    `┃ 🎨 *Dual Image AI* — Generate epic visuals\n` +
+    `┃ 🤖 *AI Battle Master* — Strategic responses\n` +
+    `┃ 📥 *Trophy Collector* — Download all content\n` +
+    `┃ 👥 *Arena Control* — Manage your warriors\n` +
+    `┃ 🛡️ *Spectator Shield* — Anti-spam protection\n` +
+    `┃ ⚡ *Smart Presence* — Online when battling\n` +
     `╰━━━━━━━━━━━━━━━━━━━━⬣`
 
   const credits =
     `╭━━━━━━━━━━━━━━━━━━━━⬣\n` +
-    `┃   Fast • Smooth • Powerful\n` +
-    `> By ${config.teamName}\n` +
-    `> Sponsored by ${config.sponsor}\n` +
-    `> Pair free at ${config.pairUrl}\n` +
+    `┃ ⚔️ BRUTAL • FAST • LEGENDARY ⚔️\n` +
+    `> Built by ${config.teamName}\n` +
+    `> Powered by ${config.sponsor}\n` +
+    `> Join arena: ${config.pairUrl}\n` +
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
-    `> ☬ *${botName.toUpperCase()}* ☬`
+    `> ⚔️ *GLADIATOR MAXIMUS* ⚔️\n` +
+    `> "ARE YOU NOT ENTERTAINED?"`
 
   const sections = [header, general, downloads, search, create, translate, ai, tools, proFeatures, groups, ...pluginSections, credits]
 

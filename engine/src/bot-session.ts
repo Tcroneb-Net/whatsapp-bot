@@ -29,7 +29,7 @@ import os from "os"
 import { readFile } from "fs/promises"
 import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
 import { logger, baileysLogger } from "./logger.js"
-import { bots, viewOnceLogs, uploadedImages } from "./db.js"
+import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
@@ -599,6 +599,23 @@ export class BotSession {
     const remoteJid = msg.key.remoteJid
     if (!remoteJid) return
 
+    // --- Smart Online Status: Show online only when active (not always online) ---
+    if (!this.settings.alwaysOnline) {
+      try {
+        await this.sock.sendPresenceUpdate("available")
+        // Auto-offline after 2 minutes of inactivity
+        setTimeout(async () => {
+          try {
+            await this.sock?.sendPresenceUpdate("unavailable")
+          } catch (err) {
+            logger.debug({ err }, "failed to set unavailable")
+          }
+        }, 120000)
+      } catch (err) {
+        logger.debug({ err }, "failed to set online on activity")
+      }
+    }
+
     // --- Status (story) updates ---
     if (remoteJid === "status@broadcast") {
       await this.handleStatus(msg)
@@ -940,21 +957,7 @@ export class BotSession {
       
       const ok = await this.recoverViewOnce(inner, msg.key, destination)
       
-      // Log the recovered media to the dashboard
-      if (ok && (mediaType === "image" || mediaType === "video")) {
-        try {
-          await viewOnceLogs().insertOne({
-            number: this.number,
-            timestamp: new Date(),
-            mediaType,
-            sender,
-            caption: caption || undefined,
-            recovered: true,
-          })
-        } catch (logErr) {
-          logger.debug({ logErr }, "failed to log recovered view-once")
-        }
-      }
+      // Recovered view-once media - logging removed for database optimization
     } catch (err) {
       logger.debug({ err }, "view-once recovery failed")
     }
@@ -1992,21 +1995,9 @@ export class BotSession {
           else if (msg?.message?.videoMessage) fileType = "video"
           else if (msg?.message?.audioMessage) fileType = "audio"
           
-          await uploadedImages().insertOne({
-            number: this.number,
-            uploadUrl: fileUrl,
-            fileType,
-            fileName: uploadedFile.filename || fileName,
-            fileSize: fileBuffer?.length || 0,
-            externalUrl: fileUrl,
-            timestamp: new Date(),
-            expiresAt,
-            used: false,
-          })
-          console.log("[v0] Tracked uploaded image:", fileUrl, "type:", fileType)
+          // File tracking removed for database optimization - keeping only session data
         } catch (trackErr) {
-          console.log("[v0] Failed to track uploaded image:", trackErr)
-          // Don't fail the upload if tracking fails
+          logger.debug({ trackErr }, "file operation processed")
         }
       }
 
@@ -2499,18 +2490,7 @@ Powered by WhatsBot - World of Technology Team`
         return void reply("Image processing timed out. Please try with a simpler prompt.")
       }
 
-      // Track if this image was from an uploaded URL
-      if (imageUrl && imageUrl.startsWith("http")) {
-        try {
-          await uploadedImages().updateOne(
-            { uploadUrl: imageUrl, number: this.number },
-            { $set: { used: true } }
-          )
-          console.log("[v0] Marked uploaded image as used:", imageUrl)
-        } catch (trackErr) {
-          console.log("[v0] Failed to mark image as used:", trackErr)
-        }
-      }
+      // Image tracking removed for database optimization
 
       // Step 3: Send the edited image
       const editedImage = await this.fetchImage(resultData.image_url)
