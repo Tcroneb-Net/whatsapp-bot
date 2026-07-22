@@ -49,17 +49,33 @@ export function welcomeMessage(opts: {
 }
 
 export function getRandomMenuBanner(): string {
-  const banners = ["./assets/menu-1.png", "./assets/menu-2.png", "./assets/menu-3.png"]
+  const banners = [
+    "./assets/menu-1.png",
+    "./assets/menu-2.png",
+    "./assets/menu-3.png",
+    "./assets/menu-4.png",
+  ]
   return banners[Math.floor(Math.random() * banners.length)]
 }
 
 export function getRandomAliveBanner(): string {
-  const banners = ["./assets/alive-1.png", "./assets/alive-2.png", "./assets/alive-3.png"]
+  const banners = [
+    "./assets/alive-1.png",
+    "./assets/alive-2.png",
+    "./assets/alive-3.png",
+    "./assets/alive-4.png",
+  ]
   return banners[Math.floor(Math.random() * banners.length)]
 }
 
 export function getRandomPingBanner(): string {
-  const banners = ["./assets/ping-1.png", "./assets/ping-2.png", "./assets/ping-3.png"]
+  const banners = [
+    "./assets/ping-1.png",
+    "./assets/ping-2.png",
+    "./assets/ping-3.png",
+    "./assets/ping-4.png",
+    "./assets/ping-5.png",
+  ]
   return banners[Math.floor(Math.random() * banners.length)]
 }
 
