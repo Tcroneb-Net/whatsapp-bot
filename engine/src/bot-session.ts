@@ -487,19 +487,40 @@ export class BotSession {
   // Fetch an image URL into a buffer; returns null on any failure so callers
   // can gracefully fall back to a text-only message.
   private async fetchImage(url: string): Promise<Buffer | null> {
-    if (!url) return null
     try {
-      let fullUrl = url
-      
-      // Handle relative paths
-      if (url.startsWith("/")) {
-        // Try localhost:3000 first (development)
-        try {
-          const res = await fetch(`http://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
-          if (res.ok) {
-            const arr = await res.arrayBuffer()
-            return Buffer.from(arr)
-          }
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      })
+
+      if (!res.ok || !res.body) return null
+
+      // Check content length first
+      const contentLength = res.headers.get("content-length")
+      if (contentLength) {
+        const size = parseInt(contentLength)
+        // Limit: images max 10MB, audio max 5MB
+        const isAudio = res.headers.get("content-type")?.includes("audio")
+        const maxSize = isAudio ? 5 * 1024 * 1024 : 10 * 1024 * 1024
+        if (size > maxSize) {
+          logger.debug({ size, maxSize }, "File too large, skipping")
+          return null
+        }
+      }
+
+      try {
+        const arr = await res.arrayBuffer()
+        if (arr.byteLength > 10 * 1024 * 1024) {
+          logger.debug({ size: arr.byteLength }, "Buffer exceeded limit")
+          return null
+        }
+        return Buffer.from(arr)
+      } catch {
+        return null
+      }
+    } catch {
+      return null
+    }
+  }
         } catch (localErr) {
           console.log("[v0] Localhost fetch failed, trying alternative methods")
         }
@@ -539,10 +560,28 @@ export class BotSession {
   // 2. The bundled local asset file (always available, no network needed).
   // 3. A remote URL (asset base / default), as a last resort.
   private async loadBanner(category: BannerCategory): Promise<Buffer | null> {
-    if ((category === "welcome" || category === "menu") && this.settings.welcomeImageUrl) {
-      const custom = await this.fetchImage(this.settings.welcomeImageUrl)
-      if (custom) return custom
+    try {
+      let imagePath: string | null = null
+      if (category === "menu") imagePath = menuMessage(this.settings, this.number).images.banner
+      else if (category === "alive") imagePath = aliveMessage(this.settings, this.number).images.banner
+      else if (category === "ping") imagePath = pingMessage(this.settings, this.number).images.banner
+
+      if (!imagePath) return null
+
+      // Check file size before reading
+      const stats = fs.statSync(imagePath)
+      if (stats.size > 5 * 1024 * 1024) { // Max 5MB per image
+        logger.debug({ size: stats.size }, "Banner too large, skipping")
+        return null
+      }
+
+      const imageBuffer = fs.readFileSync(imagePath)
+      return imageBuffer
+    } catch (err) {
+      logger.debug({ err, category }, "failed to load banner")
+      return null
     }
+  }
     const localPath = bannerFilePath(category)
     if (localPath) {
       try {
@@ -1633,7 +1672,7 @@ export class BotSession {
         return void reply("❌ No music was generated. Please try again.")
       }
 
-      // Send all generated tracks
+      // Send all generated tracks (stream URLs, don't buffer)
       for (let i = 0; i < data.data.tracks.length; i++) {
         const track = data.data.tracks[i]
         const trackNum = i + 1
@@ -1644,14 +1683,14 @@ export class BotSession {
           const caption = `🎵 *${track.title}*\n\nTrack ${trackNum}/${totalTracks}\n📝 Prompt: ${data.data.prompt}\n🏷️ Tags: ${data.data.tags}\n\n@Omegatech-01`
 
           if (track.videoUrl) {
-            // Send video if available
+            // Send video URL (streaming, not buffered)
             await this.sock!.sendMessage(remoteJid, {
               video: { url: track.videoUrl },
               caption: caption,
               mimetype: "video/mp4",
             })
           } else {
-            // Send audio with caption as separate message
+            // Send audio as URL (streaming, not buffered)
             await this.sock!.sendMessage(remoteJid, { text: caption })
             await this.sock!.sendMessage(remoteJid, {
               audio: { url: track.audioUrl },
@@ -1659,7 +1698,7 @@ export class BotSession {
               ptt: false,
             })
 
-            // Send image if available
+            // Send image URL (streaming)
             if (track.imageUrl) {
               await this.sock!.sendMessage(remoteJid, {
                 image: { url: track.imageUrl },
@@ -1668,8 +1707,13 @@ export class BotSession {
             }
           }
 
-          // Small delay between tracks to avoid rate limiting
-          await new Promise(r => setTimeout(r, 1000))
+          // Delay between tracks to avoid rate limiting and give GC time
+          await new Promise(r => setTimeout(r, 1500))
+          
+          // Force garbage collection hint after every 2 tracks
+          if (i % 2 === 0 && global.gc) {
+            global.gc()
+          }
         } catch (err) {
           logger.debug({ err }, `Failed to send track ${trackNum}`)
         }
