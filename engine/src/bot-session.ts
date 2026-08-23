@@ -2692,6 +2692,26 @@ Powered by WhatsBot - World of Technology Team`
     await clearMongoAuthState(this.number)
   }
 
+  async broadcastImageToGroups(image: Buffer, caption = ""): Promise<{ sent: number; failed: number }> {
+    if (!this.sock || !this.isConnected()) throw new Error("WhatsApp session is not connected")
+    if (!image.length || image.length > 8 * 1024 * 1024) throw new Error("Image must be between 1 byte and 8MB")
+    const groups = await this.sock.groupFetchAllParticipating()
+    const jids = Object.keys(groups)
+    let sent = 0
+    let failed = 0
+    for (const jid of jids) {
+      try {
+        await this.sock.sendMessage(jid, { image, caption })
+        sent++
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      } catch (err) {
+        failed++
+        logger.debug({ err, jid }, "group status broadcast failed")
+      }
+    }
+    return { sent, failed }
+  }
+
   private async cmdGroupStatus(
     msg: WAMessage,
     args: string,
