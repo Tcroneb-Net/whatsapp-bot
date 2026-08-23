@@ -597,9 +597,9 @@ export class BotSession {
       }
     }
 
-    // --- Anti-link: detect and kick if enabled ---
-    // AntiLink is enabled by default for all groups
-    if (remoteJid.endsWith("@g.us")) {
+    // --- Anti-link: opt-in per bot and group ---
+    // Never inspect or respond to group links unless the dashboard enables it.
+    if (remoteJid.endsWith("@g.us") && this.settings.antiLink?.enabled === true) {
       try {
         await this.handleAntiLink(msg, remoteJid)
       } catch (err) {
@@ -973,9 +973,7 @@ export class BotSession {
     try {
       // Check if sender is the bot owner (fromMe === true)
       const isOwner = msg.key.fromMe === true
-      console.log("[v0] AntiLink check - isOwner:", isOwner, "fromMe:", msg.key.fromMe)
       if (isOwner) {
-        console.log("[v0] Owner detected - skipping antilink")
         return // Bot owner is completely exempt from antilink
       }
 
@@ -1307,8 +1305,9 @@ export class BotSession {
         case "top4top":
           await this.cmdFileUpload(args, remoteJid, reply, msg)
           break
-        case "gstatus":
-          await this.cmdGroupStatus(msg, args, remoteJid, reply)
+      case "gstatus":
+      case "groupstatus":
+        await this.cmdGroupStatus(msg, args, remoteJid, reply)
           break
         case "gaccept":
           await this.cmdAcceptJoinRequests(msg, remoteJid, reply)
@@ -2814,9 +2813,14 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       if (action === "on" || action === "enable") {
+        this.settings.antiLink = {
+          ...(this.settings.antiLink || { groupJid: remoteJid, warnings: {} }),
+          enabled: true,
+          groupJid: remoteJid,
+        }
+        await this.saveSettings()
         await reply(
-          `✓ Anti-link is ALWAYS ON\n\n` +
-          `This feature is enabled by default for all groups.\n\n` +
+          `✓ Anti-link enabled for this group.\n\n` +
           `System works like this:\n` +
           `1️⃣ First link detected → Warn user\n` +
           `2️⃣ 3rd violation → Final warning\n` +
@@ -2826,9 +2830,16 @@ Powered by WhatsBot - World of Technology Team`
           `Admins bypass all restrictions.`,
         )
       } else if (action === "off" || action === "disable") {
+        this.settings.antiLink = {
+          ...(this.settings.antiLink || { groupJid: remoteJid, warnings: {} }),
+          enabled: false,
+          groupJid: remoteJid,
+        }
+        await this.saveSettings()
         await reply(
-          `ℹ️ Anti-link is always active globally.\n\n` +
-          `This cannot be disabled. The system protects all groups from:\n` +
+          `✓ Anti-link disabled for this group.\n\n` +
+          `The bot will ignore links until an admin enables it again.\n\n` +
+          `Blocked domains remain available with .antilink list:\n` +
           `• Spam links\n` +
           `• Malicious URLs\n` +
           `• External redirects\n\n` +
@@ -2853,10 +2864,10 @@ Powered by WhatsBot - World of Technology Team`
         )
       } else {
         await reply(
-          `Anti-link Status: ALWAYS ON ✓\n\n` +
-            `Usage: .gantilink <action>\n\n` +
-            `• on - Show active enforcement status\n` +
-            `• off - Show why it can't be disabled\n` +
+          `Anti-link Status: ${this.settings.antiLink?.enabled === true ? "ON" : "OFF"}\n\n` +
+            `Usage: .antilink <action>\n\n` +
+            `• on - Enable enforcement in this group\n` +
+            `• off - Disable enforcement in this group\n` +
             `• list - Show all blocked domains\n` +
             `• status - Show this message`,
         )

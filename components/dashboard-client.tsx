@@ -710,6 +710,19 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   checked={(settings as any).groupWorkEnabled}
                   onChange={(v) => update("groupWorkEnabled" as any, v)}
                 />
+                <Separator />
+                <ToggleRow
+                  icon={ShieldCheck}
+                  label="Group anti-link"
+                  desc="Delete blocked links and warn or remove repeat offenders. Disabled means the bot ignores links."
+                  checked={(settings as any).antiLink?.enabled === true}
+                  onChange={(enabled) =>
+                    update("antiLink" as any, {
+                      ...((settings as any).antiLink || { groupJid: "", warnings: {} }),
+                      enabled,
+                    })
+                  }
+                />
                 {(settings as any).groupWorkEnabled && (
                   <>
                     <Separator />
