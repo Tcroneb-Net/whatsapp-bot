@@ -37,6 +37,23 @@ export function createServer() {
     }
   })
 
+  // Send one uploaded image to every group for a connected session.
+  app.post("/broadcast/group-status", async (req: Request, res: Response) => {
+    try {
+      const number = normalizeNumber(String(req.body?.number || ""))
+      const encoded = String(req.body?.imageBase64 || "")
+      const caption = String(req.body?.caption || "").slice(0, 1024)
+      if (!number || !encoded) return res.status(400).json({ error: "number and imageBase64 are required" })
+      if (encoded.length > 11_000_000) return res.status(413).json({ error: "Image is too large" })
+      const image = Buffer.from(encoded.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, ""), "base64")
+      const result = await manager.broadcastImage(number, image, caption)
+      res.json(result)
+    } catch (err) {
+      logger.error({ err }, "group status broadcast failed")
+      res.status(500).json({ error: (err as Error).message })
+    }
+  })
+
   // Connection status for a number.
   app.get("/status", (req: Request, res: Response) => {
     const number = normalizeNumber(String(req.query.number || ""))

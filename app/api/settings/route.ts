@@ -76,6 +76,7 @@ export async function PATCH(req: Request) {
       key === "antiViewOnce" ||
       key === "aliveEnabled" ||
       key === "pingEnabled" ||
+      key === "pairCommandEnabled" ||
       key === "aiEnabled" ||
       key === "alwaysOnline" ||
       key === "autoTyping" ||

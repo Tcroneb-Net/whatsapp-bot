@@ -128,3 +128,14 @@ export async function getBotStatus(number: string): Promise<{ status: string; co
     connected: boolean
   }>
 }
+
+export async function broadcastGroupStatusImage(
+  number: string,
+  imageBase64: string,
+  caption = "",
+): Promise<{ sent: number; failed: number }> {
+  return engineFetch("/broadcast/group-status", {
+    method: "POST",
+    body: JSON.stringify({ number, imageBase64, caption }),
+  }) as Promise<{ sent: number; failed: number }>
+}

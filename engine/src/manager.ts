@@ -58,6 +58,12 @@ class SessionManager {
     await this.sessions.get(number)?.refreshSettings()
   }
 
+  async broadcastImage(number: string, image: Buffer, caption?: string) {
+    const session = this.sessions.get(number)
+    if (!session) throw new Error("Session not found")
+    return session.broadcastImageToGroups(image, caption)
+  }
+
   async deleteSession(number: string): Promise<void> {
     const session = this.sessions.get(number)
     if (session) {

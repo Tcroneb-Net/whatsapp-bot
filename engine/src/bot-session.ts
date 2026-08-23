@@ -1,4 +1,5 @@
 import { createRequire } from "module"
+import { randomUUID } from "crypto"
 import type {
   WASocket,
   WAMessage,
@@ -484,72 +485,31 @@ export class BotSession {
     return id.includes(":") ? id.split(":")[0] + "@s.whatsapp.net" : id
   }
 
-  // Fetch an image URL into a buffer; returns null on any failure so callers
-  // can gracefully fall back to a text-only message.
+  // Fetch remote or local images with a bounded timeout and payload size.
   private async fetchImage(url: string): Promise<Buffer | null> {
-    if (!url) return null
     try {
-      let fullUrl = url
-      
-      // Handle relative paths
-      if (url.startsWith("/")) {
-        // Try localhost:3000 first (development)
-        try {
-          const res = await fetch(`http://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
-          if (res.ok) {
-            const arr = await res.arrayBuffer()
-            return Buffer.from(arr)
-          }
-        } catch (localErr) {
-          console.log("[v0] Localhost fetch failed, trying alternative methods")
-        }
-        
-        // Try without protocol (might work in some environments)
-        try {
-          const res = await fetch(`https://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
-          if (res.ok) {
-            const arr = await res.arrayBuffer()
-            return Buffer.from(arr)
-          }
-        } catch {
-          // continue to next attempt
-        }
-        
-        // If no localhost, we can't fetch relative URLs without a base
-        console.log("[v0] Cannot fetch relative path:", url, "- localhost not available")
-        return null
-      }
-      
-      // For absolute URLs, fetch directly
-      const res = await fetch(fullUrl, { signal: AbortSignal.timeout(10000) })
-      if (!res.ok) {
-        console.log("[v0] Image fetch failed:", res.status, url)
-        return null
-      }
-      const arr = await res.arrayBuffer()
-      return Buffer.from(arr)
+      const target = /^https?:\/\//i.test(url) ? url : `file://${url}`
+      if (target.startsWith("file://")) return await readFile(url)
+      const res = await fetch(target, {
+        headers: { "User-Agent": "GladiatorUnderground/1.0" },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!res.ok) return null
+      const size = Number(res.headers.get("content-length") || 0)
+      if (size > 10 * 1024 * 1024) return null
+      const data = await res.arrayBuffer()
+      if (data.byteLength > 10 * 1024 * 1024) return null
+      return Buffer.from(data)
     } catch (err) {
-      console.log("[v0] Failed to fetch image:", url, err)
+      logger.debug({ err, url }, "image fetch failed")
       return null
     }
   }
 
-  // Load the banner image buffer for a category. Order of preference:
-  // 1. The user's custom image URL (welcome/menu only).
-  // 2. The bundled local asset file (always available, no network needed).
-  // 3. A remote URL (asset base / default), as a last resort.
   private async loadBanner(category: BannerCategory): Promise<Buffer | null> {
-    if ((category === "welcome" || category === "menu") && this.settings.welcomeImageUrl) {
-      const custom = await this.fetchImage(this.settings.welcomeImageUrl)
-      if (custom) return custom
-    }
     const localPath = bannerFilePath(category)
     if (localPath) {
-      try {
-        return await readFile(localPath)
-      } catch {
-        // fall through to remote
-      }
+      try { return await readFile(localPath) } catch { /* use remote fallback */ }
     }
     return this.fetchImage(bannerUrl(category))
   }
@@ -637,9 +597,9 @@ export class BotSession {
       }
     }
 
-    // --- Anti-link: detect and kick if enabled ---
-    // AntiLink is enabled by default for all groups
-    if (remoteJid.endsWith("@g.us")) {
+    // --- Anti-link: opt-in per bot and group ---
+    // Never inspect or respond to group links unless the dashboard enables it.
+    if (remoteJid.endsWith("@g.us") && this.settings.antiLink?.enabled === true) {
       try {
         await this.handleAntiLink(msg, remoteJid)
       } catch (err) {
@@ -1013,9 +973,7 @@ export class BotSession {
     try {
       // Check if sender is the bot owner (fromMe === true)
       const isOwner = msg.key.fromMe === true
-      console.log("[v0] AntiLink check - isOwner:", isOwner, "fromMe:", msg.key.fromMe)
       if (isOwner) {
-        console.log("[v0] Owner detected - skipping antilink")
         return // Bot owner is completely exempt from antilink
       }
 
@@ -1142,6 +1100,13 @@ export class BotSession {
           break
         case "status":
           await this.cmdStatus(remoteJid, msg)
+          break
+        case "pair":
+          if (this.settings.pairCommandEnabled) {
+            await reply(pairInfoMessage())
+          } else if (isOwner) {
+            await reply(`Pairing is disabled. Enable “Allow .pair requests” in the dashboard first.`)
+          }
           break
         case "menu":
         case "help": {
@@ -1340,8 +1305,9 @@ export class BotSession {
         case "top4top":
           await this.cmdFileUpload(args, remoteJid, reply, msg)
           break
-        case "gstatus":
-          await this.cmdGroupStatus(msg, args, remoteJid, reply)
+      case "gstatus":
+      case "groupstatus":
+        await this.cmdGroupStatus(msg, args, remoteJid, reply)
           break
         case "gaccept":
           await this.cmdAcceptJoinRequests(msg, remoteJid, reply)
@@ -1633,7 +1599,7 @@ export class BotSession {
         return void reply("❌ No music was generated. Please try again.")
       }
 
-      // Send all generated tracks
+      // Send all generated tracks (stream URLs, don't buffer)
       for (let i = 0; i < data.data.tracks.length; i++) {
         const track = data.data.tracks[i]
         const trackNum = i + 1
@@ -1644,14 +1610,14 @@ export class BotSession {
           const caption = `🎵 *${track.title}*\n\nTrack ${trackNum}/${totalTracks}\n📝 Prompt: ${data.data.prompt}\n🏷️ Tags: ${data.data.tags}\n\n@Omegatech-01`
 
           if (track.videoUrl) {
-            // Send video if available
+            // Send video URL (streaming, not buffered)
             await this.sock!.sendMessage(remoteJid, {
               video: { url: track.videoUrl },
               caption: caption,
               mimetype: "video/mp4",
             })
           } else {
-            // Send audio with caption as separate message
+            // Send audio as URL (streaming, not buffered)
             await this.sock!.sendMessage(remoteJid, { text: caption })
             await this.sock!.sendMessage(remoteJid, {
               audio: { url: track.audioUrl },
@@ -1659,7 +1625,7 @@ export class BotSession {
               ptt: false,
             })
 
-            // Send image if available
+            // Send image URL (streaming)
             if (track.imageUrl) {
               await this.sock!.sendMessage(remoteJid, {
                 image: { url: track.imageUrl },
@@ -1668,8 +1634,13 @@ export class BotSession {
             }
           }
 
-          // Small delay between tracks to avoid rate limiting
-          await new Promise(r => setTimeout(r, 1000))
+          // Delay between tracks to avoid rate limiting and give GC time
+          await new Promise(r => setTimeout(r, 1500))
+          
+          // Force garbage collection hint after every 2 tracks
+          if (i % 2 === 0 && global.gc) {
+            global.gc()
+          }
         } catch (err) {
           logger.debug({ err }, `Failed to send track ${trackNum}`)
         }
@@ -2721,6 +2692,26 @@ Powered by WhatsBot - World of Technology Team`
     await clearMongoAuthState(this.number)
   }
 
+  async broadcastImageToGroups(image: Buffer, caption = ""): Promise<{ sent: number; failed: number }> {
+    if (!this.sock || !this.isConnected()) throw new Error("WhatsApp session is not connected")
+    if (!image.length || image.length > 8 * 1024 * 1024) throw new Error("Image must be between 1 byte and 8MB")
+    const groups = await this.sock.groupFetchAllParticipating()
+    const jids = Object.keys(groups)
+    let sent = 0
+    let failed = 0
+    for (const jid of jids) {
+      try {
+        await this.sock.sendMessage(jid, { image, caption })
+        sent++
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      } catch (err) {
+        failed++
+        logger.debug({ err, jid }, "group status broadcast failed")
+      }
+    }
+    return { sent, failed }
+  }
+
   private async cmdGroupStatus(
     msg: WAMessage,
     args: string,
@@ -2842,9 +2833,14 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       if (action === "on" || action === "enable") {
+        this.settings.antiLink = {
+          ...(this.settings.antiLink || { groupJid: remoteJid, warnings: {} }),
+          enabled: true,
+          groupJid: remoteJid,
+        }
+        await this.saveSettings()
         await reply(
-          `✓ Anti-link is ALWAYS ON\n\n` +
-          `This feature is enabled by default for all groups.\n\n` +
+          `✓ Anti-link enabled for this group.\n\n` +
           `System works like this:\n` +
           `1️⃣ First link detected → Warn user\n` +
           `2️⃣ 3rd violation → Final warning\n` +
@@ -2854,9 +2850,16 @@ Powered by WhatsBot - World of Technology Team`
           `Admins bypass all restrictions.`,
         )
       } else if (action === "off" || action === "disable") {
+        this.settings.antiLink = {
+          ...(this.settings.antiLink || { groupJid: remoteJid, warnings: {} }),
+          enabled: false,
+          groupJid: remoteJid,
+        }
+        await this.saveSettings()
         await reply(
-          `ℹ️ Anti-link is always active globally.\n\n` +
-          `This cannot be disabled. The system protects all groups from:\n` +
+          `✓ Anti-link disabled for this group.\n\n` +
+          `The bot will ignore links until an admin enables it again.\n\n` +
+          `Blocked domains remain available with .antilink list:\n` +
           `• Spam links\n` +
           `• Malicious URLs\n` +
           `• External redirects\n\n` +
@@ -2881,10 +2884,10 @@ Powered by WhatsBot - World of Technology Team`
         )
       } else {
         await reply(
-          `Anti-link Status: ALWAYS ON ✓\n\n` +
-            `Usage: .gantilink <action>\n\n` +
-            `• on - Show active enforcement status\n` +
-            `• off - Show why it can't be disabled\n` +
+          `Anti-link Status: ${this.settings.antiLink?.enabled === true ? "ON" : "OFF"}\n\n` +
+            `Usage: .antilink <action>\n\n` +
+            `• on - Enable enforcement in this group\n` +
+            `• off - Disable enforcement in this group\n` +
             `• list - Show all blocked domains\n` +
             `• status - Show this message`,
         )
@@ -3259,6 +3262,7 @@ Powered by WhatsBot - World of Technology Team`
 
     try {
       const url = args.trim()
+      const prankId = randomUUID()
 
       // Validate URL
       try {
@@ -3269,11 +3273,12 @@ Powered by WhatsBot - World of Technology Team`
 
       await reply("⏳ Creating prank session...")
 
-      // Create prank session
+      // Create prank session with a traceable, non-secret reference.
       const createResponse = await fetch("https://coder.nx.kg/api/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, prankId }),
+        signal: AbortSignal.timeout(15000),
       })
 
       if (!createResponse.ok) {
@@ -3291,10 +3296,11 @@ Powered by WhatsBot - World of Technology Team`
       const prankMessage = `🎉 *You've been pranked!* 🎉\n\n` +
         `Click the link below for a fun surprise:\n` +
         `${url}\n\n` +
-        `Session: ${sessionId}`
+        `Session: ${sessionId}\n` +
+        `Reference: ${prankId}`
 
       await this.sock.sendMessage(remoteJid, { text: prankMessage })
-      await reply(`✓ Prank sent! Session ID: ${sessionId}`)
+      await reply(`✓ Prank sent! Session ID: ${sessionId}\nReference: ${prankId}`)
     } catch (err) {
       logger.debug({ err }, "prank command failed")
       await reply("Failed to create prank session.")

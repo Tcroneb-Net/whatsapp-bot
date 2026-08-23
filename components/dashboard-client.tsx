@@ -79,6 +79,9 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [activeTab, setActiveTab] = useState<"settings" | "pro" | "automation">("pro")
+  const [statusImage, setStatusImage] = useState<string>("")
+  const [statusCaption, setStatusCaption] = useState("")
+  const [broadcastingStatus, setBroadcastingStatus] = useState(false)
 
   const EMOJI_SUGGESTIONS = ["❤️", "🔥", "😍", "👍", "🎉", "😂", "🤔", "👏", "🙌", "✨", "💯", "🚀", "😍", "🤩"]
 
@@ -101,6 +104,35 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
     }
 
     update("statusReactEmojis", newEmojis.join(","))
+  }
+
+  function readStatusImage(file: File) {
+    if (!file.type.startsWith("image/")) return toast.error("Choose an image file.")
+    if (file.size > 8 * 1024 * 1024) return toast.error("Image must be 8MB or smaller.")
+    const reader = new FileReader()
+    reader.onload = () => setStatusImage(String(reader.result || ""))
+    reader.readAsDataURL(file)
+  }
+
+  async function broadcastStatus() {
+    if (!statusImage) return toast.error("Choose an image first.")
+    setBroadcastingStatus(true)
+    try {
+      const res = await fetch("/api/group-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: statusImage, caption: statusCaption }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || "Broadcast failed")
+      toast.success(`Sent to ${result.sent} groups${result.failed ? `; ${result.failed} failed` : ""}.`)
+      setStatusImage("")
+      setStatusCaption("")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Broadcast failed")
+    } finally {
+      setBroadcastingStatus(false)
+    }
   }
 
   async function save() {
@@ -189,6 +221,33 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-8">
         {/* Dashboard Banner */}
         <DashboardBanner />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ImageIcon className="size-5" /> Group status broadcast</CardTitle>
+            <CardDescription>Upload one image and send it once to every group connected to this bot.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Input type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && readStatusImage(event.target.files[0])} />
+            {statusImage && <img src={statusImage} alt="Selected group status preview" className="max-h-56 rounded-lg object-contain" />}
+            <Textarea value={statusCaption} onChange={(event) => setStatusCaption(event.target.value)} placeholder="Optional caption" maxLength={1024} />
+            <Button onClick={broadcastStatus} disabled={!statusImage || broadcastingStatus} className="w-full sm:w-fit">
+              {broadcastingStatus ? <Loader2 className="size-4 animate-spin" /> : <ImageIcon className="size-4" />}
+              {broadcastingStatus ? "Sending…" : "Send once to all groups"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <a href="https://www.facebook.com/share/1DTypxAWBQ/" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
+            <p className="font-semibold">Gladiator Underground on Facebook</p>
+            <p className="text-sm text-muted-foreground">Follow the official page for announcements.</p>
+          </a>
+          <a href="https://whatsapp.com/channel/0029Vb6flDp4yltRj3W6NU0z" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
+            <p className="font-semibold">WhatsApp updates channel</p>
+            <p className="text-sm text-muted-foreground">Get the latest Gladiator Underground updates.</p>
+          </a>
+        </div>
 
         {/* Tab Navigation */}
         <div className="flex gap-2 border-b border-border/50 overflow-x-auto">
@@ -523,6 +582,14 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   checked={settings.pingEnabled}
                   onChange={(v) => update("pingEnabled", v)}
                 />
+                <Separator />
+                <ToggleRow
+                  icon={Lock}
+                  label="Allow .pair requests"
+                  desc="Allow users to request WhatsApp pairing through this bot."
+                  checked={settings.pairCommandEnabled}
+                  onChange={(v) => update("pairCommandEnabled", v)}
+                />
               </CardContent>
             </Card>
 
@@ -690,6 +757,19 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   desc="Automatically count messages and lock group at threshold."
                   checked={(settings as any).groupWorkEnabled}
                   onChange={(v) => update("groupWorkEnabled" as any, v)}
+                />
+                <Separator />
+                <ToggleRow
+                  icon={ShieldCheck}
+                  label="Group anti-link"
+                  desc="Delete blocked links and warn or remove repeat offenders. Disabled means the bot ignores links."
+                  checked={(settings as any).antiLink?.enabled === true}
+                  onChange={(enabled) =>
+                    update("antiLink" as any, {
+                      ...((settings as any).antiLink || { groupJid: "", warnings: {} }),
+                      enabled,
+                    })
+                  }
                 />
                 {(settings as any).groupWorkEnabled && (
                   <>

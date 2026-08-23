@@ -17,6 +17,8 @@ export interface BotSettings {
   aliveEnabled: boolean
   // Respond to .ping command.
   pingEnabled: boolean
+  // Allow public users to request pairing instructions/code.
+  pairCommandEnabled: boolean
   // Command prefix (e.g. "." or "!").
   prefix: string
   // Enable AI / download / search commands (powered by Hostify API).
@@ -89,6 +91,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   antiViewOnce: true,
   aliveEnabled: true,
   pingEnabled: true,
+  pairCommandEnabled: false,
   prefix: ".",
   aiEnabled: true,
   welcomeImageUrl: "",
@@ -140,6 +143,7 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "antiViewOnce",
   "aliveEnabled",
   "pingEnabled",
+  "pairCommandEnabled",
   "prefix",
   "aiEnabled",
   "welcomeImageUrl",
