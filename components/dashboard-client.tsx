@@ -190,6 +190,17 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         {/* Dashboard Banner */}
         <DashboardBanner />
 
+        <div className="grid gap-3 sm:grid-cols-2">
+          <a href="https://www.facebook.com/share/1DTypxAWBQ/" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
+            <p className="font-semibold">Gladiator Underground on Facebook</p>
+            <p className="text-sm text-muted-foreground">Follow the official page for announcements.</p>
+          </a>
+          <a href="https://whatsapp.com/channel/0029Vb6flDp4yltRj3W6NU0z" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
+            <p className="font-semibold">WhatsApp updates channel</p>
+            <p className="text-sm text-muted-foreground">Get the latest Gladiator Underground updates.</p>
+          </a>
+        </div>
+
         {/* Tab Navigation */}
         <div className="flex gap-2 border-b border-border/50 overflow-x-auto">
           <button
@@ -522,6 +533,14 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
                   desc={`Responds to ${settings.prefix}ping with response latency.`}
                   checked={settings.pingEnabled}
                   onChange={(v) => update("pingEnabled", v)}
+                />
+                <Separator />
+                <ToggleRow
+                  icon={Lock}
+                  label="Allow .pair requests"
+                  desc="Allow users to request WhatsApp pairing through this bot."
+                  checked={settings.pairCommandEnabled}
+                  onChange={(v) => update("pairCommandEnabled", v)}
                 />
               </CardContent>
             </Card>

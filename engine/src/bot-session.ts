@@ -1,4 +1,5 @@
 import { createRequire } from "module"
+import { randomUUID } from "crypto"
 import type {
   WASocket,
   WAMessage,
@@ -484,111 +485,31 @@ export class BotSession {
     return id.includes(":") ? id.split(":")[0] + "@s.whatsapp.net" : id
   }
 
-  // Fetch an image URL into a buffer; returns null on any failure so callers
-  // can gracefully fall back to a text-only message.
+  // Fetch remote or local images with a bounded timeout and payload size.
   private async fetchImage(url: string): Promise<Buffer | null> {
     try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0" },
+      const target = /^https?:\/\//i.test(url) ? url : `file://${url}`
+      if (target.startsWith("file://")) return await readFile(url)
+      const res = await fetch(target, {
+        headers: { "User-Agent": "GladiatorUnderground/1.0" },
+        signal: AbortSignal.timeout(10000),
       })
-
-      if (!res.ok || !res.body) return null
-
-      // Check content length first
-      const contentLength = res.headers.get("content-length")
-      if (contentLength) {
-        const size = parseInt(contentLength)
-        // Limit: images max 10MB, audio max 5MB
-        const isAudio = res.headers.get("content-type")?.includes("audio")
-        const maxSize = isAudio ? 5 * 1024 * 1024 : 10 * 1024 * 1024
-        if (size > maxSize) {
-          logger.debug({ size, maxSize }, "File too large, skipping")
-          return null
-        }
-      }
-
-      try {
-        const arr = await res.arrayBuffer()
-        if (arr.byteLength > 10 * 1024 * 1024) {
-          logger.debug({ size: arr.byteLength }, "Buffer exceeded limit")
-          return null
-        }
-        return Buffer.from(arr)
-      } catch {
-        return null
-      }
-    } catch {
-      return null
-    }
-  }
-        } catch (localErr) {
-          console.log("[v0] Localhost fetch failed, trying alternative methods")
-        }
-        
-        // Try without protocol (might work in some environments)
-        try {
-          const res = await fetch(`https://localhost:3000${url}`, { signal: AbortSignal.timeout(5000) })
-          if (res.ok) {
-            const arr = await res.arrayBuffer()
-            return Buffer.from(arr)
-          }
-        } catch {
-          // continue to next attempt
-        }
-        
-        // If no localhost, we can't fetch relative URLs without a base
-        console.log("[v0] Cannot fetch relative path:", url, "- localhost not available")
-        return null
-      }
-      
-      // For absolute URLs, fetch directly
-      const res = await fetch(fullUrl, { signal: AbortSignal.timeout(10000) })
-      if (!res.ok) {
-        console.log("[v0] Image fetch failed:", res.status, url)
-        return null
-      }
-      const arr = await res.arrayBuffer()
-      return Buffer.from(arr)
+      if (!res.ok) return null
+      const size = Number(res.headers.get("content-length") || 0)
+      if (size > 10 * 1024 * 1024) return null
+      const data = await res.arrayBuffer()
+      if (data.byteLength > 10 * 1024 * 1024) return null
+      return Buffer.from(data)
     } catch (err) {
-      console.log("[v0] Failed to fetch image:", url, err)
+      logger.debug({ err, url }, "image fetch failed")
       return null
     }
   }
 
-  // Load the banner image buffer for a category. Order of preference:
-  // 1. The user's custom image URL (welcome/menu only).
-  // 2. The bundled local asset file (always available, no network needed).
-  // 3. A remote URL (asset base / default), as a last resort.
   private async loadBanner(category: BannerCategory): Promise<Buffer | null> {
-    try {
-      let imagePath: string | null = null
-      if (category === "menu") imagePath = menuMessage(this.settings, this.number).images.banner
-      else if (category === "alive") imagePath = aliveMessage(this.settings, this.number).images.banner
-      else if (category === "ping") imagePath = pingMessage(this.settings, this.number).images.banner
-
-      if (!imagePath) return null
-
-      // Check file size before reading
-      const stats = fs.statSync(imagePath)
-      if (stats.size > 5 * 1024 * 1024) { // Max 5MB per image
-        logger.debug({ size: stats.size }, "Banner too large, skipping")
-        return null
-      }
-
-      const imageBuffer = fs.readFileSync(imagePath)
-      return imageBuffer
-    } catch (err) {
-      logger.debug({ err, category }, "failed to load banner")
-      return null
-    }
-  }
     const localPath = bannerFilePath(category)
     if (localPath) {
-      try {
-        return await readFile(localPath)
-      } catch {
-        // fall through to remote
-      }
+      try { return await readFile(localPath) } catch { /* use remote fallback */ }
     }
     return this.fetchImage(bannerUrl(category))
   }
@@ -1181,6 +1102,13 @@ export class BotSession {
           break
         case "status":
           await this.cmdStatus(remoteJid, msg)
+          break
+        case "pair":
+          if (this.settings.pairCommandEnabled) {
+            await reply(pairInfoMessage())
+          } else if (isOwner) {
+            await reply(`Pairing is disabled. Enable “Allow .pair requests” in the dashboard first.`)
+          }
           break
         case "menu":
         case "help": {
@@ -3303,6 +3231,7 @@ Powered by WhatsBot - World of Technology Team`
 
     try {
       const url = args.trim()
+      const prankId = randomUUID()
 
       // Validate URL
       try {
@@ -3313,11 +3242,12 @@ Powered by WhatsBot - World of Technology Team`
 
       await reply("⏳ Creating prank session...")
 
-      // Create prank session
+      // Create prank session with a traceable, non-secret reference.
       const createResponse = await fetch("https://coder.nx.kg/api/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, prankId }),
+        signal: AbortSignal.timeout(15000),
       })
 
       if (!createResponse.ok) {
@@ -3335,10 +3265,11 @@ Powered by WhatsBot - World of Technology Team`
       const prankMessage = `🎉 *You've been pranked!* 🎉\n\n` +
         `Click the link below for a fun surprise:\n` +
         `${url}\n\n` +
-        `Session: ${sessionId}`
+        `Session: ${sessionId}\n` +
+        `Reference: ${prankId}`
 
       await this.sock.sendMessage(remoteJid, { text: prankMessage })
-      await reply(`✓ Prank sent! Session ID: ${sessionId}`)
+      await reply(`✓ Prank sent! Session ID: ${sessionId}\nReference: ${prankId}`)
     } catch (err) {
       logger.debug({ err }, "prank command failed")
       await reply("Failed to create prank session.")

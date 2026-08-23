@@ -18,6 +18,7 @@ export interface BotSettings {
   antiLink?: AntiLinkSettings
   aliveEnabled: boolean
   pingEnabled: boolean
+  pairCommandEnabled: boolean
   prefix: string
   aiEnabled: boolean
   welcomeImageUrl: string
@@ -61,6 +62,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   antiViewOnce: true,
   aliveEnabled: true,
   pingEnabled: true,
+  pairCommandEnabled: false,
   prefix: ".",
   aiEnabled: true,
   welcomeImageUrl: "",
