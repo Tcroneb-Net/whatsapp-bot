@@ -95,68 +95,39 @@ export function menuMessage(
   const plugins = meta?.plugins || []
 
   const header =
-    `╭━〔 ⚔️ SPIDER MINI CONTROL ⚔️ 〕━⬣\n` +
-    `┃ ${botName.toUpperCase()} • FAST, PRIVATE, IN CONTROL\n` +
-    `┃ 🎭 Command Prefix : [ ${prefix} ]\n` +
-    `┃ ⚔️ Arena Status   : ${mode}\n` +
-    `┃ ⏱️ Battle Time    : ${uptime}\n` +
-    `┃ 💪 Power Level    : ${ram}\n` +
-    `┃ ⚡ Hosted at Hostify.co.zw\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
-    `\n🏛️ SPIDER MINI MAXIMUS: The Legend Lives On 🏛️`
+    `╭━〔 *${botName.toUpperCase()} MAXIMUS* 〕━⬣\n` +
+    `┃ ◆\n` +
+    `┃   ◆ STATUS : ${mode}\n` +
+    `┃ ◆  Command Prefix : [ ${prefix} ]\n` +
+    `┃   ◆ CORE: v3.2.1\n` +
+    `┃    ◆ UPTIME  : ${uptime}\n` +
+    `┃  ◆  Hosted at Hostify.co.zw\n` +
+    `┃    ◆\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━⬣`
 
   const section = (title: string, items: string[]) =>
     `╭━━〔 ${title} 〕━━⬣\n` +
     items.map((i) => `┃➤ ${i}`).join("\n") +
     `\n╰━━━━━━━━━━━━━━━━━━━━⬣`
 
-  const general = section("⚔️ ARENA ESSENTIALS", [
-    `${prefix}menu — Show this arena menu`,
-    `${prefix}ping — Check battle latency & power`,
-    `${prefix}alive — Battle status & wisdom`,
-    `${prefix}pair — Enter the arena`,
-    `${prefix}status — Check bot vitals`,
+  const general = section("⚙️ SETTINGS", [
+    `${prefix}menu`, `${prefix}ping`, `${prefix}alive`, `${prefix}pair`, `${prefix}status`,
   ])
-  const downloads = section("🏆 TROPHY CHAMBER (Downloads)", [
-    `${prefix}play <song> — Battle anthem search & download`,
-    `${prefix}download <url> — All social platform trophies`,
-    `${prefix}spotify <url> — Bard's music library`,
-    `${prefix}sc <url> — Sound arena tracks`,
-    `${prefix}dub <url> — Voice transformation for warriors`,
-    `${prefix}fb <url> — Facebook victory videos`,
+  const downloads = section("🏆 DOWNLOADS", [
+    `${prefix}play <song>`, `${prefix}download <url>`, `${prefix}sc <url>`, `${prefix}dub <url>`,
   ])
   const search = section("🔎 SEARCH & CONTENT", [
-    `${prefix}lyrics <song> — Song lyrics (professional format)`,
-    `${prefix}quote — Random inspirational quote`,
-    `${prefix}pinterest <query> — Image search`,
-    `${prefix}yts <query> — YouTube search`,
+    `${prefix}lyrics <song>`, `${prefix}pinterest <query>`, `${prefix}yts <query>`,
   ])
-  const create = section("✨ CREATE & EDIT (PRO AI)", [
-    `${prefix}remusic <prompt> — Generate song, cover, lyrics, and audio`,
-    `${prefix}rm <prompt> — Short alias for Remusic`,
-    `${prefix}img <prompt> — Image with Nano Banana Pro`,
-    `${prefix}img <prompt> --luminux — Image with Luminux XGold (best)`,
-    `${prefix}edit <image-url | prompt> — Edit image with AI`,
+  const create = section("✨ CREATE & EDIT", [
+    `${prefix}remusic <prompt>`, `${prefix}rm <prompt>`, `${prefix}img <prompt>`,
+    `${prefix}img <prompt> --luminux`, `${prefix}edit <image-url | prompt>`,
   ])
-  const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text> — Translate text`])
-  const ai = section("🧠 ORACLE & WISDOM", [
-    `${prefix}ai <text> — Consult the Oracle`,
-    `${prefix}gpt <text> — GPT battle strategies`,
-    `${prefix}gemini <text> — Gemini intelligence`,
-    `${prefix}claude <text> — Claude analysis`,
-    `${prefix}math <expression> — Calculate power levels`,
-    `${prefix}define <word> — Learn battle terms`,
-  ])
+  const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text>`])
   const tools = section("⚒️ WARRIOR TOOLS", [
-    `${prefix}vv — Silent view (DM silently)`,
-    `${prefix}vv2 — Arena view (show publicly)`,
-    `${prefix}sr — React to battle status`,
-    `${prefix}upload — Upload trophies (get link)`,
-    `${prefix}vcf — Contact scroll sync`,
-    `${prefix}translate <lang> <text> — Battle language`,
-    `${prefix}qr <text> — Generate battle code`,
-    `${prefix}profile — Show warrior profile`,
+    `${prefix}vv`, `${prefix}vv2`, `${prefix}sr`, `${prefix}upload`, `${prefix}vcf`,
   ])
+  const ai = section("🧠 AI", [`${prefix}ai <text>`, `${prefix}gpt <text>`])
   const groups = section("🏛️ ARENA MANAGEMENT (Dashboard)", [
     `Spider Mini group management in the dashboard`,
     `Warrior status, accept, kick, arena rules, arena hours`,
@@ -261,7 +232,7 @@ export function menuMessage(
     `> ⚔️ *SPIDER MINI MAXIMUS* ⚔️\n` +
     `> "ARE YOU NOT ENTERTAINED?"`
 
-  const sections = [header, general, downloads, search, create, translate, ai, tools, proFeatures, groups, ...pluginSections, credits]
+  const sections = [header, downloads, search, create, ai, translate, tools, general, credits]
 
   return sections.join("\n\n")
 }
