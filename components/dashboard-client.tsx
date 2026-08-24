@@ -256,7 +256,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
           </a>
           <a href="https://whatsapp.com/channel/0029Vb6flDp4yltRj3W6NU0z" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
             <p className="font-semibold">WhatsApp updates channel</p>
-            <p className="text-sm text-muted-foreground">Get the latest Gladiator Underground updates.</p>
+            <p className="text-sm text-muted-foreground">Get the latest Spider Mini updates.</p>
           </a>
         </div>
 

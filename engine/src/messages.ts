@@ -132,8 +132,8 @@ export function menuMessage(
     `${prefix}yts <query> — YouTube search`,
   ])
   const create = section("✨ CREATE & EDIT (PRO AI)", [
-    `${prefix}suno <prompt> — Generate music with Suno v4 Pro`,
-    `${prefix}music <prompt> — Alias for suno`,
+    `${prefix}remusic <prompt> — Generate song, cover, lyrics, and audio`,
+    `${prefix}rm <prompt> — Short alias for Remusic`,
     `${prefix}img <prompt> — Image with Nano Banana Pro`,
     `${prefix}img <prompt> --luminux — Image with Luminux XGold (best)`,
     `${prefix}edit <image-url | prompt> — Edit image with AI`,
@@ -158,7 +158,7 @@ export function menuMessage(
     `${prefix}profile — Show warrior profile`,
   ])
   const groups = section("🏛️ ARENA MANAGEMENT (Dashboard)", [
-    `⚔️ Full warrior management in Gladiator dashboard`,
+    `Spider Mini group management in the dashboard`,
     `Warrior status, accept, kick, arena rules, arena hours`,
     `Anti-link shield, tag all warriors, spectator control, more`,
   ])
@@ -169,7 +169,7 @@ export function menuMessage(
     `${prefix}password — Change throne password`,
     `${prefix}private — Emperor-only access`,
     `${prefix}public — Open arena access`,
-    `${prefix}prank <url> — Send gladiator prank`,
+    `${prefix}prank <url> — Send Spider Mini prank`,
     `${prefix}status — Check realm statistics`,
   ])
 

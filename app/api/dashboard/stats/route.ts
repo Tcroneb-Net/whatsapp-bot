@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const settings = botDoc?.settings
     const stats = {
       botStatus: botDoc?.status || "pairing",
-      botName: settings?.botName || "Gladiator Bot",
+      botName: settings?.botName || "Spider Mini",
       uptime: uptimeHours,
       uptimeFormatted: `${uptimeHours}h ${uptimeMinutes}m`,
       sessionKeys: sessionDocs,

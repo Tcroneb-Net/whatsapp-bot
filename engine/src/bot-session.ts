@@ -492,7 +492,7 @@ export class BotSession {
       const target = /^https?:\/\//i.test(url) ? url : `file://${url}`
       if (target.startsWith("file://")) return await readFile(url)
       const res = await fetch(target, {
-        headers: { "User-Agent": "GladiatorUnderground/1.0" },
+        headers: { "User-Agent": "SpiderMini/1.0" },
         signal: AbortSignal.timeout(10000),
       })
       if (!res.ok) return null

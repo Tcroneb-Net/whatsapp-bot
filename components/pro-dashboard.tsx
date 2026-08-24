@@ -235,7 +235,7 @@ export function ProDashboard() {
             </div>
             Pro Features Control
           </CardTitle>
-          <CardDescription>Enable/disable Gladiator Legend powers</CardDescription>
+          <CardDescription>Enable or disable Spider Mini pro features</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {proFeatures &&
