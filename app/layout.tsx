@@ -11,9 +11,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'WA Bot Hub — Pair & Control Your WhatsApp Bot',
+  title: 'Spider Mini — WhatsApp Bot Control',
   description:
-    'Pair your number, get an instant dashboard, and control your personal WhatsApp bot: name, auto status view, anti view-once, alive & ping, and more.',
+    'Pair your number, manage Spider Mini, automate groups, generate music, edit images, and control your WhatsApp assistant.',
   generator: 'v0.app',
   icons: {
     icon: [

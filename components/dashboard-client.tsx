@@ -195,11 +195,11 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
-              <Bot className="size-5" />
+            <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl border border-border bg-foreground shadow-lg">
+              <img src="/spider-mini-logo.png" alt="Spider Mini logo" className="size-9 object-contain" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-bold leading-tight">WhatsApp Bot</span>
+              <span className="text-base font-bold leading-tight">Spider Mini</span>
               <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
             </div>
           </div>
@@ -251,7 +251,7 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <a href="https://www.facebook.com/share/1DTypxAWBQ/" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
-            <p className="font-semibold">Gladiator Underground on Facebook</p>
+            <p className="font-semibold">Spider Mini on Facebook</p>
             <p className="text-sm text-muted-foreground">Follow the official page for announcements.</p>
           </a>
           <a href="https://whatsapp.com/channel/0029Vb6flDp4yltRj3W6NU0z" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">

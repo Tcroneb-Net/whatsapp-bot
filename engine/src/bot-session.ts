@@ -2330,7 +2330,7 @@ Powered by WhatsBot - World of Technology Team`
         if (quoted?.imageMessage) {
           try {
             const downloadedData = await downloadMediaMessage(
-              { ...quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || "image/jpeg" } as any,
+              { key: msg.key, message: { imageMessage: { ...quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || "image/jpeg" } } } as WAMessage,
               "buffer",
               {},
               { logger } as any,
@@ -2352,7 +2352,7 @@ Powered by WhatsBot - World of Technology Team`
         if (msgImage) {
           try {
             const downloadedData = await downloadMediaMessage(
-              { ...msgImage, mimetype: msgImage.mimetype || "image/jpeg" } as any,
+              { key: msg.key, message: { imageMessage: { ...msgImage, mimetype: msgImage.mimetype || "image/jpeg" } } } as WAMessage,
               "buffer",
               {},
               { logger } as any,
@@ -2861,8 +2861,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Allow only owner and admins to configure
       if (!isBotOwner && !isAdmin) {
-        console.log("[v0] AntiLink - Permission denied. IsBotOwner:", isBotOwner, "IsAdmin:", isAdmin)
-        return void reply("❌ Only bot owner or group admins can configure anti-link.")
+        return
       }
 
       if (action === "on" || action === "enable") {
@@ -4151,9 +4150,26 @@ Powered by WhatsBot - World of Technology Team`
     }
   }
 
+  private async isSenderGroupAdmin(msg: WAMessage, groupJid: string): Promise<boolean> {
+    if (!this.sock) return false
+    const sender = (msg.key.participant || msg.key.remoteJid || "").split(":")[0]
+    if (!sender) return false
+    const metadata = await this.sock.groupMetadata(groupJid)
+    const participant = metadata.participants.find((item) => item.id.split(":")[0] === sender)
+    return Boolean(participant?.admin)
+  }
+
+  private async isBotGroupAdmin(groupJid: string): Promise<boolean> {
+    if (!this.sock?.user?.id) return false
+    const metadata = await this.sock.groupMetadata(groupJid)
+    const bot = metadata.participants.find((item) => item.id.split(":")[0] === this.sock?.user?.id.split(":")[0])
+    return Boolean(bot?.admin)
+  }
+
   // Group Work: Message counting and locking
   private async handleGroupWorkCounting(msg: WAMessage, groupJid: string): Promise<void> {
     if (!msg.message || msg.key.fromMe) return
+    if (!(await this.isBotGroupAdmin(groupJid))) return
 
     const isLocked = this.isGroupLocked(groupJid)
     if (isLocked) {
@@ -4178,11 +4194,12 @@ Powered by WhatsBot - World of Technology Team`
       tracker.lockedAt = Date.now()
       this.groupWorkTracking.set(groupJid, tracker)
 
-      // Announce lock
-      const lockMsg = `🔒 Group locked after ${tracker.messageCount} messages! Only admins can send messages.`
-      if (this.sock) {
-        await this.sock.sendMessage(groupJid, { text: lockMsg })
-      }
+  // Apply the real WhatsApp announcement setting, then announce it.
+  if (this.sock) {
+    await this.sock.groupSettingUpdate(groupJid, "announcement")
+    const lockMsg = `Group locked after ${tracker.messageCount} messages. Only admins can send messages.`
+    await this.sock.sendMessage(groupJid, { text: lockMsg })
+  }
 
       // Set auto-unlock if enabled
       if (this.settings.groupAutoUnlockMinutes > 0) {
@@ -4211,11 +4228,12 @@ Powered by WhatsBot - World of Technology Team`
     tracker.lockTimer = null
     this.groupWorkTracking.set(groupJid, tracker)
 
-    // Announce unlock
-    try {
-      if (this.sock) {
-        await this.sock.sendMessage(groupJid, { text: "🔓 Group unlocked! Messages can be sent freely again." })
-      }
+  // Restore the normal WhatsApp group setting, then announce unlock.
+  try {
+  if (this.sock) {
+  await this.sock.groupSettingUpdate(groupJid, "not_announcement")
+  await this.sock.sendMessage(groupJid, { text: "Group unlocked. Messages can be sent freely again." })
+  }
     } catch (err) {
       logger.debug({ err }, "failed to announce unlock")
     }
@@ -4228,6 +4246,10 @@ Powered by WhatsBot - World of Technology Team`
       await reply("This command only works in groups.")
       return
     }
+    if (!(await this.isSenderGroupAdmin(msg, remoteJid))) return
+    if (!(await this.isBotGroupAdmin(remoteJid))) return void reply("I need to be a group admin to enable auto-lock.")
+    this.settings.groupWorkEnabled = true
+    await this.saveSettings()
     
     // Initialize or reset group tracking
     const tracker = this.groupWorkTracking.get(remoteJid) || {

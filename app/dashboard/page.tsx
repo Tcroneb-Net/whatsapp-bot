@@ -3,8 +3,8 @@ import { getSession } from "@/lib/auth"
 import { DashboardClient } from "@/components/dashboard-client"
 
 export const metadata = {
-  title: "Gladiator Bot Dashboard",
-  description: "Professional WhatsApp bot management and pro features control",
+  title: "Spider Mini Dashboard",
+  description: "Professional WhatsApp bot management, group automation, music, and media control",
 }
 
 export default async function DashboardPage() {
