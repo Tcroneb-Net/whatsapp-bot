@@ -6,12 +6,6 @@
   "env": {
     "NODE_OPTIONS": "--max-old-space-size=2048 --expose-gc"
   },
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 60,
-      "memory": 2048
-    }
-  },
   "redirects": [],
   "rewrites": [],
   "headers": [

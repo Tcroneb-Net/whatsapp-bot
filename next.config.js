@@ -10,7 +10,7 @@ const nextConfig = {
     ],
   },
   experimental: {
-    optimizePackageImports: ['@radix-ui/react-*'],
+    optimizePackageImports: ['@radix-ui/react-*', 'lucide-react', 'sonner'],
   },
   productionBrowserSourceMaps: false,
   compress: true,
