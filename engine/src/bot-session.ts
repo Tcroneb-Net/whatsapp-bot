@@ -396,8 +396,9 @@ export class BotSession {
         void this.followChannel()
         // Send the rich welcome (with password) once, after pairing.
         void this.sendWelcome()
-        // Apply the always-online presence preference.
+        // Apply the always-online preference; otherwise remain unavailable.
         this.applyPresence()
+        if (!this.settings.alwaysOnline) this.sock?.sendPresenceUpdate("unavailable").catch(() => {})
         // Start periodic settings refresh so dashboard changes sync automatically.
         this.startSettingsRefresh()
         // Promote owner as admin in all groups where bot is admin
@@ -1199,10 +1200,12 @@ export class BotSession {
         case "gpt":
           await this.cmdAi(args, reply)
           break
-        case "suno":
-        case "music":
-          await this.cmdSuno(args, remoteJid, reply)
-          break
+  case "suno":
+  case "music":
+  case "remusic":
+  case "rm":
+  await this.cmdRemusic(args, remoteJid, reply)
+  break
         case "translate":
         case "tr":
           await this.cmdTranslate(args, reply)
@@ -1524,6 +1527,36 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "plugin execution failed")
       await reply("Failed to execute plugin. Please try again.")
+    }
+  }
+
+  private async cmdRemusic(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    const prompt = args.trim().slice(0, 500)
+    if (!prompt) return void reply(`*Remusic Studio*\n\nUsage: .remusic <prompt>\nExample: .rm fast hip-hop with female vocals about resilience\n\nReturns the title, cover art, lyrics, and audio.`)
+    if (!this.sock) return
+    await reply("Remusic is composing your song. Please wait…")
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 180000)
+    try {
+      const params = new URLSearchParams({ action: "generate", prompt, vocal: "Female Vocal" })
+      const res = await fetch(`https://api.omegatech.app/api/ai/Remusicv2?${params}`, { signal: controller.signal })
+      const data = await res.json().catch(() => null) as any
+      if (!res.ok || !data?.success || !Array.isArray(data?.data?.songs)) {
+        return void reply("Remusic could not generate a song right now. Try a shorter, more specific prompt.")
+      }
+      const song = data.data.songs.find((item: any) => item?.status === "success" && item.audio) || data.data.songs[0]
+      if (!song?.audio) return void reply("Remusic returned no playable audio. Please try again.")
+      const title = String(song.title || "Untitled track").slice(0, 120)
+      const lyrics = String(song.lyrics || "Lyrics were not returned.").slice(0, 6000)
+      await this.sock.sendMessage(remoteJid, { text: `*${title}*\n\nPrompt: ${prompt}\nStyle: ${data.data.styles || "Female Vocal"}\n\n*Lyrics*\n${lyrics}` })
+      if (song.image) await this.sock.sendMessage(remoteJid, { image: { url: song.image }, caption: `Cover art — ${title}` })
+      await this.sock.sendMessage(remoteJid, { audio: { url: song.audio }, mimetype: "audio/mpeg", ptt: false })
+      await reply(`Remusic complete: *${title}*\nYour lyrics, cover, and audio are above.`)
+    } catch (err) {
+      logger.debug({ err }, "remusic command failed")
+      await reply("Remusic timed out or is temporarily unavailable. Please try again.")
+    } finally {
+      clearTimeout(timeout)
     }
   }
 

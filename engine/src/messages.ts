@@ -242,7 +242,7 @@ export function menuMessage(
 
   const proFeatures = 
     `╭━━〔 ⚔️ GLADIATOR LEGEND POWERS ⚔️ 〕━━⬣\n` +
-    `┃ 🎵 *Suno v4 Pro Music* — Compose battle anthems\n` +
+    `┃ 🎵 *Remusic Studio* — Prompt lyrics, cover art, and audio\n` +
     `┃ 🎨 *Dual Image AI* — Generate epic visuals\n` +
     `┃ 🤖 *AI Battle Master* — Strategic responses\n` +
     `┃ 📥 *Trophy Collector* — Download all content\n` +

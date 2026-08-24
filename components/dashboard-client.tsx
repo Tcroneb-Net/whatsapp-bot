@@ -191,8 +191,8 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   }[status]
 
   return (
-    <main className="min-h-dvh bg-gradient-to-br from-background via-background to-muted/30">
-      <header className="border-b border-border/50 bg-background/95 backdrop-blur-sm">
+    <main className="min-h-dvh bg-muted/20">
+      <header className="border-b border-border bg-background">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
@@ -221,6 +221,17 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-8">
         {/* Dashboard Banner */}
         <DashboardBanner />
+
+        <Card className="border-primary/20 bg-background">
+          <CardHeader>
+            <CardTitle>Remusic Studio</CardTitle>
+            <CardDescription>Users can generate lyrics, cover art, and a playable song with .remusic, .rm, or .music.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground"><Badge variant="secondary">Legacy API</Badge><Badge variant="secondary">Lyrics</Badge><Badge variant="secondary">Cover art</Badge><Badge variant="secondary">Audio</Badge></div>
+            <p className="text-sm leading-relaxed">Example: <code className="rounded bg-muted px-1.5 py-0.5">.rm fast hip-hop with female vocals about resilience</code></p>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
