@@ -25,10 +25,10 @@ export function welcomeMessage(opts: {
   const status = (on: boolean) => (on ? "ON" : "OFF")
 
   return (
-    `⚔️ *WELCOME TO GLADIATOR ARENA* ⚔️\n` +
+    `SPIDER MINI — WHATSAPP CONTROL\n` +
     `_ARE YOU NOT ENTERTAINED? The legend is born!_\n\n` +
     `${LINE}\n` +
-    `*GLADIATOR REGISTRATION*\n` +
+    `*SPIDER MINI REGISTRATION*\n` +
     `Warrior Number: ${number}\n` +
     (password
       ? `🏛️ Throne Password: *${password}*\n` +
@@ -95,15 +95,15 @@ export function menuMessage(
   const plugins = meta?.plugins || []
 
   const header =
-    `╭━〔 ⚔️ GLADIATOR BOT ARENA ⚔️ 〕━⬣\n` +
-    `┃ ${botName.toUpperCase()} • ARE YOU NOT ENTERTAINED?\n` +
+    `╭━〔 ⚔️ SPIDER MINI CONTROL ⚔️ 〕━⬣\n` +
+    `┃ ${botName.toUpperCase()} • FAST, PRIVATE, IN CONTROL\n` +
     `┃ 🎭 Command Prefix : [ ${prefix} ]\n` +
     `┃ ⚔️ Arena Status   : ${mode}\n` +
     `┃ ⏱️ Battle Time    : ${uptime}\n` +
     `┃ 💪 Power Level    : ${ram}\n` +
     `┃ ⚡ Hosted at Hostify.co.zw\n` +
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
-    `\n🏛️ GLADIATOR MAXIMUS: The Legend Lives On 🏛️`
+    `\n🏛️ SPIDER MINI MAXIMUS: The Legend Lives On 🏛️`
 
   const section = (title: string, items: string[]) =>
     `╭━━〔 ${title} 〕━━⬣\n` +
@@ -132,8 +132,8 @@ export function menuMessage(
     `${prefix}yts <query> — YouTube search`,
   ])
   const create = section("✨ CREATE & EDIT (PRO AI)", [
-    `${prefix}suno <prompt> — Generate music with Suno v4 Pro`,
-    `${prefix}music <prompt> — Alias for suno`,
+    `${prefix}remusic <prompt> — Generate song, cover, lyrics, and audio`,
+    `${prefix}rm <prompt> — Short alias for Remusic`,
     `${prefix}img <prompt> — Image with Nano Banana Pro`,
     `${prefix}img <prompt> --luminux — Image with Luminux XGold (best)`,
     `${prefix}edit <image-url | prompt> — Edit image with AI`,
@@ -158,7 +158,7 @@ export function menuMessage(
     `${prefix}profile — Show warrior profile`,
   ])
   const groups = section("🏛️ ARENA MANAGEMENT (Dashboard)", [
-    `⚔️ Full warrior management in Gladiator dashboard`,
+    `Spider Mini group management in the dashboard`,
     `Warrior status, accept, kick, arena rules, arena hours`,
     `Anti-link shield, tag all warriors, spectator control, more`,
   ])
@@ -169,7 +169,7 @@ export function menuMessage(
     `${prefix}password — Change throne password`,
     `${prefix}private — Emperor-only access`,
     `${prefix}public — Open arena access`,
-    `${prefix}prank <url> — Send gladiator prank`,
+    `${prefix}prank <url> — Send Spider Mini prank`,
     `${prefix}status — Check realm statistics`,
   ])
 
@@ -241,8 +241,8 @@ export function menuMessage(
   }
 
   const proFeatures = 
-    `╭━━〔 ⚔️ GLADIATOR LEGEND POWERS ⚔️ 〕━━⬣\n` +
-    `┃ 🎵 *Suno v4 Pro Music* — Compose battle anthems\n` +
+    `╭━━〔 ⚔️ SPIDER MINI LEGEND POWERS ⚔️ 〕━━⬣\n` +
+    `┃ 🎵 *Remusic Studio* — Prompt lyrics, cover art, and audio\n` +
     `┃ 🎨 *Dual Image AI* — Generate epic visuals\n` +
     `┃ 🤖 *AI Battle Master* — Strategic responses\n` +
     `┃ 📥 *Trophy Collector* — Download all content\n` +
@@ -258,7 +258,7 @@ export function menuMessage(
     `> Powered by ${config.sponsor}\n` +
     `> Join arena: ${config.pairUrl}\n` +
     `╰━━━━━━━━━━━━━━━━━━━━⬣\n` +
-    `> ⚔️ *GLADIATOR MAXIMUS* ⚔️\n` +
+    `> ⚔️ *SPIDER MINI MAXIMUS* ⚔️\n` +
     `> "ARE YOU NOT ENTERTAINED?"`
 
   const sections = [header, general, downloads, search, create, translate, ai, tools, proFeatures, groups, ...pluginSections, credits]

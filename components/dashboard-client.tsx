@@ -191,15 +191,15 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   }[status]
 
   return (
-    <main className="min-h-dvh bg-gradient-to-br from-background via-background to-muted/30">
-      <header className="border-b border-border/50 bg-background/95 backdrop-blur-sm">
+    <main className="min-h-dvh bg-muted/20">
+      <header className="border-b border-border bg-background">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
-              <Bot className="size-5" />
+            <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl border border-border bg-foreground shadow-lg">
+              <img src="/spider-mini-logo.png" alt="Spider Mini logo" className="size-9 object-contain" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-bold leading-tight">WhatsApp Bot</span>
+              <span className="text-base font-bold leading-tight">Spider Mini</span>
               <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
             </div>
           </div>
@@ -222,6 +222,17 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         {/* Dashboard Banner */}
         <DashboardBanner />
 
+        <Card className="border-primary/20 bg-background">
+          <CardHeader>
+            <CardTitle>Remusic Studio</CardTitle>
+            <CardDescription>Users can generate lyrics, cover art, and a playable song with .remusic, .rm, or .music.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground"><Badge variant="secondary">Legacy API</Badge><Badge variant="secondary">Lyrics</Badge><Badge variant="secondary">Cover art</Badge><Badge variant="secondary">Audio</Badge></div>
+            <p className="text-sm leading-relaxed">Example: <code className="rounded bg-muted px-1.5 py-0.5">.rm fast hip-hop with female vocals about resilience</code></p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ImageIcon className="size-5" /> Group status broadcast</CardTitle>
@@ -240,12 +251,12 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <a href="https://www.facebook.com/share/1DTypxAWBQ/" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
-            <p className="font-semibold">Gladiator Underground on Facebook</p>
+            <p className="font-semibold">Spider Mini on Facebook</p>
             <p className="text-sm text-muted-foreground">Follow the official page for announcements.</p>
           </a>
           <a href="https://whatsapp.com/channel/0029Vb6flDp4yltRj3W6NU0z" target="_blank" rel="noreferrer" className="rounded-lg border border-border/80 p-4 transition-colors hover:bg-muted/50">
             <p className="font-semibold">WhatsApp updates channel</p>
-            <p className="text-sm text-muted-foreground">Get the latest Gladiator Underground updates.</p>
+            <p className="text-sm text-muted-foreground">Get the latest Spider Mini updates.</p>
           </a>
         </div>
 

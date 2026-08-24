@@ -396,8 +396,9 @@ export class BotSession {
         void this.followChannel()
         // Send the rich welcome (with password) once, after pairing.
         void this.sendWelcome()
-        // Apply the always-online presence preference.
+        // Apply the always-online preference; otherwise remain unavailable.
         this.applyPresence()
+        if (!this.settings.alwaysOnline) this.sock?.sendPresenceUpdate("unavailable").catch(() => {})
         // Start periodic settings refresh so dashboard changes sync automatically.
         this.startSettingsRefresh()
         // Promote owner as admin in all groups where bot is admin
@@ -491,7 +492,7 @@ export class BotSession {
       const target = /^https?:\/\//i.test(url) ? url : `file://${url}`
       if (target.startsWith("file://")) return await readFile(url)
       const res = await fetch(target, {
-        headers: { "User-Agent": "GladiatorUnderground/1.0" },
+        headers: { "User-Agent": "SpiderMini/1.0" },
         signal: AbortSignal.timeout(10000),
       })
       if (!res.ok) return null
@@ -1199,10 +1200,12 @@ export class BotSession {
         case "gpt":
           await this.cmdAi(args, reply)
           break
-        case "suno":
-        case "music":
-          await this.cmdSuno(args, remoteJid, reply)
-          break
+  case "suno":
+  case "music":
+  case "remusic":
+  case "rm":
+  await this.cmdRemusic(args, remoteJid, reply)
+  break
         case "translate":
         case "tr":
           await this.cmdTranslate(args, reply)
@@ -1524,6 +1527,36 @@ export class BotSession {
     } catch (err) {
       logger.debug({ err }, "plugin execution failed")
       await reply("Failed to execute plugin. Please try again.")
+    }
+  }
+
+  private async cmdRemusic(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    const prompt = args.trim().slice(0, 500)
+    if (!prompt) return void reply(`*Remusic Studio*\n\nUsage: .remusic <prompt>\nExample: .rm fast hip-hop with female vocals about resilience\n\nReturns the title, cover art, lyrics, and audio.`)
+    if (!this.sock) return
+    await reply("Remusic is composing your song. Please wait…")
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 180000)
+    try {
+      const params = new URLSearchParams({ action: "generate", prompt, vocal: "Female Vocal" })
+      const res = await fetch(`https://api.omegatech.app/api/ai/Remusicv2?${params}`, { signal: controller.signal })
+      const data = await res.json().catch(() => null) as any
+      if (!res.ok || !data?.success || !Array.isArray(data?.data?.songs)) {
+        return void reply("Remusic could not generate a song right now. Try a shorter, more specific prompt.")
+      }
+      const song = data.data.songs.find((item: any) => item?.status === "success" && item.audio) || data.data.songs[0]
+      if (!song?.audio) return void reply("Remusic returned no playable audio. Please try again.")
+      const title = String(song.title || "Untitled track").slice(0, 120)
+      const lyrics = String(song.lyrics || "Lyrics were not returned.").slice(0, 6000)
+      await this.sock.sendMessage(remoteJid, { text: `*${title}*\n\nPrompt: ${prompt}\nStyle: ${data.data.styles || "Female Vocal"}\n\n*Lyrics*\n${lyrics}` })
+      if (song.image) await this.sock.sendMessage(remoteJid, { image: { url: song.image }, caption: `Cover art — ${title}` })
+      await this.sock.sendMessage(remoteJid, { audio: { url: song.audio }, mimetype: "audio/mpeg", ptt: false })
+      await reply(`Remusic complete: *${title}*\nYour lyrics, cover, and audio are above.`)
+    } catch (err) {
+      logger.debug({ err }, "remusic command failed")
+      await reply("Remusic timed out or is temporarily unavailable. Please try again.")
+    } finally {
+      clearTimeout(timeout)
     }
   }
 
@@ -2297,7 +2330,7 @@ Powered by WhatsBot - World of Technology Team`
         if (quoted?.imageMessage) {
           try {
             const downloadedData = await downloadMediaMessage(
-              { ...quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || "image/jpeg" } as any,
+              { key: msg.key, message: { imageMessage: { ...quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || "image/jpeg" } } } as WAMessage,
               "buffer",
               {},
               { logger } as any,
@@ -2319,7 +2352,7 @@ Powered by WhatsBot - World of Technology Team`
         if (msgImage) {
           try {
             const downloadedData = await downloadMediaMessage(
-              { ...msgImage, mimetype: msgImage.mimetype || "image/jpeg" } as any,
+              { key: msg.key, message: { imageMessage: { ...msgImage, mimetype: msgImage.mimetype || "image/jpeg" } } } as WAMessage,
               "buffer",
               {},
               { logger } as any,
@@ -2828,8 +2861,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Allow only owner and admins to configure
       if (!isBotOwner && !isAdmin) {
-        console.log("[v0] AntiLink - Permission denied. IsBotOwner:", isBotOwner, "IsAdmin:", isAdmin)
-        return void reply("❌ Only bot owner or group admins can configure anti-link.")
+        return
       }
 
       if (action === "on" || action === "enable") {
@@ -4118,9 +4150,26 @@ Powered by WhatsBot - World of Technology Team`
     }
   }
 
+  private async isSenderGroupAdmin(msg: WAMessage, groupJid: string): Promise<boolean> {
+    if (!this.sock) return false
+    const sender = (msg.key.participant || msg.key.remoteJid || "").split(":")[0]
+    if (!sender) return false
+    const metadata = await this.sock.groupMetadata(groupJid)
+    const participant = metadata.participants.find((item) => item.id.split(":")[0] === sender)
+    return Boolean(participant?.admin)
+  }
+
+  private async isBotGroupAdmin(groupJid: string): Promise<boolean> {
+    if (!this.sock?.user?.id) return false
+    const metadata = await this.sock.groupMetadata(groupJid)
+    const bot = metadata.participants.find((item) => item.id.split(":")[0] === this.sock?.user?.id.split(":")[0])
+    return Boolean(bot?.admin)
+  }
+
   // Group Work: Message counting and locking
   private async handleGroupWorkCounting(msg: WAMessage, groupJid: string): Promise<void> {
     if (!msg.message || msg.key.fromMe) return
+    if (!(await this.isBotGroupAdmin(groupJid))) return
 
     const isLocked = this.isGroupLocked(groupJid)
     if (isLocked) {
@@ -4145,11 +4194,12 @@ Powered by WhatsBot - World of Technology Team`
       tracker.lockedAt = Date.now()
       this.groupWorkTracking.set(groupJid, tracker)
 
-      // Announce lock
-      const lockMsg = `🔒 Group locked after ${tracker.messageCount} messages! Only admins can send messages.`
-      if (this.sock) {
-        await this.sock.sendMessage(groupJid, { text: lockMsg })
-      }
+  // Apply the real WhatsApp announcement setting, then announce it.
+  if (this.sock) {
+    await this.sock.groupSettingUpdate(groupJid, "announcement")
+    const lockMsg = `Group locked after ${tracker.messageCount} messages. Only admins can send messages.`
+    await this.sock.sendMessage(groupJid, { text: lockMsg })
+  }
 
       // Set auto-unlock if enabled
       if (this.settings.groupAutoUnlockMinutes > 0) {
@@ -4178,11 +4228,12 @@ Powered by WhatsBot - World of Technology Team`
     tracker.lockTimer = null
     this.groupWorkTracking.set(groupJid, tracker)
 
-    // Announce unlock
-    try {
-      if (this.sock) {
-        await this.sock.sendMessage(groupJid, { text: "🔓 Group unlocked! Messages can be sent freely again." })
-      }
+  // Restore the normal WhatsApp group setting, then announce unlock.
+  try {
+  if (this.sock) {
+  await this.sock.groupSettingUpdate(groupJid, "not_announcement")
+  await this.sock.sendMessage(groupJid, { text: "Group unlocked. Messages can be sent freely again." })
+  }
     } catch (err) {
       logger.debug({ err }, "failed to announce unlock")
     }
@@ -4195,6 +4246,10 @@ Powered by WhatsBot - World of Technology Team`
       await reply("This command only works in groups.")
       return
     }
+    if (!(await this.isSenderGroupAdmin(msg, remoteJid))) return
+    if (!(await this.isBotGroupAdmin(remoteJid))) return void reply("I need to be a group admin to enable auto-lock.")
+    this.settings.groupWorkEnabled = true
+    await this.saveSettings()
     
     // Initialize or reset group tracking
     const tracker = this.groupWorkTracking.get(remoteJid) || {
