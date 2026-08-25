@@ -36,8 +36,8 @@ function ensureConfig() {
         ? `ENGINE_URL is not configured for development.\nAdd to .env.development.local: ENGINE_URL=https://whatsbot.hostify.co.zw`
         : `ENGINE_URL is not configured on Vercel.\n` +
           `1. Go to https://vercel.com/tcronebhackx-md/whatsapp-bot/settings/environment-variables\n` +
-          `2. Add ENGINE_URL = https://whatsbot.hostify.co.zw\n` +
-          `3. Add ENGINE_API_KEY = JeCPjsPBuIJnpZEWSCqD0uK89UZBqnV68YkaRojtNei\n` +
+          `2. Add ENGINE_URL for your engine deployment\n` +
+          `3. Add ENGINE_API_KEY matching the engine secret\n` +
           `4. Redeploy the project\n` +
           `5. Make sure to set it for both Production and Preview environments`
     )

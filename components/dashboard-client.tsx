@@ -196,10 +196,10 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl border border-border bg-foreground shadow-lg">
-              <img src="/spider-mini-logo.png" alt="Spider Mini logo" className="size-9 object-contain" />
+              <img src="/spider-mini-maximus-logo.png" alt="Spider Mini Maximus logo" className="size-9 object-contain" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-bold leading-tight">Spider Mini</span>
+              <span className="text-base font-bold leading-tight">{settings.botName || "Spider Mini"}</span>
               <span className="text-xs text-muted-foreground">{formatNumber(initialNumber)}</span>
             </div>
           </div>

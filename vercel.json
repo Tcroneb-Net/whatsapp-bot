@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "devCommand": "next dev",
-  "installCommand": "pnpm install",
+  "installCommand": "pnpm install --frozen-lockfile --filter .",
   "framework": "nextjs",
   "env": {
     "NODE_OPTIONS": "--max-old-space-size=2048 --expose-gc"
