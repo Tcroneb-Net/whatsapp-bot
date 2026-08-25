@@ -71,9 +71,6 @@ importers:
       swr:
         specifier: ^2.4.2
         version: 2.4.2(react@19.2.4)
-      tailwind-merge:
-        specifier: ^3.3.1
-        version: 3.4.0
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.2.0
@@ -1243,9 +1240,6 @@ packages:
     peerDependencies:
       react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  tailwind-merge@3.4.0:
-    resolution: {integrity: sha512-uSaO4gnW+b3Y2aWoWfFpX62vn2sR3skfhbjsEnaBI81WD1wBLlHZe5sWf0AqjksNdYTbGBEd0UasQMT3SNV15g==}
-
   tailwindcss@4.2.0:
     resolution: {integrity: sha512-yYzTZ4++b7fNYxFfpnberEEKu43w44aqDMNM9MHMmcKuCH7lL8jJ4yJ7LGHv7rSwiqM0nkiobF9I6cLlpS2P7Q==}
 
@@ -2367,8 +2361,6 @@ snapshots:
       dequal: 2.0.3
       react: 19.2.4
       use-sync-external-store: 1.6.0(react@19.2.4)
-
-  tailwind-merge@3.4.0: {}
 
   tailwindcss@4.2.0: {}
 
