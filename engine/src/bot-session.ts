@@ -2379,7 +2379,7 @@ Powered by WhatsBot - World of Technology Team`
           if (isImage) {
             try {
               const downloadedData = await downloadMediaMessage(
-                { ...msgDoc, mimetype: msgDoc.mimetype || "image/jpeg" } as any,
+                { key: msg.key, message: { documentMessage: { ...msgDoc, mimetype: msgDoc.mimetype || "image/jpeg" } } } as WAMessage,
                 "buffer",
                 {},
                 { logger } as any,
@@ -2407,7 +2407,7 @@ Powered by WhatsBot - World of Technology Team`
           if (isImage) {
             try {
               const downloadedData = await downloadMediaMessage(
-                { ...quoted.documentMessage, mimetype: quoted.documentMessage.mimetype || "image/jpeg" } as any,
+                { key: msg.key, message: { documentMessage: { ...quoted.documentMessage, mimetype: quoted.documentMessage.mimetype || "image/jpeg" } } } as WAMessage,
                 "buffer",
                 {},
                 { logger } as any,
