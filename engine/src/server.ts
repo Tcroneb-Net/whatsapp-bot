@@ -99,6 +99,7 @@ export function createServer() {
     res.json({
       number,
       connected: session.isConnected?.() ?? false,
+      status: session.isConnected?.() ? "connected" : "pairing",
       settings: session.getSettings(),
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),

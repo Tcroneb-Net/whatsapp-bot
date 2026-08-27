@@ -141,7 +141,15 @@ export class BotSession {
   async loadSettings(): Promise<void> {
     try {
       const doc = await bots().findOne({ number: this.number })
-      this.settings = { ...DEFAULT_SETTINGS, ...doc?.settings }
+      this.settings = {
+        ...DEFAULT_SETTINGS,
+        ...doc?.settings,
+        antiLink: {
+          enabled: doc?.settings?.antiLink?.enabled ?? DEFAULT_SETTINGS.antiLink!.enabled,
+          groupJid: doc?.settings?.antiLink?.groupJid ?? DEFAULT_SETTINGS.antiLink!.groupJid,
+          warnings: doc?.settings?.antiLink?.warnings ?? DEFAULT_SETTINGS.antiLink!.warnings,
+        },
+      }
       logger.debug(
         {
           autoStatusReact: this.settings.autoStatusReact,
@@ -1130,13 +1138,12 @@ export class BotSession {
         case "menu":
         case "help": {
           // Send professional WhatsBot menu animation
-          const proMenuUrl = "./assets/menu-pro.png"
-          const proMenuImg = await this.fetchImage(proMenuUrl)
+          const proMenuImg = await this.loadBanner("menu")
           if (proMenuImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
                 image: proMenuImg,
-                caption: "🤖 *WHATSBOT PRO MENU*\n\nPowered by Hostify • GOAT Messi 10 Mode Active\n\nWorld of Technology 🚀",
+                caption: `🕷️ *${this.settings.botName} PRO MENU*\n\nPowered by Spider Mini Maximus\n\nType ${this.settings.prefix}alive for status or ${this.settings.prefix}ping for latency.`,
               })
             } catch (imgErr) {
               logger.debug({ imgErr }, "failed to send pro menu banner")
@@ -2777,7 +2784,7 @@ Powered by WhatsBot - World of Technology Team`
       const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
 
       // If replying to image/video, set that as group icon
-      if (quoted?.imageMessage) {
+      if (quoted?.imageMessage || quoted?.videoMessage) {
         try {
           const imageData = await downloadMediaMessage(
             { key: msg.key, message: quoted } as WAMessage,

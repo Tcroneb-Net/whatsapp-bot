@@ -27,7 +27,12 @@ export async function POST(req: NextRequest) {
     await bots.updateOne(
       { number },
       {
-        $set: { passwordHash, status: "pairing", updatedAt: now },
+        $set: {
+          passwordHash,
+          status: "pairing",
+          updatedAt: now,
+          "settings.pairCommandEnabled": true,
+        },
         $setOnInsert: {
           number,
           settings: DEFAULT_SETTINGS,

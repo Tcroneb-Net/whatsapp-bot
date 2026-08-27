@@ -86,14 +86,14 @@ export interface BotDoc {
 }
 
 export const DEFAULT_SETTINGS: BotSettings = {
-  botName: "MyBot",
+  botName: "Spider Mini Maximus",
   autoStatusView: true,
   autoStatusReact: true,
   viewOnceMode: "dm",
   antiViewOnce: true,
   aliveEnabled: true,
   pingEnabled: true,
-  pairCommandEnabled: false,
+  pairCommandEnabled: true,
   prefix: ".",
   aiEnabled: true,
   welcomeImageUrl: "",
