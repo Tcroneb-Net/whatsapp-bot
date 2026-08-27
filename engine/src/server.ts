@@ -7,7 +7,9 @@ import { logger } from "./logger.js"
 
 export function createServer() {
   const app = express()
-  app.use(express.json())
+  // Status images are sent as base64 JSON. Keep the limit bounded but above
+  // the dashboard's 8MB decoded-image limit (base64 adds roughly 33%).
+  app.use(express.json({ limit: "16mb" }))
 
   // Simple shared-secret auth between the dashboard and the engine.
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -62,12 +64,14 @@ export function createServer() {
   })
 
   // Tell a live session to reload settings from MongoDB.
-  app.post("/refresh", async (req: Request, res: Response) => {
-    const number = normalizeNumber(String(req.body?.number || ""))
+  const refreshSettings = async (req: Request, res: Response) => {
+    const number = normalizeNumber(String(req.body?.number || req.params?.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
     await manager.refreshSettings(number)
     res.json({ ok: true })
-  })
+  }
+  app.post("/refresh", refreshSettings)
+  app.post("/session/:number/refresh-settings", refreshSettings)
 
   // Log out + wipe stored credentials for a number.
   app.delete("/session", async (req: Request, res: Response) => {
@@ -95,9 +99,18 @@ export function createServer() {
     res.json({
       number,
       connected: session.isConnected?.() ?? false,
+      settings: session.getSettings(),
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     })
+  })
+
+  // Keep oversized request failures machine-readable for the dashboard.
+  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+    if (err?.type === "entity.too.large" || err?.status === 413) {
+      return res.status(413).json({ error: "Image payload is too large. Please use an image under 8MB." })
+    }
+    return next(err)
   })
 
   return app

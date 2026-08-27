@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoStatusReact: true,
   viewOnceMode: "dm",
   antiViewOnce: true,
+  antiLink: { enabled: false, groupJid: "", warnings: {} },
   aliveEnabled: true,
   pingEnabled: true,
   pairCommandEnabled: false,

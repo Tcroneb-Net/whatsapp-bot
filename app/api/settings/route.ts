@@ -107,6 +107,15 @@ export async function PATCH(req: Request) {
       key === "welcomeImageUrl"
     ) {
       if (typeof value === "string") update[`settings.${key}`] = value.slice(0, 500)
+    } else if (key === "antiLink") {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const policy = value as Record<string, unknown>
+        update[`settings.${key}`] = {
+          enabled: policy.enabled === true,
+          groupJid: typeof policy.groupJid === "string" ? policy.groupJid.trim().slice(0, 120) : "",
+          warnings: {},
+        }
+      }
     } else if (key === "antiSpamAction") {
       // Enum validation
       if (value === "warn" || value === "kick") update[`settings.${key}`] = value

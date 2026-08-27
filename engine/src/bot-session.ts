@@ -192,6 +192,16 @@ export class BotSession {
     
     // Re-apply presence in case "always online" was toggled from the dashboard.
     this.applyPresence()
+
+    // Keep the WhatsApp profile name in sync with dashboard identity changes.
+    if (this.sock && this.settings.botName !== oldSettings.botName && this.settings.botName.trim()) {
+      try {
+        await this.sock.updateProfileName(this.settings.botName.trim())
+        logger.info({ number: this.number, botName: this.settings.botName }, "WhatsApp profile name updated")
+      } catch (err) {
+        logger.warn({ number: this.number, err }, "failed to update WhatsApp profile name")
+      }
+    }
   }
 
   // Apply (or remove) the always-online presence keepalive.
@@ -279,6 +289,10 @@ export class BotSession {
     } catch {
       // ignore presence failures
     }
+  }
+
+  getSettings(): BotSettings {
+    return { ...this.settings }
   }
 
   isConnected(): boolean {
@@ -600,7 +614,11 @@ export class BotSession {
 
     // --- Anti-link: opt-in per bot and group ---
     // Never inspect or respond to group links unless the dashboard enables it.
-    if (remoteJid.endsWith("@g.us") && this.settings.antiLink?.enabled === true) {
+    if (
+      remoteJid.endsWith("@g.us") &&
+      this.settings.antiLink?.enabled === true &&
+      (!this.settings.antiLink.groupJid || this.settings.antiLink.groupJid === remoteJid)
+    ) {
       try {
         await this.handleAntiLink(msg, remoteJid)
       } catch (err) {
