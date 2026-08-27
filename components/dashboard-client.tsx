@@ -29,6 +29,7 @@ import {
   Save,
   Lock,
   Smile,
+  MessageSquare,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -946,12 +947,38 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
               <Card className="border-border/80 shadow-sm">
                 <CardHeader>
                   <CardTitle>Automation Center</CardTitle>
-                  <CardDescription>Coming soon - Advanced automation tools</CardDescription>
+                  <CardDescription>Configure group protection and response automations from one place.</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Schedule messages, auto-replies, and advanced automation workflows will be available here.
-                  </p>
+                <CardContent className="flex flex-col gap-5">
+                  <div className="rounded-xl border border-border bg-muted/30 p-4">
+                    <ToggleRow
+                      icon={ShieldCheck}
+                      label="Anti-link protection"
+                      desc="Delete links in the selected group and track repeat offenders."
+                      checked={(settings as any).antiLink?.enabled === true}
+                      onChange={(enabled) => update("antiLink" as any, {
+                        ...((settings as any).antiLink || { groupJid: "", warnings: {} }), enabled,
+                      })}
+                    />
+                    <div className="flex flex-col gap-2 border-t border-border pt-4">
+                      <Label htmlFor="antiLinkGroup">Target group JID</Label>
+                      <Input
+                        id="antiLinkGroup"
+                        placeholder="120363...@g.us"
+                        value={(settings as any).antiLink?.groupJid || ""}
+                        onChange={(event) => update("antiLink" as any, {
+                          ...((settings as any).antiLink || { enabled: false, warnings: {} }),
+                          groupJid: event.target.value,
+                        })}
+                      />
+                      <p className="text-xs text-muted-foreground">Leave empty to apply anti-link protection to every group.</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-4">
+                    <ToggleRow icon={MessageSquare} label="DM auto-replies" desc="Use the configured AI persona for incoming direct messages." checked={settings.autoChatEnabled} onChange={(v) => update("autoChatEnabled", v)} />
+                    <Separator />
+                    <ToggleRow icon={Activity} label="Automatic status actions" desc="Keep status viewing and reactions controlled by your saved bot settings." checked={settings.autoStatusView || settings.autoStatusReact} onChange={(v) => { update("autoStatusView", v); update("autoStatusReact", v) }} />
+                  </div>
                 </CardContent>
               </Card>
             )}

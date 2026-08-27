@@ -59,6 +59,8 @@ export interface BotSettings {
   groupAutoUnlockMinutes: number
   // Whitelist of group JIDs that group work applies to (empty = all groups).
   groupWorkWhitelist: string[]
+  // Group-scoped anti-link policy. Empty groupJid means apply to all groups.
+  antiLink: { enabled: boolean; groupJid: string; warnings: Record<string, number> }
   // Anti-spam: enable spam detection and enforcement.
   antiSpamEnabled: boolean
   // Maximum messages per minute before considering as spam.
@@ -111,6 +113,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   groupWorkThreshold: 50,
   groupAutoUnlockMinutes: 0,
   groupWorkWhitelist: [],
+  antiLink: { enabled: false, groupJid: "", warnings: {} },
   antiSpamEnabled: false,
   antiSpamMessagesPerMinute: 10,
   antiSpamAction: "warn",
@@ -163,6 +166,7 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "groupWorkThreshold",
   "groupAutoUnlockMinutes",
   "groupWorkWhitelist",
+  "antiLink",
   "antiSpamEnabled",
   "antiSpamMessagesPerMinute",
   "antiSpamAction",
