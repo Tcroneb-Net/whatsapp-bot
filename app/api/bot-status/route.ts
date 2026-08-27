@@ -17,7 +17,11 @@ export async function GET() {
   }
 
   // Get dashboard settings (merged with defaults)
-  const dashboardSettings = { ...DEFAULT_SETTINGS, ...bot.settings }
+  const dashboardSettings = {
+    ...DEFAULT_SETTINGS,
+    ...bot.settings,
+    antiLink: { ...DEFAULT_SETTINGS.antiLink, ...(bot.settings?.antiLink || {}) },
+  }
 
   // Try to get live engine status
   let engineStatus: Record<string, unknown> | null = null
@@ -51,8 +55,8 @@ export async function GET() {
 
   return NextResponse.json({
     number: bot.number,
-    status: bot.status,
-    connected: engineStatus?.connected ?? false,
+    status: engineStatus?.connected === true ? "connected" : (bot.status === "connected" ? "disconnected" : bot.status),
+    connected: engineStatus?.connected === true,
     dashboardSettings,
     engineStatus: engineStatus?.settings ?? null,
     sync,
