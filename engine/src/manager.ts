@@ -101,12 +101,16 @@ class SessionManager {
     }
   }
 
-  status(number: string): { status: string; connected: boolean } {
+  async status(number: string): Promise<{ status: string; connected: boolean }> {
     this.touch(number)
-    const session = this.sessions.get(number)
+    let session = this.sessions.get(number)
+    if (!session) {
+      session = await this.startSession(number)
+    }
+    const connected = session.isConnected()
     return {
-      status: session ? (session.isConnected() ? "connected" : "disconnected") : "disconnected",
-      connected: Boolean(session?.isConnected()),
+      status: connected ? "connected" : "pairing",
+      connected,
     }
   }
 }
