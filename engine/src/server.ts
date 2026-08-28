@@ -57,10 +57,15 @@ export function createServer() {
   })
 
   // Connection status for a number.
-  app.get("/status", (req: Request, res: Response) => {
+  app.get("/status", async (req: Request, res: Response) => {
     const number = normalizeNumber(String(req.query.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
-    res.json(manager.status(number))
+    try {
+      res.json(await manager.status(number))
+    } catch (err) {
+      logger.error({ number, err }, "status session wake failed")
+      res.status(500).json({ error: "Could not wake bot session" })
+    }
   })
 
   // Tell a live session to reload settings from MongoDB.
@@ -87,19 +92,17 @@ export function createServer() {
   })
 
   // Get live session status and current settings
-  app.get("/session/:number/status", (req: Request, res: Response) => {
+  app.get("/session/:number/status", async (req: Request, res: Response) => {
     const number = normalizeNumber(String(req.params.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
     
-    const session = manager.get(number)
-    if (!session) {
-      return res.status(404).json({ error: "Session not found" })
-    }
+    const session = await manager.startSession(number)
+    const connected = session.isConnected()
 
     res.json({
       number,
-      connected: session.isConnected?.() ?? false,
-      status: session.isConnected?.() ? "connected" : "pairing",
+      connected,
+      status: connected ? "connected" : "pairing",
       settings: session.getSettings(),
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),

@@ -106,7 +106,7 @@ export async function requestBotStatus(number: string): Promise<Record<string, u
   ensureConfig()
   const { url, key } = getEngineConfig()
   try {
-    const res = await fetch(`${url}/session/${number}/status`, {
+    const res = await fetch(`${url}/session/${encodeURIComponent(number)}/status`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
