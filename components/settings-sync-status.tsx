@@ -38,9 +38,12 @@ export function SettingsSyncStatus() {
   }
 
   useEffect(() => {
-    checkSync()
-    const interval = setInterval(checkSync, 30000) // Check every 30 seconds
-    return () => clearInterval(interval)
+    const initialCheck = window.setTimeout(() => void checkSync(), 0)
+    const interval = window.setInterval(() => void checkSync(), 30000) // Check every 30 seconds
+    return () => {
+      window.clearTimeout(initialCheck)
+      window.clearInterval(interval)
+    }
   }, [])
 
   if (!status) return null
