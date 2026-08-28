@@ -137,6 +137,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "No valid settings to update" }, { status: 400 })
   }
   const bots = await getBots()
+  console.info("[v0] settings persistence", { number: session.number, keys: Object.keys(incoming) })
   const result = await bots.findOneAndUpdate(
     { number: session.number },
     { $set: { settings: nextSettings, updatedAt: new Date() } },

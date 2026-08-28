@@ -7,9 +7,10 @@ import { getBots } from "@/lib/mongodb"
 import { DEFAULT_SETTINGS } from "@/lib/types"
 
 export async function POST(req: NextRequest) {
+  let body: Record<string, unknown> = {}
   try {
-    const body = await req.json().catch(() => ({}))
-    const number = normalizeNumber(body?.number || "")
+    body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+    const number = normalizeNumber(typeof body.number === "string" ? body.number : "")
     if (!number) {
       return NextResponse.json(
         { error: "Please enter a valid phone number with country code." },
@@ -24,20 +25,26 @@ export async function POST(req: NextRequest) {
 
     const bots = await getBots()
     const now = new Date()
+    const existing = await bots.findOne({ number }, { projection: { settings: 1 } })
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...(existing?.settings || {}),
+      pairCommandEnabled: true,
+      antiLink: { ...DEFAULT_SETTINGS.antiLink, ...(existing?.settings?.antiLink || {}) },
+    }
+
+    console.info("[v0] pairing persistence", { number, existing: Boolean(existing) })
     await bots.updateOne(
       { number },
       {
         $set: {
+          number,
           passwordHash,
           status: "pairing",
+          settings,
           updatedAt: now,
-          "settings.pairCommandEnabled": true,
         },
-        $setOnInsert: {
-          number,
-          settings: DEFAULT_SETTINGS,
-          createdAt: now,
-        },
+        $setOnInsert: { createdAt: now },
       },
       { upsert: true },
     )
@@ -46,8 +53,10 @@ export async function POST(req: NextRequest) {
     // it can DM the user once they connect.
     let code: string
     try {
+      console.info("[v0] requesting engine pairing code", { number })
       const result = await requestPairingCode(number, password)
       code = result.code
+      console.info("[v0] engine pairing code received", { number })
     } catch (engineErr) {
       console.error("[v0] Engine pairing error:", engineErr)
       // Check if it's a connection error
@@ -66,7 +75,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ code, number, password })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to request pairing code."
-    console.error("[v0] Pair endpoint error:", message)
+    console.error("[v0] Pair endpoint error:", { message })
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

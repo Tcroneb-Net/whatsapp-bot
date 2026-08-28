@@ -92,7 +92,8 @@ export async function deleteBotSession(number: string): Promise<void> {
 
 export async function refreshBotSettings(number: string): Promise<void> {
   try {
-    await engineFetch(`/session/${number}/refresh-settings`, {
+    console.info("[v0] refreshing engine settings", { number })
+    await engineFetch(`/session/${encodeURIComponent(number)}/refresh-settings`, {
       method: "POST",
     })
   } catch (err) {
