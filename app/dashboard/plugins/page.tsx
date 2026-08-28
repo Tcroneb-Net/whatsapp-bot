@@ -318,7 +318,7 @@ export default function PluginsPage() {
             </div>
             <p>Your API should respond with:</p>
             <div className="rounded-lg bg-background p-3 font-mono text-xs">
-              {"{"} response: "Your reply text" {"}"}
+              {`{ response: "Your reply text" }`}
             </div>
           </CardContent>
         </Card>
