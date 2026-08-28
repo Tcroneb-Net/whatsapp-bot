@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getBots } from "@/lib/mongodb"
 import { getSession } from "@/lib/auth"
-import { requestBotStatus } from "@/lib/engine"
+import { requestBotStatus, refreshBotSettings } from "@/lib/engine"
 import { DEFAULT_SETTINGS } from "@/lib/types"
 
 export async function GET() {
@@ -31,7 +31,28 @@ export async function GET() {
     console.log("[v0] Failed to get engine status:", err instanceof Error ? err.message : String(err))
   }
 
-  // Compare settings
+  // Compare settings. If a live session has stale in-memory settings,
+  // refresh it once and read back the authoritative engine state.
+  if (engineStatus?.settings) {
+    const liveSettings = engineStatus.settings as Record<string, unknown>
+    const stale = Object.keys(dashboardSettings).some((key) =>
+      JSON.stringify(dashboardSettings[key as keyof typeof dashboardSettings]) !==
+      JSON.stringify(liveSettings[key]),
+    )
+    if (stale) {
+      try {
+        console.info("[v0] status detected stale engine settings; refreshing", { number: session.number })
+        await refreshBotSettings(session.number)
+        engineStatus = await requestBotStatus(session.number)
+      } catch (err) {
+        console.warn("[v0] automatic engine settings refresh failed", {
+          number: session.number,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+  }
+
   const sync = {
     isDashboardInSync: true,
     differences: [] as Array<{ key: string; dashboard: unknown; engine: unknown }>,
