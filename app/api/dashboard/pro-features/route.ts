@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDb, bots } from "@/engine/src/db"
+import { DEFAULT_SETTINGS } from "@/lib/types"
 
 export async function GET(req: NextRequest) {
   try {
@@ -89,10 +90,17 @@ export async function PATCH(req: NextRequest) {
     const { feature, enabled } = await req.json()
     await connectDb()
 
-    const updateKey = `settings.${feature}Enabled`
+    const bot = await bots().findOne({ number: session.number })
+    if (!bot) return NextResponse.json({ error: "Bot not found" }, { status: 404 })
+    const settings = { ...DEFAULT_SETTINGS, ...(bot.settings || {}) } as typeof DEFAULT_SETTINGS
+    const allowed = new Set(["alive", "ping", "pairCommand", "ai", "autoChat"])
+    if (!allowed.has(feature) || typeof enabled !== "boolean") {
+      return NextResponse.json({ error: "Invalid feature" }, { status: 400 })
+    }
+    ;(settings as unknown as Record<string, unknown>)[`${feature}Enabled`] = enabled
     await bots().updateOne(
       { number: session.number },
-      { $set: { [updateKey]: enabled } }
+      { $set: { settings, updatedAt: new Date() } },
     )
 
     return NextResponse.json({ success: true, message: `${feature} ${enabled ? "enabled" : "disabled"}` })

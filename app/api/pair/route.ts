@@ -9,8 +9,8 @@ import { DEFAULT_SETTINGS } from "@/lib/types"
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown> = {}
   try {
-    body = await req.json().catch(() => ({}))
-    const number = normalizeNumber(body?.number || "")
+    body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+    const number = normalizeNumber(typeof body.number === "string" ? body.number : "")
     if (!number) {
       return NextResponse.json(
         { error: "Please enter a valid phone number with country code." },
