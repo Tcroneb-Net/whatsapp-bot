@@ -180,6 +180,7 @@ export class BotSession {
 
   // Re-read settings from MongoDB so dashboard changes take effect live.
   async refreshSettings(): Promise<void> {
+    logger.info({ number: this.number }, "refreshing session settings")
     const oldSettings = { ...this.settings }
     await this.loadSettings()
     
@@ -532,7 +533,14 @@ export class BotSession {
   private async loadBanner(category: BannerCategory): Promise<Buffer | null> {
     const localPath = bannerFilePath(category)
     if (localPath) {
-      try { return await readFile(localPath) } catch { /* use remote fallback */ }
+      try {
+        logger.debug({ category, localPath }, "loading local engine asset")
+        return await readFile(localPath)
+      } catch (err) {
+        logger.warn({ category, localPath, err }, "local engine asset could not be read")
+      }
+    } else {
+      logger.debug({ category }, "local engine asset not found; using remote fallback")
     }
     return this.fetchImage(bannerUrl(category))
   }
