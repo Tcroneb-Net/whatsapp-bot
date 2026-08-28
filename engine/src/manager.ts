@@ -5,8 +5,29 @@ import { logger } from "./logger.js"
 // Holds one BotSession per paired number and coordinates lifecycle.
 class SessionManager {
   private sessions = new Map<string, BotSession>()
+  private lastActivity = new Map<string, number>()
+  private readonly idleTimeoutMs = Math.max(5, Number(process.env.IDLE_SESSION_MINUTES || 60)) * 60_000
+  private readonly idleTimer = setInterval(() => void this.stopIdleSessions(), 60_000)
+
+  private touch(number: string): void {
+    this.lastActivity.set(number, Date.now())
+  }
+
+  private async stopIdleSessions(): Promise<void> {
+    const cutoff = Date.now() - this.idleTimeoutMs
+    for (const [number, session] of this.sessions) {
+      if ((this.lastActivity.get(number) || Date.now()) < cutoff) {
+        await session.stop().catch((err) => logger.warn({ number, err }, "idle session stop failed"))
+        this.sessions.delete(number)
+        this.lastActivity.delete(number)
+        await bots().updateOne({ number }, { $set: { status: "disconnected", lastSeen: new Date() } })
+        logger.info({ number }, "stopped idle session; credentials preserved")
+      }
+    }
+  }
 
   get(number: string): BotSession | undefined {
+    this.touch(number)
     return this.sessions.get(number)
   }
 
@@ -32,12 +53,14 @@ class SessionManager {
     if (session) return session
     session = new BotSession(number)
     this.sessions.set(number, session)
+    this.touch(number)
     await session.start()
     return session
   }
 
   // Create (or reuse) a session and return a fresh pairing code for it.
   async requestPairing(number: string, password?: string): Promise<string> {
+    this.touch(number)
     let session = this.sessions.get(number)
     if (!session) {
       session = new BotSession(number)
@@ -55,7 +78,10 @@ class SessionManager {
   }
 
   async refreshSettings(number: string): Promise<void> {
-    await this.sessions.get(number)?.refreshSettings()
+    this.touch(number)
+    let session = this.sessions.get(number)
+    if (!session) session = await this.startSession(number)
+    await session.refreshSettings()
   }
 
   async broadcastImage(number: string, image: Buffer, caption?: string) {
@@ -76,6 +102,7 @@ class SessionManager {
   }
 
   status(number: string): { status: string; connected: boolean } {
+    this.touch(number)
     const session = this.sessions.get(number)
     return {
       status: session ? (session.isConnected() ? "connected" : "disconnected") : "disconnected",

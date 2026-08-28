@@ -36,8 +36,16 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Invalid settings payload" }, { status: 400 })
   }
 
-  // Whitelist + validate each editable field with generic type checking
-  const update: Record<string, unknown> = {}
+  // Build one complete settings document. Updating `settings` and
+  // `settings.*` in the same MongoDB operation causes a path conflict.
+  const current = await getBots().then((collection) => collection.findOne({ number: session.number }))
+  if (!current) {
+    return NextResponse.json({ error: "Bot not found" }, { status: 404 })
+  }
+  const nextSettings = {
+    ...DEFAULT_SETTINGS,
+    ...(current.settings || {}),
+  } as BotSettings
   for (const key of EDITABLE_SETTING_KEYS) {
     if (!(key in incoming)) continue
     const value = incoming[key]
@@ -47,13 +55,13 @@ export async function PATCH(req: Request) {
       if (typeof value !== "string") continue
       const trimmed = value.trim().slice(0, 40)
       if (trimmed.length === 0) continue
-      update[`settings.${key}`] = trimmed
+      nextSettings[key] = trimmed
     } else if (key === "prefix") {
       if (typeof value !== "string") continue
       const p = value.trim().slice(0, 3) || "."
-      update[`settings.${key}`] = p
+      nextSettings[key] = p
     } else if (key === "viewOnceMode") {
-      if (value === "same" || value === "dm") update[`settings.${key}`] = value
+      if (value === "same" || value === "dm") nextSettings[key] = value
     } else if (key === "statusReactEmojis") {
       // Validate emoji list: comma-separated, non-empty
       if (typeof value !== "string") continue
@@ -61,13 +69,13 @@ export async function PATCH(req: Request) {
         .split(",")
         .map((e) => e.trim())
         .filter(Boolean)
-      if (emojis.length > 0) update[`settings.${key}`] = emojis.join(",")
+      if (emojis.length > 0) nextSettings[key] = emojis.join(",")
     } else if (key === "groupWorkWhitelist") {
       // Handle string arrays
       if (Array.isArray(value)) {
-        update[`settings.${key}`] = value.filter(v => typeof v === "string")
+        nextSettings[key] = value.filter(v => typeof v === "string")
       } else if (value === "" || value === null) {
-        update[`settings.${key}`] = []
+        nextSettings[key] = []
       }
     } else if (
       // Boolean fields
@@ -87,7 +95,7 @@ export async function PATCH(req: Request) {
       key === "groupWorkEnabled" ||
       key === "antiSpamEnabled"
     ) {
-      if (typeof value === "boolean") update[`settings.${key}`] = value
+      if (typeof value === "boolean") nextSettings[key] = value
     } else if (
       // Numeric fields
       key === "autoStatusViewDelay" ||
@@ -100,17 +108,17 @@ export async function PATCH(req: Request) {
       key === "antiSpamWarnings"
     ) {
       const num = typeof value === "number" ? value : parseInt(String(value), 10)
-      if (!isNaN(num) && num >= 0) update[`settings.${key}`] = Math.max(0, num)
+      if (!isNaN(num) && num >= 0) nextSettings[key] = Math.max(0, num)
     } else if (
       // String fields
       key === "aiPersona" ||
       key === "welcomeImageUrl"
     ) {
-      if (typeof value === "string") update[`settings.${key}`] = value.slice(0, 500)
+      if (typeof value === "string") nextSettings[key] = value.slice(0, 500)
     } else if (key === "antiLink") {
       if (value && typeof value === "object" && !Array.isArray(value)) {
         const policy = value as Record<string, unknown>
-        update[`settings.${key}`] = {
+        nextSettings[key] = {
           enabled: policy.enabled === true,
           groupJid: typeof policy.groupJid === "string" ? policy.groupJid.trim().slice(0, 120) : "",
           warnings: {},
@@ -118,22 +126,20 @@ export async function PATCH(req: Request) {
       }
     } else if (key === "antiSpamAction") {
       // Enum validation
-      if (value === "warn" || value === "kick") update[`settings.${key}`] = value
+      if (value === "warn" || value === "kick") nextSettings[key] = value
     } else {
       // Fallback: accept boolean or string
-      if (typeof value === "boolean" || typeof value === "string") update[`settings.${key}`] = value
+      if (typeof value === "boolean" || typeof value === "string") (nextSettings as unknown as Record<string, unknown>)[key] = value
     }
   }
 
-  if (Object.keys(update).length === 0) {
+  if (!Object.keys(incoming).some((key) => EDITABLE_SETTING_KEYS.includes(key as keyof BotSettings))) {
     return NextResponse.json({ error: "No valid settings to update" }, { status: 400 })
   }
-  update.updatedAt = new Date()
-
   const bots = await getBots()
   const result = await bots.findOneAndUpdate(
     { number: session.number },
-    { $set: update },
+    { $set: { settings: nextSettings, updatedAt: new Date() } },
     { returnDocument: "after" },
   )
 
@@ -143,9 +149,18 @@ export async function PATCH(req: Request) {
 
   // Best-effort: tell the live bot to reload settings. Never block the
   // dashboard response if the engine is unreachable.
-  refreshBotSettings(session.number).catch(() => {})
+  try {
+    await refreshBotSettings(session.number)
+  } catch {
+    return NextResponse.json({
+      error: "Settings saved, but the bot engine could not refresh. Check ENGINE_URL and ENGINE_API_KEY.",
+      settings: { ...DEFAULT_SETTINGS, ...result.settings },
+      synced: false,
+    }, { status: 502 })
+  }
 
   return NextResponse.json({
     settings: { ...DEFAULT_SETTINGS, ...result.settings },
+    synced: true,
   })
 }
