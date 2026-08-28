@@ -13,7 +13,7 @@ let db: Db | null = null
 
 export async function connectDb(): Promise<Db> {
   if (db) return db
-  const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017"
+  const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_CONNECTION_STRING || "mongodb://localhost:27017"
   const mongoDb = process.env.MONGODB_DB || "whatsapp_bot"
   client = new MongoClient(mongoUri)
   await client.connect()

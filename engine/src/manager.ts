@@ -5,6 +5,7 @@ import { logger } from "./logger.js"
 // Holds one BotSession per paired number and coordinates lifecycle.
 class SessionManager {
   private sessions = new Map<string, BotSession>()
+  private starting = new Map<string, Promise<BotSession>>()
   private lastActivity = new Map<string, number>()
   private readonly idleTimeoutMs = Math.max(5, Number(process.env.IDLE_SESSION_MINUTES || 60)) * 60_000
   private readonly idleTimer = setInterval(() => void this.stopIdleSessions(), 60_000)
@@ -49,13 +50,28 @@ class SessionManager {
   }
 
   async startSession(number: string): Promise<BotSession> {
-    let session = this.sessions.get(number)
-    if (session) return session
-    session = new BotSession(number)
-    this.sessions.set(number, session)
-    this.touch(number)
-    await session.start()
-    return session
+    const existing = this.sessions.get(number)
+    if (existing) return existing
+    const pending = this.starting.get(number)
+    if (pending) return pending
+
+    const promise = (async () => {
+      const session = new BotSession(number)
+      this.sessions.set(number, session)
+      this.touch(number)
+      try {
+        await session.start()
+        return session
+      } catch (err) {
+        this.sessions.delete(number)
+        this.lastActivity.delete(number)
+        throw err
+      } finally {
+        this.starting.delete(number)
+      }
+    })()
+    this.starting.set(number, promise)
+    return promise
   }
 
   // Create (or reuse) a session and return a fresh pairing code for it.

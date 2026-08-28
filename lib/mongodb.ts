@@ -23,7 +23,7 @@ export interface PluginDoc {
   updatedAt: Date
 }
 
-const uri = process.env.MONGODB_URI
+const uri = process.env.MONGODB_URI || process.env.MONGODB_CONNECTION_STRING
 const dbName = process.env.MONGODB_DB || "whatsapp_bot"
 
 if (!uri) {
