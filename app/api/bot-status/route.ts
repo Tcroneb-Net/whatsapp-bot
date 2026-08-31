@@ -78,6 +78,7 @@ export async function GET() {
     number: bot.number,
     status: engineStatus?.connected === true ? "connected" : (bot.status === "connected" ? "disconnected" : bot.status),
     connected: engineStatus?.connected === true,
+    engineReachable: engineStatus !== null,
     dashboardSettings,
     engineStatus: engineStatus?.settings ?? null,
     sync,
