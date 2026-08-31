@@ -121,6 +121,8 @@ class SessionManager {
     this.touch(number)
     let session = this.sessions.get(number)
     if (!session) {
+      const credentials = await authState().findOne({ number, key: "creds" })
+      if (!credentials) return { status: "disconnected", connected: false }
       session = await this.startSession(number)
     }
     const connected = session.isConnected()

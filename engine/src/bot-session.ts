@@ -103,6 +103,7 @@ export class BotSession {
   private saveCreds: (() => Promise<void>) | null = null
   private startTime = Date.now()
   private stopped = false
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private pendingPairingResolve: ((code: string) => void) | null = null
   // Plaintext password held in memory only, to DM once on first connect.
   private pendingWelcomePassword: string | null = null
@@ -444,8 +445,10 @@ export class BotSession {
           return
         }
 
-        if (!this.stopped) {
-          setTimeout(() => {
+        this.sock = null
+        if (!this.stopped && !this.reconnectTimer) {
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null
             void this.start().catch((err) =>
               logger.error({ number: this.number, err }, "reconnect failed"),
             )
@@ -1734,7 +1737,7 @@ export class BotSession {
       `${s.pingEnabled ? "✅" : "❌"} Ping: ${s.pingEnabled ? "ON" : "OFF"}\n` +
       `${s.aiEnabled ? "✅" : "❌"} AI: ${s.aiEnabled ? "ON" : "OFF"}\n` +
       `${s.autoStatusView ? "✅" : "❌"} Status view: ${s.autoStatusView ? "ON" : "OFF"}\n` +
-      `${s.autoStatusReact ? "✅" : "❌"} Status react: ${s.autoStatusReact ? "ON" : "OFF"}\n` +
+      `${s.autoStatusReact ? "✅" : "��"} Status react: ${s.autoStatusReact ? "ON" : "OFF"}\n` +
       `${s.antiViewOnce ? "✅" : "❌"} View-once save: ${s.antiViewOnce ? "ON" : "OFF"}\n` +
       `${s.autoLikeStatus ? "✅" : "❌"} Auto-like status: ${s.autoLikeStatus ? "ON" : "OFF"}\n\n` +
       `*Group Control:*\n` +
@@ -2729,6 +2732,10 @@ Powered by WhatsBot - World of Technology Team`
 
   async stop(): Promise<void> {
     this.stopped = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     this.clearSettingsRefreshTimer()
     this.clearCacheClearTimer()
     try {
