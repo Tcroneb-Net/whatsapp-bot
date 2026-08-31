@@ -657,8 +657,10 @@ export class BotSession {
     // --- Commands ---
     await this.handleCommands(msg, remoteJid)
 
-    // --- AutoChat: Auto-reply to DMs with AI ---
-    if ((this.settings as any).autoChatEnabled && remoteJid.endsWith("@s.whatsapp.net")) {
+    // --- AutoChat: Auto-reply to direct messages with AI ---
+    // Baileys can represent direct chats as @s.whatsapp.net or @lid.
+    const isDirectChat = remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid")
+    if (this.settings.autoChatEnabled === true && isDirectChat) {
       try {
         await this.handleAutoChat(msg, remoteJid)
       } catch (err) {
@@ -1603,7 +1605,7 @@ export class BotSession {
       // No args - show help
       if (!prompt) {
         return void reply(
-          `🎵 *AI Music Creator (Suno v4 Pro)*\n\n` +
+          `🎵 *AI Music Creator (Suno 3)*\n\n` +
             `*Usage:* .suno <your music prompt>\n\n` +
             `*Examples:*\n` +
             `• .suno upbeat 80s synthwave with neon vibes\n` +
@@ -1632,13 +1634,14 @@ export class BotSession {
         text: `🏷️ What *tags/genres* describe this song? (e.g., "Electronic, Synthwave" or reply "skip" for auto)`,
       })
 
-      await reply("🎵 Generating your Suno v4 Pro track... Please wait...")
+      await reply("🎵 Generating your Suno 3 track... Please wait...")
 
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 180000) // 3 min timeout for generation
 
-      // Use the pro Omegatech Suno v4 API
-      const sunoUrl = `https://api.omegatech.app/api/ai/sonu4`
+      // Use the configured Omegatech Suno 3-compatible API endpoint.
+      // Keep the provider boundary in one place so it can be replaced safely.
+      const sunoUrl = `https://api.omegatech.app/api/ai/suno3`
       const params = new URLSearchParams({
         action: "generate",
         prompt: prompt,
@@ -2474,9 +2477,30 @@ Powered by WhatsBot - World of Technology Team`
         return void reply("Please provide a prompt for image editing.\n\nExample: Remove background and add sunset")
       }
 
+      // The editor accepts a remote URL, not a multi-megabyte data URI.
+      // Upload downloaded WhatsApp media first so the request stays within URL limits.
+      if (imageUrl.startsWith("data:")) {
+        const comma = imageUrl.indexOf(",")
+        const encoded = comma >= 0 ? imageUrl.slice(comma + 1) : ""
+        const mediaBuffer = Buffer.from(encoded, "base64")
+        const form = new FormData()
+        form.append("files", new Blob([mediaBuffer], { type: "image/jpeg" }), "edit-image.jpg")
+        const upload = await fetch("https://omegatech-api.dixonomega.tech/api/tools/Top4top-uploader", {
+          method: "POST",
+          body: form,
+          signal: AbortSignal.timeout(60000),
+        })
+        const uploadData = await upload.json().catch(() => null) as any
+        imageUrl = uploadData?.data?.files?.[0]?.url || ""
+        if (!upload.ok || !imageUrl) {
+          logger.warn({ number: this.number, status: upload.status }, "edit media upload failed")
+          return void reply("I could not upload that image for editing. Please try a smaller image or use an image URL.")
+        }
+      }
+
       await reply("🎨 Processing your image with nano-banana2...\n⏳ This takes 30-60 seconds...")
 
-      // Step 1: Submit the image and prompt to start processing
+      // Step 1: Submit the image URL and prompt to start processing
       const submitUrl =
         `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
 
@@ -3033,7 +3057,7 @@ Powered by WhatsBot - World of Technology Team`
       await this.saveSettings()
       await reply("🔇 *AutoChat Disabled*\n\nBot will no longer automatically reply to DMs.")
     } else {
-      const status = ((this.settings as any).autoChatEnabled) ? "ON 🤖" : "OFF 🔇"
+      const status = ((this.settings as any).autoChatEnabled) ? "ON ��" : "OFF 🔇"
       await reply(
         `*AutoChat Status:* ${status}\n\n` +
         `AutoChat uses AI to intelligently respond to all DM messages.\n\n` +

@@ -101,6 +101,14 @@ export function createServer() {
     const number = normalizeNumber(String(req.params.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
     
+    // Wake a persisted session before reporting status. Previously the dashboard
+    // saw "disconnected" until another endpoint happened to start the session.
+    try {
+      await manager.status(number)
+    } catch (err) {
+      logger.error({ number, err }, "status session wake failed")
+      return res.status(503).json({ error: "Could not load bot session" })
+    }
     const session = manager.get(number)
     if (!session) {
       return res.json({
