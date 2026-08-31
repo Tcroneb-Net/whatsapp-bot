@@ -96,7 +96,17 @@ export function createServer() {
     const number = normalizeNumber(String(req.params.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
     
-    const session = await manager.startSession(number)
+    const session = manager.get(number)
+    if (!session) {
+      return res.json({
+        number,
+        connected: false,
+        status: "disconnected",
+        settings: null,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      })
+    }
     const connected = session.isConnected()
 
     res.json({

@@ -38,7 +38,7 @@ function required(name: string, fallback?: string): string {
 
 export const config = {
   port: Number(process.env.PORT || 8080),
-  mongoUri: required("MONGODB_URI"),
+  mongoUri: required("MONGODB_URI", process.env.MONGODB_CONNECTION_STRING),
   mongoDb: process.env.MONGODB_DB || "whatsapp_bot",
   // Shared secret the dashboard sends in the x-api-key header.
   apiKey: required("ENGINE_API_KEY"),
