@@ -405,8 +405,10 @@ export class BotSession {
   private bindEvents(): void {
     if (!this.sock) return
 
-    this.sock.ev.on("creds.update", async () => {
-      await this.saveCreds?.()
+    this.sock.ev.on("creds.update", () => {
+      void this.saveCreds?.().catch((err) =>
+        logger.error({ number: this.number, err }, "credential persistence failed"),
+      )
     })
 
     this.sock.ev.on("connection.update", async (update) => {
@@ -457,14 +459,12 @@ export class BotSession {
       }
     })
 
-    this.sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    this.sock.ev.on("messages.upsert", ({ messages, type }) => {
       if (type !== "notify") return
       for (const msg of messages) {
-        try {
-          await this.handleMessage(msg)
-        } catch (err) {
+        void this.handleMessage(msg).catch((err) => {
           logger.error({ number: this.number, err }, "handleMessage error")
-        }
+        })
       }
     })
   }
