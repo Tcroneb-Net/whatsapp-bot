@@ -111,7 +111,9 @@ export async function requestBotStatus(number: string): Promise<Record<string, u
       headers: {
         "Content-Type": "application/json",
         "x-api-key": key || "",
+        "cache-control": "no-cache",
       },
+      cache: "no-store",
     })
     if (!res.ok) {
       throw new Error(`Status request failed: ${res.status}`)

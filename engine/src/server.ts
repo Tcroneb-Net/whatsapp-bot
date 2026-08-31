@@ -72,8 +72,13 @@ export function createServer() {
   const refreshSettings = async (req: Request, res: Response) => {
     const number = normalizeNumber(String(req.body?.number || req.params?.number || ""))
     if (!number) return res.status(400).json({ error: "Invalid number" })
-    await manager.refreshSettings(number)
-    res.json({ ok: true })
+    try {
+      await manager.refreshSettings(number)
+      res.json({ ok: true, number })
+    } catch (err) {
+      logger.error({ number, err }, "settings refresh failed")
+      res.status(500).json({ error: "Could not refresh bot settings" })
+    }
   }
   app.post("/refresh", refreshSettings)
   app.post("/session/:number/refresh-settings", refreshSettings)
@@ -106,6 +111,12 @@ export function createServer() {
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
       })
+    }
+    try {
+      await session.refreshSettings()
+    } catch (err) {
+      logger.error({ number, err }, "status settings refresh failed")
+      return res.status(503).json({ error: "Bot session settings unavailable" })
     }
     const connected = session.isConnected()
 
