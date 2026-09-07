@@ -114,7 +114,7 @@ export function menuMessage(
     `${prefix}menu`, `${prefix}ping`, `${prefix}alive`, `${prefix}pair`, `${prefix}status`,
   ])
   const downloads = section("🏆 DOWNLOADS", [
-    `${prefix}play <song>`, `${prefix}download <url>`, `${prefix}sc <url>`, `${prefix}dub <url>`,
+    `${prefix}play <song>`, `${prefix}download <url>`, `${prefix}dramadl <dramaId> <episodeId>`, `${prefix}sc <url>`, `${prefix}dub <url>`,
   ])
   const search = section("🔎 SEARCH & CONTENT", [
     `${prefix}lyrics <song>`, `${prefix}pinterest <query>`, `${prefix}yts <query>`,

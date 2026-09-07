@@ -25,10 +25,12 @@ export async function GET() {
 
   // Try to get live engine status
   let engineStatus: Record<string, unknown> | null = null
+  let engineError: string | null = null
   try {
     engineStatus = await requestBotStatus(session.number)
   } catch (err) {
-    console.log("[v0] Failed to get engine status:", err instanceof Error ? err.message : String(err))
+    engineError = err instanceof Error ? err.message : String(err)
+    console.warn("[v0] Failed to get engine status:", engineError)
   }
 
   // Compare settings. If a live session has stale in-memory settings,
@@ -79,6 +81,7 @@ export async function GET() {
     status: engineStatus?.connected === true ? "connected" : (bot.status === "connected" ? "disconnected" : bot.status),
     connected: engineStatus?.connected === true,
     engineReachable: engineStatus !== null,
+    engineError,
     dashboardSettings,
     engineStatus: engineStatus?.settings ?? null,
     sync,

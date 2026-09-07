@@ -1260,6 +1260,7 @@ export class BotSession {
         case "drama":
         case "dramabox":
         case "dramas":
+        case "dramadl":
           await this.cmdDrama(args, remoteJid, reply)
           break
         case "yts":
@@ -1329,9 +1330,6 @@ export class BotSession {
         case "fbdl":
         case "fbv":
           await this.cmdFacebookDownload(args, remoteJid, reply)
-          break
-        case "download":
-          await this.cmdDownloadSearchResult(args, remoteJid, reply)
           break
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
@@ -2082,9 +2080,9 @@ export class BotSession {
       category: `${base}/category?id=${encodeURIComponent(query)}&page=1`,
     }
     if (action === "help") {
-      return void reply("Drama commands:\n.dramabox\n.dramabox search <keyword>\n.dramabox detail <id>\n.dramabox stream <dramaId> <chapterId>\n.dramabox category <id>")
+      return void reply("Drama commands:\n.dramabox\n.dramabox search <keyword>\n.dramabox detail <id>\n.dramabox stream <dramaId> <chapterId>\n.dramadl <dramaId> <chapterId>\n.dramabox category <id>")
     }
-    if (action === "stream") {
+    if (action === "download" || action === "stream") {
       const [dramaId, chapterId] = rest
       if (!dramaId || !chapterId) return void reply("Use .dramabox stream <dramaId> <chapterId>.")
       try {
@@ -2092,7 +2090,7 @@ export class BotSession {
         const data = await response.json().catch(() => null) as any
         const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.url || data?.videoUrl
         if (!response.ok || !streamUrl) return void reply("That episode is not available right now.")
-        await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/player/${encodeURIComponent(dramaId)}/${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
+        await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
         return
       } catch (error) {
         logger.warn({ error, remoteJid, action }, "drama stream failed")
@@ -2111,7 +2109,7 @@ export class BotSession {
         const list = Array.isArray(results) ? results.slice(0, 8) : []
         if (!list.length) return void reply("No dramas found.")
         const text = list.map((item: any, index: number) => {
-          const player = `https://zimbox.top.co.zw/player/${item.id}/${item.chapterId || "latest"}`
+          const player = `https://zimbox.top.co.zw/?drama=${encodeURIComponent(item.id)}&episode=${encodeURIComponent(item.chapterId || "latest")}`
           return `${index + 1}. ${item.title || "Untitled"}\nEpisodes: ${item.episodes || "?"} · ${item.genres?.join(", ") || "Drama"}\n${item.synopsis ? item.synopsis.slice(0, 180) : ""}\nPlayer: ${player}\nStream: .dramabox stream ${item.id} ${item.chapterId || ""}`
         }).join("\n\n")
         await this.sock.sendMessage(remoteJid, { text: `DramaBox ${action}\n\n${text}` })
@@ -2121,7 +2119,7 @@ export class BotSession {
         return
       }
       const item = data?.data || data
-      await reply(`DramaBox detail\n\n${item?.title || "Drama"}\n${item?.synopsis || ""}\nEpisodes: ${item?.episodes || "?"}\nPlayer: https://zimbox.top.co.zw/player/${item?.id || query}/${item?.chapterId || "latest"}`)
+      await reply(`DramaBox detail\n\n${item?.title || "Drama"}\n${item?.synopsis || ""}\nEpisodes: ${item?.episodes || "?"}\nPlayer: https://zimbox.top.co.zw/?drama=${encodeURIComponent(item?.id || query)}&episode=${encodeURIComponent(item?.chapterId || "latest")}`)
     } catch (error) {
       logger.warn({ error, remoteJid, action }, "drama command failed")
       await reply("Drama service timed out. Please try again shortly.")
