@@ -223,14 +223,27 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
         {/* Dashboard Banner */}
         <DashboardBanner />
 
-        <Card className="border-primary/20 bg-background">
-          <CardHeader>
-            <CardTitle>Remusic Studio</CardTitle>
-            <CardDescription>Users can generate lyrics, cover art, and a playable song with .remusic, .rm, or .music.</CardDescription>
+        <Card className="overflow-hidden border-primary/20 bg-background shadow-sm">
+          <CardHeader className="border-b border-border/60 bg-primary/[0.04]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Command center</CardTitle>
+                <CardDescription>Live bot capabilities powered by the connected engine.</CardDescription>
+              </div>
+              <Badge variant="outline" className="border-primary/30 text-primary">Engine-ready</Badge>
+            </div>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground"><Badge variant="secondary">Legacy API</Badge><Badge variant="secondary">Lyrics</Badge><Badge variant="secondary">Cover art</Badge><Badge variant="secondary">Audio</Badge></div>
-            <p className="text-sm leading-relaxed">Example: <code className="rounded bg-muted px-1.5 py-0.5">.rm fast hip-hop with female vocals about resilience</code></p>
+          <CardContent className="grid gap-3 pt-5 sm:grid-cols-2">
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+              <p className="font-semibold">DramaBox</p>
+              <p className="mt-1 text-sm text-muted-foreground">Browse, search, inspect episodes, and stream free episodes.</p>
+              <code className="mt-3 block text-xs text-primary">.dramabox search love</code>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+              <p className="font-semibold">Media tools</p>
+              <p className="mt-1 text-sm text-muted-foreground">View-once recovery, image editing, uploads, and music.</p>
+              <code className="mt-3 block text-xs text-primary">.vv · .edit · .rm</code>
+            </div>
           </CardContent>
         </Card>
 
