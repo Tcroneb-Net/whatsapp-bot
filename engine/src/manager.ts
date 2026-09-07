@@ -42,9 +42,15 @@ class SessionManager {
 
     logger.info({ count: registered.length }, "restoring sessions")
 
-    for (const { number } of registered) {
-      await this.startSession(number).catch((err) =>
-        logger.error({ number, err }, "failed to restore session"),
+    const concurrency = 4
+    for (let i = 0; i < registered.length; i += concurrency) {
+      const batch = registered.slice(i, i + concurrency)
+      await Promise.all(
+        batch.map(({ number }) =>
+          this.startSession(number).catch((err) =>
+            logger.error({ number, err }, "failed to restore session"),
+          ),
+        ),
       )
     }
   }

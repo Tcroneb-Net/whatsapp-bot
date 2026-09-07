@@ -187,8 +187,8 @@ export function DashboardClient({ initialNumber }: { initialNumber: string }) {
   const status = data?.status ?? "disconnected"
   const statusConfig = {
     connected: { label: "Connected", color: "text-primary" },
-    pairing: { label: "Pairing", color: "text-amber-500" },
-    disconnected: { label: "Disconnected", color: "text-muted-foreground" },
+    pairing: { label: "Engine connected · WhatsApp pairing", color: "text-amber-500" },
+    disconnected: { label: "Engine disconnected", color: "text-muted-foreground" },
   }[status]
 
   return (

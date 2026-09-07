@@ -104,6 +104,7 @@ export class BotSession {
   private startTime = Date.now()
   private stopped = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly handledMessages = new Set<string>()
   private pendingPairingResolve: ((code: string) => void) | null = null
   // Plaintext password held in memory only, to DM once on first connect.
   private pendingWelcomePassword: string | null = null
@@ -592,6 +593,15 @@ export class BotSession {
 
     const remoteJid = msg.key.remoteJid
     if (!remoteJid) return
+    const messageId = msg.key.id
+    if (messageId) {
+      if (this.handledMessages.has(messageId)) return
+      this.handledMessages.add(messageId)
+      if (this.handledMessages.size > 2000) {
+        const oldest = this.handledMessages.values().next().value
+        if (oldest) this.handledMessages.delete(oldest)
+      }
+    }
 
     // --- Smart Online Status: Show online only when active (not always online) ---
     if (!this.settings.alwaysOnline) {
@@ -781,8 +791,8 @@ export class BotSession {
     if (!text) return
 
     try {
-      await this.sendTyping(remoteJid)
-      
+      void this.sendTyping(remoteJid)
+
       let response: string
       
       if ((this.settings as any).autoChatUseAI && this.settings.aiEnabled) {
