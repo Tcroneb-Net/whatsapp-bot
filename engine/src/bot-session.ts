@@ -1206,9 +1206,6 @@ export class BotSession {
           )
           break
         }
-        case "pair":
-          await this.sendBranded(remoteJid, pairInfoMessage(), "welcome")
-          break
         case "pairwhats": {
           const jid = this.ownJid()
           if (jid) await this.sendBranded(jid, pairInfoMessage(), "welcome")
@@ -1236,7 +1233,6 @@ export class BotSession {
           break
         case "vv":
         case "viewonce":
-        case "vv":
         case "vv2":
           await this.cmdVv(msg, remoteJid, reply)
           break
@@ -1260,6 +1256,11 @@ export class BotSession {
           break
         case "lyrics":
           await this.cmdLyrics(args, remoteJid, reply)
+          break
+        case "drama":
+        case "dramabox":
+        case "dramas":
+          await this.cmdDrama(args, remoteJid, reply)
           break
         case "yts":
         case "ytsearch":
@@ -2062,6 +2063,39 @@ export class BotSession {
       logger.debug({ err }, "file upload failed")
       console.log("[v0] Upload error:", err)
       await reply("Failed to upload file. Please try again.")
+    }
+  }
+
+  private async cmdDrama(
+    args: string,
+    remoteJid: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    const [action = "home", ...rest] = args.trim().split(/\s+/)
+    const query = rest.join(" ")
+    const base = "https://zimbox-api.top.co.zw/api/dramabox"
+    const endpoints: Record<string, string> = {
+      home: `${base}/home`,
+      search: `${base}/search?q=${encodeURIComponent(query || "love")}&page=1`,
+      detail: `${base}/detail?id=${encodeURIComponent(query)}`,
+      category: `${base}/category?id=${encodeURIComponent(query)}&page=1`,
+    }
+    if (action === "help") {
+      return void reply("Drama commands:\n.dramabox\n.dramabox search <keyword>\n.dramabox detail <id>\n.dramabox category <id>")
+    }
+    if (!endpoints[action] || ["detail", "category"].includes(action) && !query) {
+      return void reply("Use .dramabox, .dramabox search <keyword>, .dramabox detail <id>, or .dramabox category <id>.")
+    }
+    try {
+      const response = await fetch(endpoints[action], { signal: AbortSignal.timeout(15000) })
+      const data = await response.json().catch(() => null) as any
+      if (!response.ok) return void reply("Drama service is temporarily unavailable. Please try again.")
+      const items = data?.data?.list || data?.data?.dramas || data?.data || data
+      const text = JSON.stringify(items).slice(0, 3500)
+      await reply(`DramaBox ${action}:\n\n${text}`)
+    } catch (error) {
+      logger.warn({ error, remoteJid, action }, "drama command failed")
+      await reply("Drama service timed out. Please try again shortly.")
     }
   }
 

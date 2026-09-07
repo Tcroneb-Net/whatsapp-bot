@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { connectDb, bots, authState } from "@/engine/src/db"
+import { COMMAND_COUNT } from "@/lib/command-catalog"
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
       
       // Settings
       prefix: settings?.prefix || ".",
-      commandsAvailable: 50, // Total available commands
+      commandsAvailable: COMMAND_COUNT,
     }
 
     return NextResponse.json(stats)
