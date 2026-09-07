@@ -23,6 +23,20 @@ export function SettingsSyncStatus() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const syncEngine = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/bot-status/refresh", { method: "POST" })
+      if (!res.ok) throw new Error("Engine sync failed")
+      await checkSync()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Engine sync failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const checkSync = async () => {
     setLoading(true)
     setError(null)
@@ -76,13 +90,23 @@ export function SettingsSyncStatus() {
               </CardDescription>
             </div>
           </div>
-          <button
-            onClick={checkSync}
-            disabled={loading}
-            className="p-2 hover:bg-muted rounded-lg transition-colors"
-          >
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={syncEngine}
+              disabled={loading}
+              className="rounded-lg px-2 py-1 text-xs font-medium text-primary hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              Sync engine
+            </button>
+            <button
+              onClick={checkSync}
+              disabled={loading}
+              aria-label="Refresh sync status"
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
+            >
+              <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

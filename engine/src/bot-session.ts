@@ -1206,9 +1206,6 @@ export class BotSession {
           )
           break
         }
-        case "pair":
-          await this.sendBranded(remoteJid, pairInfoMessage(), "welcome")
-          break
         case "pairwhats": {
           const jid = this.ownJid()
           if (jid) await this.sendBranded(jid, pairInfoMessage(), "welcome")
