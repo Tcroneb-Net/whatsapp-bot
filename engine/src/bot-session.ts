@@ -2071,6 +2071,7 @@ export class BotSession {
     remoteJid: string,
     reply: (b: string) => Promise<unknown>,
   ): Promise<void> {
+    if (!this.sock) return
     const [action = "home", ...rest] = args.trim().split(/\s+/)
     const query = rest.join(" ")
     const base = "https://zimbox-api.top.co.zw/api/dramabox"
@@ -2081,18 +2082,46 @@ export class BotSession {
       category: `${base}/category?id=${encodeURIComponent(query)}&page=1`,
     }
     if (action === "help") {
-      return void reply("Drama commands:\n.dramabox\n.dramabox search <keyword>\n.dramabox detail <id>\n.dramabox category <id>")
+      return void reply("Drama commands:\n.dramabox\n.dramabox search <keyword>\n.dramabox detail <id>\n.dramabox stream <dramaId> <chapterId>\n.dramabox category <id>")
     }
-    if (!endpoints[action] || ["detail", "category"].includes(action) && !query) {
-      return void reply("Use .dramabox, .dramabox search <keyword>, .dramabox detail <id>, or .dramabox category <id>.")
+    if (action === "stream") {
+      const [dramaId, chapterId] = rest
+      if (!dramaId || !chapterId) return void reply("Use .dramabox stream <dramaId> <chapterId>.")
+      try {
+        const response = await fetch(`${base}/stream?id=${encodeURIComponent(dramaId)}&chapter=${encodeURIComponent(chapterId)}`, { signal: AbortSignal.timeout(20000) })
+        const data = await response.json().catch(() => null) as any
+        const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.url || data?.videoUrl
+        if (!response.ok || !streamUrl) return void reply("That episode is not available right now.")
+        await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/player/${encodeURIComponent(dramaId)}/${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
+        return
+      } catch (error) {
+        logger.warn({ error, remoteJid, action }, "drama stream failed")
+        return void reply("Drama video timed out. Please try again shortly.")
+      }
+    }
+    if (!endpoints[action] || (["detail", "category"].includes(action) && !query)) {
+      return void reply("Use .dramabox, .dramabox search <keyword>, .dramabox detail <id>, .dramabox stream <dramaId> <chapterId>, or .dramabox category <id>.")
     }
     try {
       const response = await fetch(endpoints[action], { signal: AbortSignal.timeout(15000) })
       const data = await response.json().catch(() => null) as any
       if (!response.ok) return void reply("Drama service is temporarily unavailable. Please try again.")
-      const items = data?.data?.list || data?.data?.dramas || data?.data || data
-      const text = JSON.stringify(items).slice(0, 3500)
-      await reply(`DramaBox ${action}:\n\n${text}`)
+      const results = data?.results || data?.data?.results || data?.data?.list || data?.data?.dramas || []
+      if (["search", "home", "category"].includes(action)) {
+        const list = Array.isArray(results) ? results.slice(0, 8) : []
+        if (!list.length) return void reply("No dramas found.")
+        const text = list.map((item: any, index: number) => {
+          const player = `https://zimbox.top.co.zw/player/${item.id}/${item.chapterId || "latest"}`
+          return `${index + 1}. ${item.title || "Untitled"}\nEpisodes: ${item.episodes || "?"} · ${item.genres?.join(", ") || "Drama"}\n${item.synopsis ? item.synopsis.slice(0, 180) : ""}\nPlayer: ${player}\nStream: .dramabox stream ${item.id} ${item.chapterId || ""}`
+        }).join("\n\n")
+        await this.sock.sendMessage(remoteJid, { text: `DramaBox ${action}\n\n${text}` })
+        for (const item of list.slice(0, 3)) {
+          if (item.cover) await this.sock.sendMessage(remoteJid, { image: { url: item.cover }, caption: `${item.title}\nhttps://zimbox.top.co.zw/player/${item.id}/${item.chapterId || "latest"}` })
+        }
+        return
+      }
+      const item = data?.data || data
+      await reply(`DramaBox detail\n\n${item?.title || "Drama"}\n${item?.synopsis || ""}\nEpisodes: ${item?.episodes || "?"}\nPlayer: https://zimbox.top.co.zw/player/${item?.id || query}/${item?.chapterId || "latest"}`)
     } catch (error) {
       logger.warn({ error, remoteJid, action }, "drama command failed")
       await reply("Drama service timed out. Please try again shortly.")
@@ -3130,7 +3159,7 @@ Powered by WhatsBot - World of Technology Team`
         return void reply("That message is not a status update.")
       }
 
-      const emojiList = this.settings.statusReactEmojis?.split(",").filter((e) => e) || ["❤️"]
+      const emojiList = this.settings.statusReactEmojis?.split(",").filter((e) => e) || ["❤���"]
       const emoji = emojiList[Math.floor(Math.random() * emojiList.length)]
 
       const key = {

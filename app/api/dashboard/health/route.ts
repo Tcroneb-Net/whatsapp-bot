@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+import { getDb } from "@/lib/mongodb"
+import os from "node:os"
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,15 +13,27 @@ export async function GET(req: NextRequest) {
     const memUsage = process.memoryUsage()
     const uptime = process.uptime()
 
-    // Calculate health metrics
     const memPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100
     const memStatus = memPercent > 85 ? "critical" : memPercent > 70 ? "warning" : "healthy"
+    let database: { status: string; collections: number; documentsApprox: number; indexCount: number; error?: string }
+    try {
+      const db = await getDb()
+      const collections = await db.listCollections().toArray()
+      const stats = await db.stats()
+      database = {
+        status: "connected",
+        collections: collections.length,
+        documentsApprox: stats.objects,
+        indexCount: stats.indexes,
+      }
+    } catch (error) {
+      database = { status: "error", collections: 0, documentsApprox: 0, indexCount: 0, error: error instanceof Error ? error.message : "MongoDB unavailable" }
+    }
 
     const health = {
       status: "healthy",
       timestamp: new Date().toISOString(),
       
-      // System metrics
       system: {
         uptime: Math.floor(uptime),
         uptimeFormatted: formatUptime(uptime),
@@ -30,25 +44,16 @@ export async function GET(req: NextRequest) {
           status: memStatus,
         },
         cpu: {
-          usage: Math.round(Math.random() * 40 + 10), // Mock data
-          cores: require("os").cpus().length,
+          usage: Math.round((os.loadavg()[0] / Math.max(os.cpus().length, 1)) * 100),
+          cores: os.cpus().length,
         },
       },
-
-      // Database health
-      database: {
-        status: "connected",
-        collections: 2,
-        documentsApprox: Math.floor(Math.random() * 1000 + 100),
-        indexCount: 2,
-      },
-
-      // Bot performance
+      database,
       bot: {
-        messagesProcessed: Math.floor(Math.random() * 10000 + 1000),
-        responseTime: Math.floor(Math.random() * 500 + 50), // ms
-        errorsToday: Math.floor(Math.random() * 5),
-        uptimePercent: 99.8,
+        messagesProcessed: 0,
+        responseTime: 0,
+        errorsToday: 0,
+        uptimePercent: 100,
       },
 
       // Connection status
