@@ -13,6 +13,7 @@ interface SyncStatus {
 interface BotStatusResponse {
   connected: boolean
   engineReachable: boolean
+  engineError?: string | null
   dashboardSettings: Record<string, unknown>
   engineStatus: Record<string, unknown> | null
   sync: SyncStatus
@@ -86,7 +87,7 @@ export function SettingsSyncStatus() {
                   ? status.connected
                     ? "Dashboard ↔ engine connected · WhatsApp connected"
                     : "Dashboard ↔ engine connected · WhatsApp pairing"
-                  : "Dashboard ↔ engine disconnected"}
+                  : status.engineError || "Dashboard ↔ engine disconnected"}
               </CardDescription>
             </div>
           </div>

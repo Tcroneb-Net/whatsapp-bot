@@ -16,7 +16,7 @@ export const COMMAND_CATALOG: CommandDefinition[] = [
   { command: "pair", aliases: ["pairwhats"], description: "Show pairing information", category: "core" },
   { command: "vv", aliases: ["viewonce", "vv2"], description: "Recover view-once media", category: "media" },
   { command: "edit", aliases: [], description: "Edit an image with an AI prompt", category: "media" },
-  { command: "drama", aliases: ["dramabox", "dramas"], description: "Browse and search DramaBox", category: "media" },
+  { command: "drama", aliases: ["dramabox", "dramas", "dramadl"], description: "Browse, search, and download DramaBox episodes", category: "media" },
   { command: "play", aliases: ["song", "ytmp3"], description: "Find and download audio", category: "media" },
   { command: "ai", aliases: ["gpt"], description: "Ask the bot an AI question", category: "ai" },
   { command: "music", aliases: ["suno", "remusic", "rm"], description: "Generate AI music", category: "ai" },
