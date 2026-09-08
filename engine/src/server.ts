@@ -25,6 +25,7 @@ export function createServer() {
     res.json({
       ok: true,
       service: "wa-bot-engine",
+      instance: config.instanceName,
       pid: process.pid,
       uptime: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
