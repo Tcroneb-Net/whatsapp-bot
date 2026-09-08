@@ -18,7 +18,14 @@ async function main() {
 
   // 3. Crash auto-restore: bring every previously paired number back online.
   await manager.restoreAll()
-  logger.info("startup restore complete")
+  logger.info({ uptime: process.uptime() }, "startup restore complete")
+
+  process.on("SIGTERM", () => {
+    logger.info("received SIGTERM; allowing active sessions to close")
+  })
+  process.on("SIGINT", () => {
+    logger.info("received SIGINT; allowing active sessions to close")
+  })
 
   // 4. Aggressive memory optimization to prevent resource exhaustion
   setInterval(() => {
