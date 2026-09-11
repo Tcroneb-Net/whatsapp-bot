@@ -3,6 +3,10 @@ import type { BotSettings } from "./types.js"
 
 // Premium English message templates shared across the bot.
 
+export function styleReply(body: string, brand = config.replyBrand, footerText = config.replyFooter): string {
+  return `*${brand}*\n${body}\n\n_${footerText}_`
+}
+
 const LINE = "━━━━━━━━━━━━━━━━━━━━━"
 
 export function footer(): string {

@@ -29,12 +29,12 @@ import bcrypt from "bcryptjs"
 import os from "os"
 import { readFile } from "fs/promises"
 import { config, bannerUrl, bannerFilePath, randomEmoji, pickRandomEmoji, type BannerCategory } from "./config.js"
-import { logger, baileysLogger } from "./logger.js"
+import { logger, baileysLogger, isCryptoNoise } from "./logger.js"
 import { bots } from "./db.js"
 import { useMongoAuthState, clearMongoAuthState } from "./mongo-auth-state.js"
 import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 import { hostify, safeHostify } from "./hostify.js"
-import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, getRandomMenuBanner, getRandomAliveBanner, getRandomPingBanner } from "./messages.js"
+import { welcomeMessage, menuMessage, pairInfoMessage, lyricsMessage, styleReply, getRandomMenuBanner, getRandomAliveBanner, getRandomPingBanner } from "./messages.js"
 
 const PRESENCE_KEEPALIVE_MS = 30 * 60 * 1000 // 30 minutes instead of 10 to reduce resource usage
 
@@ -475,14 +475,16 @@ export class BotSession {
       }
     })
 
-    this.sock.ev.on("messages.upsert", ({ messages, type }) => {
-      if (type !== "notify") return
-      for (const msg of messages) {
-        void this.handleMessage(msg).catch((err) => {
-          logger.error({ number: this.number, err }, "handleMessage error")
-        })
-      }
-    })
+  this.sock.ev.on("messages.upsert", ({ messages, type }) => {
+    if (type !== "notify") return
+    for (const msg of messages) {
+      void this.handleMessage(msg).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        const log = isCryptoNoise(err) ? logger.debug.bind(logger) : logger.warn.bind(logger)
+        log({ number: this.number, message, id: msg.key.id }, "message ignored after handler failure")
+      })
+    }
+  })
   }
 
   private async setStatus(status: "pairing" | "connected" | "disconnected"): Promise<void> {
@@ -621,15 +623,9 @@ export class BotSession {
     // --- Smart Online Status: Show online only when active (not always online) ---
     if (!this.settings.alwaysOnline) {
       try {
-        await this.sock.sendPresenceUpdate("available")
-        // Auto-offline after 2 minutes of inactivity
-        setTimeout(async () => {
-          try {
-            await this.sock?.sendPresenceUpdate("unavailable")
-          } catch (err) {
-            logger.debug({ err }, "failed to set unavailable")
-          }
-        }, 120000)
+        void this.sock.sendPresenceUpdate("available").catch((err) => {
+          logger.debug({ err }, "failed to set online on activity")
+        })
       } catch (err) {
         logger.debug({ err }, "failed to set online on activity")
       }
@@ -1143,7 +1139,7 @@ export class BotSession {
   const reply = async (body: string) => {
     // Keep replies immediate. Presence is optional and must never block delivery.
     if ((this.settings as BotSettings & { showTyping?: boolean }).showTyping !== false) void this.sendTyping(remoteJid)
-    return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
+    return this.sock!.sendMessage(remoteJid, { text: styleReply(body) }, { quoted: msg })
   }
 
     // In private mode, only the owner can use any command (silently ignore
