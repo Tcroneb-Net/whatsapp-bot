@@ -7,13 +7,18 @@ import { existsSync } from "fs"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const envPaths = [
+  process.env.ENV_FILE,
+  "/app/.env",
+  "/app/.env.production",
   join(__dirname, "..", "..", ".env.local"),
   join(__dirname, "..", "..", ".env.development.local"),
+  join(__dirname, "..", "..", ".env.production"),
   join(__dirname, "..", "..", ".env"),
   join(process.cwd(), ".env.local"),
   join(process.cwd(), ".env.development.local"),
+  join(process.cwd(), ".env.production"),
   join(process.cwd(), ".env"),
-]
+].filter((path): path is string => Boolean(path))
 
 for (const envPath of envPaths) {
   if (existsSync(envPath)) {

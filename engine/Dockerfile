@@ -2,12 +2,12 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@9 --activate
+# Install pnpm without Corepack's unwritable cache path.
+RUN npm install --global pnpm@9.15.5
 
-# Install dependencies first (better layer caching)
-COPY package.json ./
-RUN pnpm install --prod=false
+# Install dependencies first (better layer caching), using the committed lockfile.
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY tsconfig.json ./
