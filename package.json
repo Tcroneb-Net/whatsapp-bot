@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "NODE_OPTIONS='--max-old-space-size=2048 --expose-gc' next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "engine:reset": "node scripts/clear-mongo-db.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

@@ -27,27 +27,8 @@ async function main() {
     logger.info("received SIGINT; allowing active sessions to close")
   })
 
-  // 4. Aggressive memory optimization to prevent resource exhaustion
-  setInterval(() => {
-    if (global.gc) {
-      global.gc()
-      const memUsage = process.memoryUsage()
-      const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024)
-      logger.info({
-        heapUsed: heapUsedMB,
-        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
-      }, `GC cleanup complete (${heapUsedMB}MB)`)
-      
-      // Warn if memory usage is high
-      if (heapUsedMB > 400) {
-        logger.warn({ heapUsedMB }, "high memory usage detected")
-      }
-    }
-  }, 2 * 60 * 1000) // Every 2 minutes for aggressive cleanup
-
-  // Periodically stop idle sessions to free memory
-  // Note: Session iteration removed since manager.sessions is private.
-  // Sessions auto-cleanup happens through the socket/connection lifecycle.
+  // Keep runtime memory policy in the container/platform. Do not force GC on a
+  // timer because it adds latency and hides leaks instead of fixing them.
 }
 
 main().catch((err) => {

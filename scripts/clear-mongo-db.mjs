@@ -2,8 +2,13 @@
 
 import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://thelastcroneb_db_user:ThxAi@thxai.c1oeccy.mongodb.net/?appName=ThxAi';
-const MONGODB_DB = process.env.MONGODB_DB || 'Hostify';
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_CONNECTION_STRING;
+const MONGODB_DB = process.env.MONGODB_DB || 'whatsapp_bot';
+
+if (!MONGODB_URI) throw new Error('Set MONGODB_URI or MONGODB_CONNECTION_STRING before resetting data.');
+if (process.env.CONFIRM_FRESH_ENGINE_DATA !== 'yes') {
+  throw new Error('Refusing to reset data. Re-run with CONFIRM_FRESH_ENGINE_DATA=yes after taking a backup.');
+}
 
 async function clearDatabase() {
   const client = new MongoClient(MONGODB_URI);
