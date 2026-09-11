@@ -109,6 +109,7 @@ export class BotSession {
   // Plaintext password held in memory only, to DM once on first connect.
   private pendingWelcomePassword: string | null = null
   private welcomeSent = false
+  private onTerminalDisconnect: (() => void) | null = null
   // Keepalive timer that holds the "always online" presence.
   private presenceTimer: ReturnType<typeof setInterval> | null = null
   // Periodic settings refresh from MongoDB (auto-sync dashboard changes).
@@ -133,6 +134,10 @@ export class BotSession {
 
   constructor(number: string) {
     this.number = number
+  }
+
+  setTerminalDisconnectHandler(handler: () => void): void {
+    this.onTerminalDisconnect = handler
   }
 
   setPendingWelcomePassword(password: string): void {
@@ -435,20 +440,30 @@ export class BotSession {
       if (connection === "close") {
         this.clearSettingsRefreshTimer()
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode
-        const loggedOut = statusCode === DisconnectReason.loggedOut
+        const terminalCodes = new Set([
+          DisconnectReason.loggedOut,
+          DisconnectReason.badSession,
+          DisconnectReason.connectionReplaced,
+          DisconnectReason.multideviceMismatch,
+          DisconnectReason.forbidden,
+        ])
+        const terminal = terminalCodes.has(statusCode)
 
         await this.setStatus("disconnected")
         this.clearPresenceTimer()
-        logger.warn({ number: this.number, statusCode }, "connection closed")
+        logger.warn({ number: this.number, statusCode, terminal }, "connection closed")
+        this.sock = null
 
-        if (loggedOut) {
-          // Credentials are no longer valid — clear them so we don't loop.
+        if (terminal) {
+          // These codes mean the stored Signal/WhatsApp identity cannot recover.
+          // Remove only this number so other bots remain online and require pairing.
           await clearMongoAuthState(this.number)
-          this.sock = null
+          await bots().deleteOne({ number: this.number })
+          logger.warn({ number: this.number, statusCode }, "removed unusable bot session")
+          this.onTerminalDisconnect?.()
           return
         }
 
-        this.sock = null
         if (!this.stopped && !this.reconnectTimer) {
           this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null
@@ -1125,16 +1140,11 @@ export class BotSession {
     const command = withoutPrefix.split(/\s+/)[0]?.toLowerCase() ?? ""
     const args = withoutPrefix.slice(command.length).trim()
     const isOwner = msg.key.fromMe === true
-    const reply = async (body: string) => {
-      // Simulate human reading time before responding
-      await new Promise(r => setTimeout(r, HumanBehavior.getReadingDelay()))
-      // Show typing indicator with human-like duration
-      const typingDelay = HumanBehavior.getTypingDelay(body.length)
-      await this.sendTyping(remoteJid)
-      await new Promise(r => setTimeout(r, typingDelay))
-      // Send message
-      return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
-    }
+  const reply = async (body: string) => {
+    // Keep replies immediate. Presence is optional and must never block delivery.
+    if ((this.settings as BotSettings & { showTyping?: boolean }).showTyping !== false) void this.sendTyping(remoteJid)
+    return this.sock!.sendMessage(remoteJid, { text: body }, { quoted: msg })
+  }
 
     // In private mode, only the owner can use any command (silently ignore
     // others so the bot stays quiet in groups it doesn't control).

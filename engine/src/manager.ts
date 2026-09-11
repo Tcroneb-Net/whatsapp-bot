@@ -41,6 +41,9 @@ class SessionManager {
 
     const promise = (async () => {
       const session = new BotSession(number)
+      session.setTerminalDisconnectHandler(() => {
+        if (this.sessions.get(number) === session) this.sessions.delete(number)
+      })
       this.sessions.set(number, session)
       try {
         await session.start()
@@ -61,6 +64,9 @@ class SessionManager {
     let session = this.sessions.get(number)
     if (!session) {
       session = new BotSession(number)
+      session.setTerminalDisconnectHandler(() => {
+        if (this.sessions.get(number) === session) this.sessions.delete(number)
+      })
       this.sessions.set(number, session)
     }
     // Stash the plaintext password so the welcome DM can include it once the
