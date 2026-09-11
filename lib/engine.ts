@@ -71,6 +71,14 @@ async function engineFetch(path: string, init?: RequestInit) {
   return data
 }
 
+export async function requestEngineHealth(): Promise<Record<string, unknown>> {
+  return engineFetch("/health") as Promise<Record<string, unknown>>
+}
+
+export async function requestEngineReadiness(): Promise<Record<string, unknown>> {
+  return engineFetch("/ready") as Promise<Record<string, unknown>>
+}
+
 export async function requestPairingCode(
   number: string,
   password?: string,

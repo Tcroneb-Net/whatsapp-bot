@@ -6,29 +6,7 @@ import { logger } from "./logger.js"
 class SessionManager {
   private sessions = new Map<string, BotSession>()
   private starting = new Map<string, Promise<BotSession>>()
-  private lastActivity = new Map<string, number>()
-  private readonly idleTimeoutMs = Math.max(5, Number(process.env.IDLE_SESSION_MINUTES || 60)) * 60_000
-  private readonly idleTimer = setInterval(() => void this.stopIdleSessions(), 60_000)
-
-  private touch(number: string): void {
-    this.lastActivity.set(number, Date.now())
-  }
-
-  private async stopIdleSessions(): Promise<void> {
-    const cutoff = Date.now() - this.idleTimeoutMs
-    for (const [number, session] of this.sessions) {
-      if ((this.lastActivity.get(number) || Date.now()) < cutoff) {
-        await session.stop().catch((err) => logger.warn({ number, err }, "idle session stop failed"))
-        this.sessions.delete(number)
-        this.lastActivity.delete(number)
-        await bots().updateOne({ number }, { $set: { status: "disconnected", lastSeen: new Date() } })
-        logger.info({ number }, "stopped idle session; credentials preserved")
-      }
-    }
-  }
-
   get(number: string): BotSession | undefined {
-    this.touch(number)
     return this.sessions.get(number)
   }
 
@@ -64,13 +42,11 @@ class SessionManager {
     const promise = (async () => {
       const session = new BotSession(number)
       this.sessions.set(number, session)
-      this.touch(number)
       try {
         await session.start()
         return session
       } catch (err) {
         this.sessions.delete(number)
-        this.lastActivity.delete(number)
         throw err
       } finally {
         this.starting.delete(number)
@@ -82,7 +58,6 @@ class SessionManager {
 
   // Create (or reuse) a session and return a fresh pairing code for it.
   async requestPairing(number: string, password?: string): Promise<string> {
-    this.touch(number)
     let session = this.sessions.get(number)
     if (!session) {
       session = new BotSession(number)
@@ -100,7 +75,6 @@ class SessionManager {
   }
 
   async refreshSettings(number: string): Promise<void> {
-    this.touch(number)
     let session = this.sessions.get(number)
     if (!session) session = await this.startSession(number)
     await session.refreshSettings()
@@ -123,8 +97,11 @@ class SessionManager {
     }
   }
 
+  async readyCount(): Promise<number> {
+    return (await authState().find({ key: "creds" }).project({ _id: 1 }).toArray()).length
+  }
+
   async status(number: string): Promise<{ status: string; connected: boolean }> {
-    this.touch(number)
     let session = this.sessions.get(number)
     if (!session) {
       const credentials = await authState().findOne({ number, key: "creds" })

@@ -22,7 +22,24 @@ export function createServer() {
   })
 
   app.get("/health", (_req: Request, res: Response) => {
-    res.json({ ok: true })
+    res.json({
+      ok: true,
+      service: "wa-bot-engine",
+      instance: config.instanceName,
+      pid: process.pid,
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    })
+  })
+
+  app.get("/ready", async (_req: Request, res: Response) => {
+    try {
+      const registered = await manager.readyCount()
+      res.json({ ok: true, ready: true, sessions: registered, uptime: Math.floor(process.uptime()) })
+    } catch (err) {
+      logger.error({ err }, "readiness check failed")
+      res.status(503).json({ ok: false, ready: false, error: "Engine storage is unavailable" })
+    }
   })
 
   // Request a fresh 8-digit pairing code for a number.

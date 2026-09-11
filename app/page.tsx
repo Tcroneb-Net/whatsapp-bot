@@ -9,6 +9,10 @@ import {
   Zap,
   LogIn,
   Sparkles,
+  Download,
+  PlayCircle,
+  ExternalLink,
+  Server,
 } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -125,6 +129,39 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Builder resources */}
+      <section className="border-t border-border bg-muted/20">
+        <div className="mx-auto max-w-6xl px-4 py-14">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm font-medium text-primary">Build your next bot</p>
+              <h2 className="mt-1 text-balance text-2xl font-semibold tracking-tight md:text-3xl">Start from the files, then make it yours.</h2>
+            </div>
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">Download the starter project, follow the walkthrough, or pair another bot without leaving this page.</p>
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <a href="https://github.com/mulaxprime/Tsala_Yame" target="_blank" rel="noreferrer" className="group rounded-2xl border border-border bg-background p-5 transition-colors hover:border-primary/50">
+              <Download className="size-5 text-primary" />
+              <h3 className="mt-4 font-semibold">Download bot files</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Explore the Tsala Yame starter repository and adapt the commands for your own bot.</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">Open GitHub <ExternalLink className="size-3.5" /></span>
+            </a>
+            <a href="https://youtu.be/PyZT7PQyiNs" target="_blank" rel="noreferrer" className="group rounded-2xl border border-border bg-background p-5 transition-colors hover:border-primary/50">
+              <PlayCircle className="size-5 text-primary" />
+              <h3 className="mt-4 font-semibold">Watch the setup guide</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Learn how to create a WhatsApp bot and keep it working around the clock.</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">Watch tutorial <ExternalLink className="size-3.5" /></span>
+            </a>
+            <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] p-5">
+              <Server className="size-5 text-primary" />
+              <h3 className="mt-4 font-semibold">Run a second bot</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Use the same control plane to pair another number and keep each bot isolated by its own WhatsApp session.</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">Pair another bot below</span>
+            </div>
           </div>
         </div>
       </section>

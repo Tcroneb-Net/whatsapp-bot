@@ -1,0 +1,26 @@
+name: whatsapp-bot-engine
+service:
+  type: web
+  instance_type: nano
+  ports:
+    - port: 8080
+      protocol: http
+      routes:
+        - path: /
+  health_checks:
+    - port: 8080
+      protocol: http
+      path: /health
+      interval: 30s
+      timeout: 10s
+      healthy_threshold: 2
+      unhealthy_threshold: 3
+  docker:
+    dockerfile: Dockerfile
+  env:
+    - key: NODE_ENV
+      value: production
+    - key: PORT
+      value: "8080"
+    - key: ENGINE_INSTANCE
+      value: engine-1

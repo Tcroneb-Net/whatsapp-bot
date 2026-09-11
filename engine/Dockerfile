@@ -13,9 +13,14 @@ RUN pnpm install --prod=false
 COPY tsconfig.json ./
 COPY src ./src
 COPY assets ./assets
-RUN pnpm build
+RUN pnpm build && pnpm prune --prod
 
 ENV NODE_ENV=production
+ENV PORT=8080
+
+RUN groupadd --system --gid 1001 app && useradd --system --uid 1001 --gid app app
+USER app
+
 EXPOSE 8080
 
 CMD ["pnpm", "start"]

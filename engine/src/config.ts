@@ -37,6 +37,7 @@ function required(name: string, fallback?: string): string {
 }
 
 export const config = {
+  instanceName: process.env.ENGINE_INSTANCE || "engine-1",
   port: Number(process.env.PORT || 8080),
   mongoUri: required("MONGODB_URI", process.env.MONGODB_CONNECTION_STRING),
   mongoDb: process.env.MONGODB_DB || "whatsapp_bot",

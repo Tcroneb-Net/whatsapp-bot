@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getBots } from "@/lib/mongodb"
 import { getSession } from "@/lib/auth"
-import { requestBotStatus, refreshBotSettings } from "@/lib/engine"
+import { requestBotStatus, refreshBotSettings, requestEngineHealth, requestEngineReadiness } from "@/lib/engine"
 import { DEFAULT_SETTINGS } from "@/lib/types"
 
 export async function GET() {
@@ -25,7 +25,17 @@ export async function GET() {
 
   // Try to get live engine status
   let engineStatus: Record<string, unknown> | null = null
+  let engineHealth: Record<string, unknown> | null = null
+  let engineReadiness: Record<string, unknown> | null = null
   let engineError: string | null = null
+  try {
+    ;[engineHealth, engineReadiness] = await Promise.all([
+      requestEngineHealth(),
+      requestEngineReadiness(),
+    ])
+  } catch (err) {
+    engineError = err instanceof Error ? err.message : String(err)
+  }
   try {
     engineStatus = await requestBotStatus(session.number)
   } catch (err) {
@@ -82,6 +92,8 @@ export async function GET() {
     connected: engineStatus?.connected === true,
     engineReachable: engineStatus !== null,
     engineError,
+    engineHealth,
+    engineReadiness,
     dashboardSettings,
     engineStatus: engineStatus?.settings ?? null,
     sync,
