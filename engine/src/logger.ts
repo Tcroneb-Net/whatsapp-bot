@@ -9,3 +9,8 @@ export const logger = pino({
 
 // Baileys expects a pino logger; use a quiet child so its internal logs don't flood.
 export const baileysLogger = pino({ level: "silent" })
+
+export function isCryptoNoise(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /bad mac|failed to decrypt|sender key/i.test(message)
+}
