@@ -30,21 +30,29 @@ for (const envPath of envPaths) {
 
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback
-  if (value === undefined) {
-    const envNames = Object.keys(process.env).filter(k => !k.startsWith('npm_')).join(', ')
+  if (value === undefined || value.trim() === "") {
+    const envNames = Object.keys(process.env).filter((key) => !key.startsWith("npm_")).sort().join(", ")
     throw new Error(
       `Missing required environment variable: ${name}\n` +
-      `Make sure it's set in .env file or environment.\n` +
-      `Loaded env vars: ${envNames.substring(0, 200)}...`
+      `Set it in Koyeb environment variables or provide ENV_FILE=/app/.env.\n` +
+      `Loaded env vars: ${envNames.substring(0, 240)}...`,
     )
   }
   return value
 }
 
+function requiredAny(names: string[], label: string): string {
+  for (const name of names) {
+    const value = process.env[name]?.trim()
+    if (value) return value
+  }
+  return required(label)
+}
+
 export const config = {
   instanceName: process.env.ENGINE_INSTANCE || "engine-1",
   port: Number(process.env.PORT || 8080),
-  mongoUri: required("MONGODB_URI", process.env.MONGODB_CONNECTION_STRING),
+  mongoUri: requiredAny(["MONGODB_CONNECTION_STRING", "MONGODB_URI", "MONGO_URI", "DATABASE_URL"], "MONGODB_CONNECTION_STRING or MONGODB_URI"),
   mongoDb: process.env.MONGODB_DB || "whatsapp_bot",
   // Shared secret the dashboard sends in the x-api-key header.
   apiKey: required("ENGINE_API_KEY"),
