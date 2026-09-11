@@ -17,6 +17,7 @@ RUN pnpm build && pnpm prune --prod
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV ENV_FILE=/app/.env
 
 RUN groupadd --system --gid 1001 app && useradd --system --uid 1001 --gid app app
 USER app
