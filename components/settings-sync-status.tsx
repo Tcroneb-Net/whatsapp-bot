@@ -93,7 +93,9 @@ export function SettingsSyncStatus() {
                 {status.engineReachable
                   ? status.connected
                     ? "Dashboard ↔ engine connected · WhatsApp connected"
-                    : "Dashboard ↔ engine connected · WhatsApp pairing"
+                    : status.engineStatus?.hasCredentials
+                      ? "Dashboard ↔ engine connected · WhatsApp session restoring"
+                      : "Dashboard ↔ engine connected · WhatsApp pairing"
                   : status.engineError || "Dashboard ↔ engine disconnected"}
               </CardDescription>
             </div>
