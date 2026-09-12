@@ -144,10 +144,15 @@ export function createServer() {
       return res.status(503).json({ error: "Bot session settings unavailable" })
     }
     const connected = session.isConnected()
+    let connectedPeople = 0
+    if (connected) {
+      try { connectedPeople = await session.getConnectedPeopleCount() } catch (err) { logger.debug({ number, err }, "connected people count failed") }
+    }
 
     res.json({
       number,
       connected,
+      connectedPeople,
       status: connected ? "connected" : "pairing",
       settings: session.getSettings(),
       uptime: process.uptime(),

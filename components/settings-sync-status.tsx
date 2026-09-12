@@ -89,6 +89,7 @@ export function SettingsSyncStatus() {
                 )}
               </CardTitle>
               <CardDescription className="text-xs">
+                {status.engineStatus?.connectedPeople !== undefined && `People in groups: ${String(status.engineStatus.connectedPeople)} · `}
                 {status.engineReachable
                   ? status.connected
                     ? "Dashboard ↔ engine connected · WhatsApp connected"

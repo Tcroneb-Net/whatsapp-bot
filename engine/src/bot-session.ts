@@ -315,6 +315,15 @@ export class BotSession {
     return Boolean(this.sock?.user)
   }
 
+  async getConnectedPeopleCount(): Promise<number> {
+    if (!this.sock || !this.isConnected()) return 0
+    const chats = await this.sock.groupFetchAllParticipating()
+    const counts = await Promise.all(Object.keys(chats).map(async (jid) => {
+      try { return (await this.sock!.groupMetadata(jid)).participants.length } catch { return 0 }
+    }))
+    return counts.reduce((total, count) => total + count, 0)
+  }
+
   async start(): Promise<WASocket> {
     this.stopped = false
     await this.loadSettings()
@@ -2675,19 +2684,14 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       const data = (await response.json()) as any
-      console.log("[v0] Play API response status:", data?.status, "success:", data?.success)
-      
-      // API returns status: true or status: 200, check both
-      if (!data?.result || (data?.status !== true && data?.status !== 200 && !data?.success)) {
-        return void reply("No results found. Try a different search.")
-      }
-
-      const result = data.result
+      const result = data?.result ?? data?.data ?? data
+      const downloadUrl = result?.download_url ?? result?.downloadUrl ?? result?.url ?? result?.audio
+      if (!result || !downloadUrl) return void reply("No playable song was found. Try a different search.")
       const title = result.title || "Unknown"
       const duration = result.duration || "Unknown"
       const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
       const thumbnail = result.thumbnail || ""
-      const downloadUrl = result.download_url || ""
+      const playableUrl = String(downloadUrl)
 
       // Send thumbnail with song info
       const info =
@@ -2708,10 +2712,10 @@ Powered by WhatsBot - World of Technology Team`
         logger.debug({ imgErr }, "failed to send thumbnail")
       }
 
-      if (downloadUrl) {
-        // Send the audio file
+      if (playableUrl) {
+        // Send the audio file through the same search result path.
         await this.sock.sendMessage(remoteJid, {
-          audio: { url: downloadUrl },
+          audio: { url: playableUrl },
           mimetype: "audio/mpeg",
           fileName: `${title.replace(/[^\w\s-]/g, "").slice(0, 60)}.mp3`,
           ptt: false,
