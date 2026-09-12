@@ -99,6 +99,21 @@ export function createServer() {
   }
   app.post("/refresh", refreshSettings)
   app.post("/session/:number/refresh-settings", refreshSettings)
+  app.patch("/session/:number/settings", async (req: Request, res: Response) => {
+    const number = normalizeNumber(String(req.params.number || ""))
+    if (!number) return res.status(400).json({ error: "Invalid number" })
+    try {
+      const settings = req.body?.settings
+      if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+        return res.status(400).json({ error: "settings object is required" })
+      }
+      await manager.updateSettings(number, settings)
+      res.json({ ok: true, number, settings: manager.get(number)?.getSettings() ?? null })
+    } catch (err) {
+      logger.error({ number, err }, "settings update failed")
+      res.status(500).json({ error: "Could not update bot settings" })
+    }
+  })
 
   // Log out + wipe stored credentials for a number.
   app.delete("/session", async (req: Request, res: Response) => {

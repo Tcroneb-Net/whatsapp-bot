@@ -1,6 +1,7 @@
 import { BotSession } from "./bot-session.js"
 import { bots, authState } from "./db.js"
 import { logger } from "./logger.js"
+import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 
 // Holds one BotSession per paired number and coordinates lifecycle.
 class SessionManager {
@@ -94,6 +95,17 @@ class SessionManager {
     let session = this.sessions.get(number)
     if (!session) session = await this.startSession(number)
     await session.refreshSettings()
+  }
+
+  async updateSettings(number: string, settings: Partial<BotSettings>): Promise<void> {
+    const current = await bots().findOne({ number })
+    const merged = { ...DEFAULT_SETTINGS, ...current?.settings, ...settings }
+    await bots().updateOne(
+      { number },
+      { $set: { settings: merged, updatedAt: new Date() } },
+      { upsert: false },
+    )
+    await this.refreshSettings(number)
   }
 
   async broadcastImage(number: string, image: Buffer, caption?: string) {
