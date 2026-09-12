@@ -42,6 +42,7 @@ export interface BotSettings {
   antiSpamMessagesPerMinute: number
   antiSpamAction: "warn" | "kick"
   antiSpamWarnings: number
+  plugins?: Array<{ id: string; name: string; command: string; apiUrl: string; enabled: boolean; category?: string }>
 }
 
 export interface BotDoc {
@@ -52,6 +53,7 @@ export interface BotDoc {
   createdAt: Date
   updatedAt: Date
   lastSeen?: Date
+  plugins?: Array<{ id: string; name: string; command: string; apiUrl: string; enabled: boolean; category?: string }>
 }
 
 export const DEFAULT_SETTINGS: BotSettings = {

@@ -42,7 +42,12 @@ class SessionManager {
     const promise = (async () => {
       const session = new BotSession(number)
       session.setTerminalDisconnectHandler(() => {
-        if (this.sessions.get(number) === session) this.sessions.delete(number)
+        if (this.sessions.get(number) === session) {
+          this.sessions.delete(number)
+          setTimeout(() => {
+            this.startSession(number).catch((err) => logger.error({ number, err }, "automatic session restart failed"))
+          }, 2500)
+        }
       })
       this.sessions.set(number, session)
       try {
@@ -65,7 +70,12 @@ class SessionManager {
     if (!session) {
       session = new BotSession(number)
       session.setTerminalDisconnectHandler(() => {
-        if (this.sessions.get(number) === session) this.sessions.delete(number)
+        if (this.sessions.get(number) === session) {
+          this.sessions.delete(number)
+          setTimeout(() => {
+            this.startSession(number).catch((err) => logger.error({ number, err }, "automatic session restart failed"))
+          }, 2500)
+        }
       })
       this.sessions.set(number, session)
     }
