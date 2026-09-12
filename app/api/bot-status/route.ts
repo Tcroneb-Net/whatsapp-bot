@@ -43,14 +43,21 @@ export async function GET() {
     console.warn("[v0] Failed to get engine status:", engineError)
   }
 
-  // Compare settings. If a live session has stale in-memory settings,
-  // refresh it once and read back the authoritative engine state.
+  const normalizeSetting = (key: string, value: unknown): unknown => {
+    if (value === undefined || value === null) return dashboardSettings[key as keyof typeof dashboardSettings]
+    if (["autoStatusView", "autoStatusReact", "antiViewOnce", "aliveEnabled", "pingEnabled", "pairCommandEnabled", "aiEnabled", "alwaysOnline", "autoTyping", "publicMode", "autoLikeStatus", "autoChatEnabled", "autoChatUseAI", "groupWorkEnabled", "antiSpamEnabled"].includes(key)) return value === true || value === "true"
+    if (key === "viewOnceMode") return value === "same" || value === "dm" ? value : dashboardSettings.viewOnceMode
+    if (key === "prefix") return String(value).trim() || dashboardSettings.prefix
+    return value
+  }
+
+  const settingsMatch = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+    Object.keys(dashboardSettings).every((key) => JSON.stringify(normalizeSetting(key, a[key])) === JSON.stringify(normalizeSetting(key, b[key])))
+
+  // Compare settings after forcing the live session to reload Mongo state.
   if (engineStatus?.settings) {
     const liveSettings = engineStatus.settings as Record<string, unknown>
-    const stale = Object.keys(dashboardSettings).some((key) =>
-      JSON.stringify(dashboardSettings[key as keyof typeof dashboardSettings]) !==
-      JSON.stringify(liveSettings[key]),
-    )
+    const stale = !settingsMatch(dashboardSettings, liveSettings)
     if (stale) {
       try {
         console.info("[v0] status detected stale engine settings; refreshing", { number: session.number })
@@ -75,7 +82,7 @@ export async function GET() {
     for (const key of Object.keys(dashboardSettings)) {
       const dashValue = dashboardSettings[key as keyof typeof dashboardSettings]
       const engValue = engineSettings[key]
-      if (JSON.stringify(dashValue) !== JSON.stringify(engValue)) {
+      if (JSON.stringify(normalizeSetting(key, dashValue)) !== JSON.stringify(normalizeSetting(key, engValue))) {
         sync.isDashboardInSync = false
         sync.differences.push({
           key,
@@ -95,7 +102,7 @@ export async function GET() {
     engineHealth,
     engineReadiness,
     dashboardSettings,
-    engineStatus: engineStatus?.settings ?? null,
+    engineStatus: engineStatus ?? null,
     sync,
   })
 }
