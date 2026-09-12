@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getBots } from "@/lib/mongodb"
 import { getSession } from "@/lib/auth"
-import { refreshBotSettings } from "@/lib/engine"
+import { refreshBotSettings, updateBotSettings } from "@/lib/engine"
 import { DEFAULT_SETTINGS, EDITABLE_SETTING_KEYS, type BotSettings } from "@/lib/types"
 
 export async function GET() {
@@ -151,6 +151,8 @@ export async function PATCH(req: Request) {
   // Best-effort: tell the live bot to reload settings. Never block the
   // dashboard response if the engine is unreachable.
   try {
+    const effectiveSettings = { ...DEFAULT_SETTINGS, ...result.settings }
+    await updateBotSettings(session.number, effectiveSettings)
     await refreshBotSettings(session.number)
   } catch {
     return NextResponse.json({

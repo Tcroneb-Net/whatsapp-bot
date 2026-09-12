@@ -653,40 +653,25 @@ export class BotSession {
       return
     }
 
-    // --- Anti view-once: auto-recover if enabled ---
-    if (this.settings.antiViewOnce) {
-      try {
-        await this.handleViewOnce(msg)
-      } catch (err) {
-        logger.debug({ err }, "view-once handler error")
-      }
-    }
-
-    // --- Anti-link: opt-in per bot and group ---
-    // Never inspect or respond to group links unless the dashboard enables it.
-    if (
-      remoteJid.endsWith("@g.us") &&
-      this.settings.antiLink?.enabled === true &&
-      (!this.settings.antiLink.groupJid || this.settings.antiLink.groupJid === remoteJid)
-    ) {
-      try {
-        await this.handleAntiLink(msg, remoteJid)
-      } catch (err) {
-        logger.debug({ err }, "antilink handler error")
-      }
-    }
-
-    // --- Group Work: message counting for group control ---
-    if (remoteJid.endsWith("@g.us") && this.settings.groupWorkEnabled) {
-      try {
-        await this.handleGroupWorkCounting(msg, remoteJid)
-      } catch (err) {
-        logger.debug({ err }, "group work counting error")
-      }
-    }
-
-    // --- Commands ---
+    // Commands take priority. Auxiliary moderation/analytics work runs after
+    // dispatch so a slow database or media operation never delays replies.
     await this.handleCommands(msg, remoteJid)
+
+    void (async () => {
+      if (this.settings.antiViewOnce) {
+        try { await this.handleViewOnce(msg) } catch (err) { logger.debug({ err }, "view-once handler error") }
+      }
+      if (
+        remoteJid.endsWith("@g.us") &&
+        this.settings.antiLink?.enabled === true &&
+        (!this.settings.antiLink.groupJid || this.settings.antiLink.groupJid === remoteJid)
+      ) {
+        try { await this.handleAntiLink(msg, remoteJid) } catch (err) { logger.debug({ err }, "antilink handler error") }
+      }
+      if (remoteJid.endsWith("@g.us") && this.settings.groupWorkEnabled) {
+        try { await this.handleGroupWorkCounting(msg, remoteJid) } catch (err) { logger.debug({ err }, "group work counting error") }
+      }
+    })()
 
     // --- AutoChat: Auto-reply to direct messages with AI ---
     // Baileys can represent direct chats as @s.whatsapp.net or @lid.
@@ -3507,7 +3492,7 @@ Powered by WhatsBot - World of Technology Team`
       const url = args.trim()
       if (!url.startsWith("http")) return void reply("Please provide a valid URL")
 
-      await reply("📥 Downloading from social media...")
+      await reply("���� Downloading from social media...")
 
       const apiUrl = `https://apis.davidcyril.name.ng/download/aiov2?url=${encodeURIComponent(url)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(45000) })
