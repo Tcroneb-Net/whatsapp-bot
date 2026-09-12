@@ -95,7 +95,13 @@ export async function GET() {
 
   return NextResponse.json({
     number: bot.number,
-    status: engineStatus?.connected === true ? "connected" : (engineHealth || engineReadiness ? "pairing" : "disconnected"),
+    status: engineStatus?.connected === true
+      ? "connected"
+      : engineStatus?.hasCredentials === true
+        ? "restoring"
+        : engineHealth || engineReadiness
+          ? "pairing"
+          : "disconnected",
     connected: engineStatus?.connected === true,
     engineReachable: engineHealth !== null || engineReadiness !== null || engineStatus !== null,
     engineError,

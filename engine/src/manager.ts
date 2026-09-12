@@ -117,17 +117,19 @@ class SessionManager {
     return (await authState().find({ key: "creds" }).project({ _id: 1 }).toArray()).length
   }
 
-  async status(number: string): Promise<{ status: string; connected: boolean }> {
+  async status(number: string): Promise<{ status: string; connected: boolean; hasCredentials: boolean }> {
     let session = this.sessions.get(number)
+    const credentials = await authState().findOne({ number, key: "creds" })
+    const hasCredentials = Boolean(credentials)
     if (!session) {
-      const credentials = await authState().findOne({ number, key: "creds" })
-      if (!credentials) return { status: "disconnected", connected: false }
+      if (!hasCredentials) return { status: "disconnected", connected: false, hasCredentials: false }
       session = await this.startSession(number)
     }
     const connected = session.isConnected()
     return {
-      status: connected ? "connected" : "pairing",
+      status: connected ? "connected" : hasCredentials ? "restoring" : "pairing",
       connected,
+      hasCredentials,
     }
   }
 }

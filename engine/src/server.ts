@@ -144,6 +144,7 @@ export function createServer() {
       return res.status(503).json({ error: "Bot session settings unavailable" })
     }
     const connected = session.isConnected()
+    const hasCredentials = (await manager.status(number)).hasCredentials
     let connectedPeople = 0
     if (connected) {
       try { connectedPeople = await session.getConnectedPeopleCount() } catch (err) { logger.debug({ number, err }, "connected people count failed") }
@@ -152,8 +153,9 @@ export function createServer() {
     res.json({
       number,
       connected,
+      hasCredentials,
       connectedPeople,
-      status: connected ? "connected" : "pairing",
+      status: connected ? "connected" : hasCredentials ? "restoring" : "pairing",
       settings: session.getSettings(),
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
