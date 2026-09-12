@@ -39,10 +39,11 @@ export function SettingsSyncStatus() {
   }
 
   const checkSync = async () => {
+    if (document.visibilityState === "hidden") return
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/bot-status")
+      const res = await fetch("/api/bot-status", { cache: "no-store" })
       if (!res.ok) throw new Error("Failed to fetch sync status")
       const data = await res.json()
       setStatus(data)
@@ -55,10 +56,15 @@ export function SettingsSyncStatus() {
 
   useEffect(() => {
     const initialCheck = window.setTimeout(() => void checkSync(), 0)
-    const interval = window.setInterval(() => void checkSync(), 30000) // Check every 30 seconds
+    const interval = window.setInterval(() => void checkSync(), 5000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void checkSync()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
     return () => {
       window.clearTimeout(initialCheck)
       window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [])
 
