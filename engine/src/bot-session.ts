@@ -1166,8 +1166,10 @@ export class BotSession {
           break
         case "menu":
         case "help": {
-          // Send professional WhatsBot menu animation
-          const proMenuImg = await this.loadBanner("menu")
+          // Prefer the user-configured image immediately; fall back to the bundled menu art.
+          const proMenuImg = this.settings.welcomeImageUrl
+            ? await this.fetchImage(this.settings.welcomeImageUrl)
+            : await this.loadBanner("menu")
           if (proMenuImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
@@ -1179,9 +1181,10 @@ export class BotSession {
             }
           }
           
-          // Also send random additional banner for variety
-          const randomBannerUrl = getRandomMenuBanner()
-          const randomBannerImg = await this.fetchImage(randomBannerUrl)
+          // Only add the rotating fallback banner when no custom image is configured.
+          const randomBannerImg = this.settings.welcomeImageUrl
+            ? null
+            : await this.fetchImage(getRandomMenuBanner())
           if (randomBannerImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {

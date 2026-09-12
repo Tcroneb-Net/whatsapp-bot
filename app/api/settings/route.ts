@@ -157,7 +157,7 @@ export async function PATCH(req: Request) {
       error: "Settings saved, but the bot engine could not refresh. Check ENGINE_URL and ENGINE_API_KEY.",
       settings: { ...DEFAULT_SETTINGS, ...result.settings },
       synced: false,
-    }, { status: 502 })
+    })
   }
 
   return NextResponse.json({

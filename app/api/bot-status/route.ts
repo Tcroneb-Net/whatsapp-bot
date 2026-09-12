@@ -88,9 +88,9 @@ export async function GET() {
 
   return NextResponse.json({
     number: bot.number,
-    status: engineStatus?.connected === true ? "connected" : (bot.status === "connected" ? "disconnected" : bot.status),
+    status: engineStatus?.connected === true ? "connected" : (engineHealth || engineReadiness ? "pairing" : "disconnected"),
     connected: engineStatus?.connected === true,
-    engineReachable: engineStatus !== null,
+    engineReachable: engineHealth !== null || engineReadiness !== null || engineStatus !== null,
     engineError,
     engineHealth,
     engineReadiness,
