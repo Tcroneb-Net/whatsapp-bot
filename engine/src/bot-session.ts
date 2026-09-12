@@ -151,6 +151,7 @@ export class BotSession {
       this.settings = {
         ...DEFAULT_SETTINGS,
         ...doc?.settings,
+        plugins: doc?.plugins ?? [],
         antiLink: {
           enabled: doc?.settings?.antiLink?.enabled ?? DEFAULT_SETTINGS.antiLink!.enabled,
           groupJid: doc?.settings?.antiLink?.groupJid ?? DEFAULT_SETTINGS.antiLink!.groupJid,
@@ -713,6 +714,7 @@ export class BotSession {
     if (this.settings.autoStatusView) {
       const delay = (((this.settings as any).autoStatusViewDelay) || 0) * 1000
       setTimeout(() => {
+        if (!this.settings.autoStatusView) return
         try {
           this.sock?.readMessages([msg.key])
         } catch (err) {
@@ -725,6 +727,7 @@ export class BotSession {
     if (this.settings.autoStatusReact) {
       const delay = ((this.settings as any).autoStatusReactDelay || 0) * 1000
       setTimeout(async () => {
+        if (!this.settings.autoStatusReact) return
         try {
           const emoji = pickRandomEmoji(this.settings.statusReactEmojis)
           const participant = msg.key.participant
@@ -751,6 +754,7 @@ export class BotSession {
     if ((this.settings as any).autoLikeStatus) {
       const delay = (((this.settings as any).autoLikeDelay) || 2) * 1000
       setTimeout(async () => {
+        if (!(this.settings as any).autoLikeStatus) return
         try {
           const participant = msg.key.participant
           
@@ -843,22 +847,22 @@ export class BotSession {
 
       // Try to use an AI service via the Hostify API
       try {
-        const aiResponse = await fetch("https://omegatech-api.dixonomega.tech/api/ai/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: userMessage,
-            context: systemPrompt,
-          }),
-          signal: AbortSignal.timeout(5000),
+        const params = new URLSearchParams({
+          action: "chat",
+          message: userMessage,
+          context: systemPrompt,
+        })
+        const aiResponse = await fetch(`https://api.omegatech.app/api/ai/notice?${params.toString()}`, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(8000),
         })
 
         if (aiResponse.ok) {
           const data = (await aiResponse.json()) as any
-          if (data.result || data.response) {
-            return (data.result || data.response)
-              .toString()
-              .slice(0, 500) // Limit response length
+          const result = data?.result ?? data?.response ?? data?.message ?? data?.text ?? data?.data?.response ?? data?.data?.message
+          if (result) {
+            return String(result).slice(0, 500) // Limit response length
           }
         }
       } catch (aiErr) {
