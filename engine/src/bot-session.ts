@@ -677,11 +677,11 @@ export class BotSession {
     // Baileys can represent direct chats as @s.whatsapp.net or @lid.
     const isDirectChat = remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid")
     if (this.settings.autoChatEnabled === true && isDirectChat) {
-      try {
-        await this.handleAutoChat(msg, remoteJid)
-      } catch (err) {
+      // Never hold the message event loop open while an AI provider responds.
+      // Commands and later messages remain responsive during slow API calls.
+      void this.handleAutoChat(msg, remoteJid).catch((err) => {
         logger.debug({ err }, "autochat handler error")
-      }
+      })
     }
   }
 
@@ -840,7 +840,7 @@ export class BotSession {
         const aiResponse = await fetch(`https://api.omegatech.app/api/ai/notice?${params.toString()}`, {
           method: "GET",
           headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(2500),
         })
 
         if (aiResponse.ok) {
