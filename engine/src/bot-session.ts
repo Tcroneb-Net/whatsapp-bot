@@ -1164,10 +1164,8 @@ export class BotSession {
           break
         case "menu":
         case "help": {
-          // Prefer the user-configured image immediately; fall back to the bundled menu art.
-          const proMenuImg = this.settings.welcomeImageUrl
-            ? await this.fetchImage(this.settings.welcomeImageUrl)
-            : await this.loadBanner("menu")
+          // Send text immediately; images are optional and must never block the menu.
+          const proMenuImg = null
           if (proMenuImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
@@ -1180,9 +1178,7 @@ export class BotSession {
           }
           
           // Only add the rotating fallback banner when no custom image is configured.
-          const randomBannerImg = this.settings.welcomeImageUrl
-            ? null
-            : await this.fetchImage(getRandomMenuBanner())
+          const randomBannerImg = null
           if (randomBannerImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
@@ -1203,11 +1199,13 @@ export class BotSession {
               mode: this.settings.publicMode ? "PUBLIC" : "PRIVATE",
               plugins: ((this.settings as any).plugins || [])
                 .filter((p: any) => p.enabled)
-                .map((p: any) => ({
-                  command: p.command,
-                  name: p.name,
-                  category: p.category,
-                })),
+                .map((p: any) => ({ command: p.command, name: p.name, category: p.category })),
+              controls: {
+                statusView: this.settings.autoStatusView,
+                statusReact: this.settings.autoStatusReact,
+                chatbot: this.settings.autoChatEnabled,
+                viewOnceMode: this.settings.viewOnceMode,
+              },
             }),
             "menu",
           )
@@ -1227,6 +1225,22 @@ export class BotSession {
         case "online":
         case "alwaysonline":
           await this.cmdToggle(isOwner, "alwaysOnline", args, "Always online", reply)
+          break
+        case "statusview":
+        case "autoview":
+          await this.cmdToggle(isOwner, "autoStatusView", args, "Auto status view", reply)
+          break
+        case "statusreact":
+        case "autoreact":
+          await this.cmdToggle(isOwner, "autoStatusReact", args, "Auto status react", reply)
+          break
+        case "chatbot":
+        case "autochat":
+          await this.cmdToggle(isOwner, "autoChatEnabled", args, "DM chatbot", reply)
+          break
+        case "viewonce":
+        case "vvmode":
+          await this.cmdViewOnceMode(isOwner, args, reply)
           break
         case "autotype":
         case "autotyping":
@@ -1797,7 +1811,7 @@ export class BotSession {
   // Owner-only: toggle a boolean setting on/off and persist + apply it live.
   private async cmdToggle(
     isOwner: boolean,
-    key: "alwaysOnline" | "autoTyping",
+    key: "alwaysOnline" | "autoTyping" | "autoStatusView" | "autoStatusReact" | "autoChatEnabled",
     args: string,
     label: string,
     reply: (b: string) => Promise<unknown>,
@@ -1817,6 +1831,21 @@ export class BotSession {
     )
     this.applyPresence()
     await reply(`${label} is now *${next ? "ON" : "OFF"}*.`)
+  }
+
+  private async cmdViewOnceMode(
+    isOwner: boolean,
+    args: string,
+    reply: (b: string) => Promise<unknown>,
+  ): Promise<void> {
+    if (!isOwner) return void reply("This command is for the bot owner only.")
+    const mode = args.trim().toLowerCase()
+    if (mode !== "same" && mode !== "dm" && mode !== "private") {
+      return void reply(`View-once mode is *${this.settings.viewOnceMode}*. Use ${this.settings.prefix}viewonce same or ${this.settings.prefix}viewonce dm.`)
+    }
+    this.settings.viewOnceMode = mode === "private" ? "dm" : mode
+    await bots().updateOne({ number: this.number }, { $set: { "settings.viewOnceMode": this.settings.viewOnceMode, updatedAt: new Date() } })
+    await reply(`View-once replies now go to *${this.settings.viewOnceMode === "same" ? "same chat" : "private DM"}*.`)
   }
 
   // Owner-only: switch between public (anyone) and private (owner-only) mode.
