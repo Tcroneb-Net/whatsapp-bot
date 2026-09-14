@@ -138,9 +138,10 @@ export async function PATCH(req: Request) {
   }
   const bots = await getBots()
   console.info("[v0] settings persistence", { number: session.number, keys: Object.keys(incoming) })
+  const mergedSettings = { ...DEFAULT_SETTINGS, ...(current.settings ?? {}), ...nextSettings }
   const result = await bots.findOneAndUpdate(
     { number: session.number },
-    { $set: { settings: nextSettings, updatedAt: new Date() } },
+    { $set: { settings: mergedSettings, updatedAt: new Date() } },
     { returnDocument: "after" },
   )
 

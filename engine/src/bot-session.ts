@@ -679,6 +679,7 @@ export class BotSession {
     const scope = this.settings.chatScope || "dm"
     const scopeAllowsChat = scope === "all" || (scope === "dm" && isDirectChat) || (scope === "groups" && remoteJid.endsWith("@g.us")) || (scope === "inbox" && isDirectChat)
     if (this.settings.autoChatEnabled === true && scopeAllowsChat) {
+      logger.info({ number: this.number, remoteJid, scope, aiEnabled: this.settings.aiEnabled }, "autochat accepted")
       // Never hold the message event loop open while an AI provider responds.
       // Commands and later messages remain responsive during slow API calls.
       void this.handleAutoChat(msg, remoteJid).catch((err) => {
@@ -814,7 +815,8 @@ export class BotSession {
         response = this.getSmartResponse(text)
       }
 
-      await this.sock.sendMessage(remoteJid, { text: response }, { quoted: msg })
+      logger.info({ number: this.number, remoteJid, responseLength: response.length }, "autochat sending reply")
+      await this.sock.sendMessage(remoteJid, { text: response || this.getSmartResponse(text) }, { quoted: msg })
     } catch (err) {
       logger.debug({ err }, "autochat response failed")
     }
@@ -846,8 +848,12 @@ export class BotSession {
         })
 
         if (aiResponse.ok) {
-          const data = (await aiResponse.json()) as any
-          const result = data?.result ?? data?.response ?? data?.message ?? data?.text ?? data?.data?.response ?? data?.data?.message
+          const raw = await aiResponse.text()
+          let data: any = raw
+          try { data = JSON.parse(raw) } catch { /* plain-text API response */ }
+          const result = typeof data === "string"
+            ? data
+            : data?.result ?? data?.response ?? data?.message ?? data?.text ?? data?.data?.response ?? data?.data?.message
           if (result) {
             return String(result).slice(0, 500) // Limit response length
           }
@@ -1135,10 +1141,12 @@ export class BotSession {
     const withoutPrefix = text.slice(prefix.length).trim()
     const command = withoutPrefix.split(/\s+/)[0]?.toLowerCase() ?? ""
     const args = withoutPrefix.slice(command.length).trim()
+    logger.info({ number: this.number, command, hasArgs: Boolean(args) }, "command received")
     const senderJid = msg.key.participant || msg.key.remoteJid || ""
-    const normalizedSender = senderJid.replace(/:\d+(?=@)/, "")
-    const normalizedOwner = (this.ownJid() || "").replace(/:\d+(?=@)/, "")
-    const isOwner = msg.key.fromMe === true || (normalizedOwner.length > 0 && normalizedSender === normalizedOwner)
+    const normalizeIdentity = (jid: string) => jid.replace(/:\d+(?=@)/, "").replace(/\D/g, "")
+    const normalizedSender = normalizeIdentity(senderJid)
+    const normalizedOwner = normalizeIdentity(this.ownJid() || this.number)
+    const isOwner = msg.key.fromMe === true || (normalizedOwner.length > 0 && normalizedSender.endsWith(normalizedOwner))
   const reply = async (body: string) => {
     // Keep replies immediate. Presence is optional and must never block delivery.
     if ((this.settings as BotSettings & { showTyping?: boolean }).showTyping !== false) void this.sendTyping(remoteJid)
