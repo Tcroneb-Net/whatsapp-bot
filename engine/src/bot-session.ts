@@ -676,7 +676,9 @@ export class BotSession {
     // --- AutoChat: Auto-reply to direct messages with AI ---
     // Baileys can represent direct chats as @s.whatsapp.net or @lid.
     const isDirectChat = remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid")
-    if (this.settings.autoChatEnabled === true && isDirectChat) {
+    const scope = this.settings.chatScope || "dm"
+    const scopeAllowsChat = scope === "all" || (scope === "dm" && isDirectChat) || (scope === "groups" && remoteJid.endsWith("@g.us")) || (scope === "inbox" && isDirectChat)
+    if (this.settings.autoChatEnabled === true && scopeAllowsChat) {
       // Never hold the message event loop open while an AI provider responds.
       // Commands and later messages remain responsive during slow API calls.
       void this.handleAutoChat(msg, remoteJid).catch((err) => {
@@ -1133,7 +1135,10 @@ export class BotSession {
     const withoutPrefix = text.slice(prefix.length).trim()
     const command = withoutPrefix.split(/\s+/)[0]?.toLowerCase() ?? ""
     const args = withoutPrefix.slice(command.length).trim()
-    const isOwner = msg.key.fromMe === true
+    const senderJid = msg.key.participant || msg.key.remoteJid || ""
+    const normalizedSender = senderJid.replace(/:\d+(?=@)/, "")
+    const normalizedOwner = (this.ownJid() || "").replace(/:\d+(?=@)/, "")
+    const isOwner = msg.key.fromMe === true || (normalizedOwner.length > 0 && normalizedSender === normalizedOwner)
   const reply = async (body: string) => {
     // Keep replies immediate. Presence is optional and must never block delivery.
     if ((this.settings as BotSettings & { showTyping?: boolean }).showTyping !== false) void this.sendTyping(remoteJid)
@@ -1204,6 +1209,7 @@ export class BotSession {
                 statusView: this.settings.autoStatusView,
                 statusReact: this.settings.autoStatusReact,
                 chatbot: this.settings.autoChatEnabled,
+                chatScope: this.settings.chatScope,
                 viewOnceMode: this.settings.viewOnceMode,
               },
             }),
@@ -1242,6 +1248,14 @@ export class BotSession {
         case "vvmode":
           await this.cmdViewOnceMode(isOwner, args, reply)
           break
+        case "scope":
+        case "chatscope":
+          await this.cmdChatScope(isOwner, args, reply)
+          break
+        case "train":
+        case "persona":
+          await this.cmdTrain(isOwner, args, reply)
+          break
         case "autotype":
         case "autotyping":
           await this.cmdToggle(isOwner, "autoTyping", args, "Auto typing", reply)
@@ -1253,7 +1267,6 @@ export class BotSession {
           await this.cmdSetPublic(isOwner, false, reply)
           break
         case "vv":
-        case "viewonce":
         case "vv2":
           await this.cmdVv(msg, remoteJid, reply)
           break
@@ -1831,6 +1844,24 @@ export class BotSession {
     )
     this.applyPresence()
     await reply(`${label} is now *${next ? "ON" : "OFF"}*.`)
+  }
+
+  private async cmdChatScope(isOwner: boolean, args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!isOwner) return void reply("This command is for the bot owner only.")
+    const scope = args.trim().toLowerCase()
+    if (!["dm", "groups", "all", "inbox"].includes(scope)) return void reply(`Chat scope is *${this.settings.chatScope || "dm"}*. Use dm, groups, all, or inbox.`)
+    this.settings.chatScope = scope as BotSettings["chatScope"]
+    await bots().updateOne({ number: this.number }, { $set: { "settings.chatScope": this.settings.chatScope, updatedAt: new Date() } })
+    await reply(`Chatbot scope is now *${scope}*.`)
+  }
+
+  private async cmdTrain(isOwner: boolean, args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!isOwner) return void reply("This command is for the bot owner only.")
+    const persona = args.trim()
+    if (!persona) return void reply(`Training is: *${this.settings.aiPersona || "not set"}*. Use ${this.settings.prefix}train <instructions>.`)
+    this.settings.aiPersona = persona.slice(0, 2000)
+    await bots().updateOne({ number: this.number }, { $set: { "settings.aiPersona": this.settings.aiPersona, updatedAt: new Date() } })
+    await reply("Bot training instructions saved and active.")
   }
 
   private async cmdViewOnceMode(
