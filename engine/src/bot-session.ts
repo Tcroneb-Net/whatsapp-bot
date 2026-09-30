@@ -1,30 +1,23 @@
 import { createRequire } from "module"
 import { randomUUID } from "crypto"
-import type {
-  WASocket,
-  WAMessage,
-  proto,
-} from "@whiskeysockets/baileys"
+import type { WAMessage, proto } from "@japofc/baileys"
+type WASocket = any
 
 // Baileys ships as CommonJS. Under Node's ESM interop, `import makeWASocket from
-// "@whiskeysockets/baileys"` resolves to `module.exports` (the namespace object,
+// "@japofc/baileys"` resolves to `module.exports` (the namespace object,
 // not the factory function), which throws "makeWASocket is not a function" at
 // runtime. Loading via createRequire gives us the real callable exports across
 // Baileys versions.
 const require = createRequire(import.meta.url)
-const baileys = require("@whiskeysockets/baileys")
+const baileys = require("@japofc/baileys")
 // NOTE: do not name this `makeWASocket`. The imported `WASocket` type is
 // defined as `ReturnType<typeof makeWASocket>`, so a local binding with that
 // name shadows it and collapses the socket type to `never`.
-const createWASocket: (...args: any[]) => WASocket =
-  baileys.makeWASocket ?? baileys.default
-const DisconnectReason: typeof import("@whiskeysockets/baileys").DisconnectReason =
-  baileys.DisconnectReason
-const downloadMediaMessage: typeof import("@whiskeysockets/baileys").downloadMediaMessage =
-  baileys.downloadMediaMessage
-const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchLatestBaileysVersion =
-  baileys.fetchLatestBaileysVersion
-const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
+const createWASocket: any = baileys.makeWASocketAuto ?? baileys.makeWASocket ?? baileys.default
+const DisconnectReason: any = baileys.DisconnectReason
+const downloadMediaMessage: any = baileys.downloadMediaMessage
+const fetchLatestBaileysVersion: any = baileys.fetchLatestBaileysVersion
+const Browsers: any = baileys.Browsers
 import bcrypt from "bcryptjs"
 import os from "os"
 import { readFile } from "fs/promises"
@@ -343,7 +336,7 @@ export class BotSession {
       logger.warn({ err }, "fetchLatestBaileysVersion failed; using bundled default")
     }
 
-    this.sock = createWASocket({
+    this.sock = await createWASocket({
       version,
       auth: state,
       logger: baileysLogger,

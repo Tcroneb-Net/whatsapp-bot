@@ -1,4 +1,4 @@
-import type { WASocket } from "@whiskeysockets/baileys"
+type WASocket = any
 
 export type PluginContext = {
   sock: WASocket
