@@ -1,23 +1,15 @@
-import { createRequire } from "module"
 import { randomUUID } from "crypto"
-import type { WAMessage, proto } from "@japofc/baileys"
+import makeWASocket, {
+  Browsers,
+  DisconnectReason,
+  downloadMediaMessage,
+  makeWASocketAuto,
+  Button,
+  Poll,
+  type WAMessage,
+  type proto,
+} from "@japofc/baileys"
 type WASocket = any
-
-// Baileys ships as CommonJS. Under Node's ESM interop, `import makeWASocket from
-// "@japofc/baileys"` resolves to `module.exports` (the namespace object,
-// not the factory function), which throws "makeWASocket is not a function" at
-// runtime. Loading via createRequire gives us the real callable exports across
-// Baileys versions.
-const require = createRequire(import.meta.url)
-const baileys = require("@japofc/baileys")
-// NOTE: do not name this `makeWASocket`. The imported `WASocket` type is
-// defined as `ReturnType<typeof makeWASocket>`, so a local binding with that
-// name shadows it and collapses the socket type to `never`.
-const createWASocket: any = baileys.makeWASocketAuto ?? baileys.makeWASocket ?? baileys.default
-const DisconnectReason: any = baileys.DisconnectReason
-const downloadMediaMessage: any = baileys.downloadMediaMessage
-const fetchLatestBaileysVersion: any = baileys.fetchLatestBaileysVersion
-const Browsers: any = baileys.Browsers
 import bcrypt from "bcryptjs"
 import os from "os"
 import { readFile } from "fs/promises"
@@ -327,17 +319,7 @@ export class BotSession {
 
     // Always pin the current WhatsApp Web protocol version. Using a stale
     // version is the most common cause of "couldn't link because of errors".
-    let version: [number, number, number] | undefined
-    try {
-      const latest = await fetchLatestBaileysVersion()
-      version = latest.version
-      logger.info({ number: this.number, version }, "using WA version")
-    } catch (err) {
-      logger.warn({ err }, "fetchLatestBaileysVersion failed; using bundled default")
-    }
-
-    this.sock = await createWASocket({
-      version,
+    this.sock = await makeWASocketAuto({
       auth: state,
       logger: baileysLogger,
       printQRInTerminal: false,
@@ -567,6 +549,39 @@ export class BotSession {
       logger.debug({ category }, "local engine asset not found; using remote fallback")
     }
     return this.fetchImage(bannerUrl(category))
+  }
+
+  private async sendInteractiveMenu(jid: string, text: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await new Button(this.sock)
+        .setTitle(this.settings.botName)
+        .setBody(text.slice(0, 3500))
+        .setFooter("Choose an action or use text commands")
+        .addReply("Status", "menu_status")
+        .addReply("Ping", "menu_ping")
+        .addReply("Help", "menu_help")
+        .send(jid, { validate: true })
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "interactive menu unavailable; using text fallback")
+      return false
+    }
+  }
+
+  private async sendControlPoll(jid: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await new Poll(this.sock)
+        .setName("Bot controls")
+        .addOptions(["Status view", "Status react", "Chatbot", "View-once mode"])
+        .setSelectable(1)
+        .send(jid)
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "control poll unavailable")
+      return false
+    }
   }
 
   // Send a branded message with a banner image + caption (falls back to text).
@@ -931,6 +946,7 @@ export class BotSession {
       { key, message: inner } as WAMessage,
       "buffer",
       {},
+      undefined,
     )) as Buffer
 
     const caption =
@@ -984,15 +1000,19 @@ export class BotSession {
   }
 
   private extractText(msg: WAMessage): string {
-    const m = msg.message
+    const m: any = msg.message
     if (!m) return ""
-    return (
-      m.conversation ||
-      m.extendedTextMessage?.text ||
-      m.imageMessage?.caption ||
-      m.videoMessage?.caption ||
-      ""
-    )
+    if (m.buttonsResponseMessage?.selectedButtonId) return `${this.settings.prefix}${m.buttonsResponseMessage.selectedButtonId}`
+    if (m.templateButtonReplyMessage?.selectedId) return `${this.settings.prefix}${m.templateButtonReplyMessage.selectedId}`
+    const flow = m.interactiveResponseMessage?.nativeFlowResponseMessage
+    if (flow?.paramsJson) {
+      try {
+        const params = JSON.parse(flow.paramsJson)
+        const action = params.id || params.button_id || params.selected_id
+        if (action) return `${this.settings.prefix}${action}`
+      } catch { /* unsupported flow payload; fall back to text */ }
+    }
+    return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || ""
   }
 
 
@@ -1152,6 +1172,15 @@ export class BotSession {
 
     try {
       switch (command) {
+        case "menu_status":
+          await this.cmdStatus(remoteJid, msg)
+          break
+        case "menu_ping":
+          await this.cmdPing(remoteJid, msg)
+          break
+        case "menu_help":
+          await reply(`Use ${prefix}menu for controls. Owner controls: ${prefix}statusview on/off, ${prefix}statusreact on/off, ${prefix}chatbot on/off, ${prefix}scope dm/groups/all/inbox.`)
+          break
         case "alive":
           if (this.settings.aliveEnabled) await this.cmdAlive(remoteJid, msg)
           break
@@ -1196,10 +1225,8 @@ export class BotSession {
             }
           }
 
-          // Send menu text
-          await this.sendBranded(
-            remoteJid,
-            menuMessage(this.settings.botName, prefix, {
+          // Prefer native buttons, with the existing text menu as a guaranteed fallback.
+          const menuText = menuMessage(this.settings.botName, prefix, {
               uptime: this.formatUptime(Date.now() - this.startTime),
               ram: this.formatRam(),
               mode: this.settings.publicMode ? "PUBLIC" : "PRIVATE",
@@ -1213,9 +1240,10 @@ export class BotSession {
                 chatScope: this.settings.chatScope,
                 viewOnceMode: this.settings.viewOnceMode,
               },
-            }),
-            "menu",
-          )
+            })
+          if (!(await this.sendInteractiveMenu(remoteJid, menuText))) {
+            await this.sendBranded(remoteJid, menuText, "menu")
+          }
           break
         }
         case "pairwhats": {
@@ -2963,6 +2991,7 @@ Powered by WhatsBot - World of Technology Team`
             { key: msg.key, message: quoted } as WAMessage,
             "buffer",
             {},
+            undefined,
           )
           if (imageData) {
             await this.sock.updateProfilePicture(remoteJid, imageData)
