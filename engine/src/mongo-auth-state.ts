@@ -3,7 +3,7 @@ import type {
   AuthenticationCreds,
   AuthenticationState,
   SignalDataTypeMap,
-} from "@whiskeysockets/baileys"
+} from "@japofc/baileys"
 import { authState } from "./db.js"
 
 // Load Baileys' runtime values via createRequire instead of named ESM imports.
@@ -12,7 +12,7 @@ import { authState } from "./db.js"
 // directly throws `does not provide an export named 'proto'` at startup. A
 // runtime require resolves the same values reliably regardless of the build.
 const require = createRequire(import.meta.url)
-const baileys = require("@whiskeysockets/baileys")
+const baileys = require("@japofc/baileys")
 const initAuthCreds: () => AuthenticationCreds = baileys.initAuthCreds
 const BufferJSON: { replacer: (k: string, v: unknown) => unknown; reviver: (k: string, v: unknown) => unknown } =
   baileys.BufferJSON

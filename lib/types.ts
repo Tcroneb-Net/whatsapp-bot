@@ -51,6 +51,8 @@ export interface BotSettings {
   autoChatEnabled: boolean
   // Use AI to generate responses in autochat.
   autoChatUseAI: boolean
+  // Where the auto-chatbot is allowed to respond.
+  chatScope: "dm" | "groups" | "all" | "inbox"
   // Group Work Mode: enable message counting and locking in groups.
   groupWorkEnabled: boolean
   // Message counting threshold to trigger lock.
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoClearCacheHours: 6,
   autoChatEnabled: false,
   autoChatUseAI: true,
+  chatScope: "dm",
   groupWorkEnabled: false,
   groupWorkThreshold: 50,
   groupAutoUnlockMinutes: 0,
@@ -162,6 +165,7 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "autoClearCacheHours",
   "autoChatEnabled",
   "autoChatUseAI",
+  "chatScope",
   "groupWorkEnabled",
   "groupWorkThreshold",
   "groupAutoUnlockMinutes",

@@ -24,7 +24,6 @@ export interface BotSettings {
   welcomeImageUrl: string
   alwaysOnline: boolean
   autoTyping: boolean
-  aiPersona: string
   publicMode: boolean
   statusReactEmojis: string
   autoStatusViewDelay: number
@@ -34,6 +33,8 @@ export interface BotSettings {
   autoClearCacheHours: number
   autoChatEnabled: boolean
   autoChatUseAI: boolean
+  chatScope: "dm" | "groups" | "all" | "inbox"
+  aiPersona: string
   groupWorkEnabled: boolean
   groupWorkThreshold: number
   groupAutoUnlockMinutes: number
@@ -81,6 +82,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoClearCacheHours: 6,
   autoChatEnabled: false,
   autoChatUseAI: true,
+  chatScope: "dm",
   groupWorkEnabled: false,
   groupWorkThreshold: 50,
   groupAutoUnlockMinutes: 0,

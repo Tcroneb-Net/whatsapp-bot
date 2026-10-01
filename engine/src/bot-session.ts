@@ -1,30 +1,15 @@
-import { createRequire } from "module"
 import { randomUUID } from "crypto"
-import type {
-  WASocket,
-  WAMessage,
-  proto,
-} from "@whiskeysockets/baileys"
-
-// Baileys ships as CommonJS. Under Node's ESM interop, `import makeWASocket from
-// "@whiskeysockets/baileys"` resolves to `module.exports` (the namespace object,
-// not the factory function), which throws "makeWASocket is not a function" at
-// runtime. Loading via createRequire gives us the real callable exports across
-// Baileys versions.
-const require = createRequire(import.meta.url)
-const baileys = require("@whiskeysockets/baileys")
-// NOTE: do not name this `makeWASocket`. The imported `WASocket` type is
-// defined as `ReturnType<typeof makeWASocket>`, so a local binding with that
-// name shadows it and collapses the socket type to `never`.
-const createWASocket: (...args: any[]) => WASocket =
-  baileys.makeWASocket ?? baileys.default
-const DisconnectReason: typeof import("@whiskeysockets/baileys").DisconnectReason =
-  baileys.DisconnectReason
-const downloadMediaMessage: typeof import("@whiskeysockets/baileys").downloadMediaMessage =
-  baileys.downloadMediaMessage
-const fetchLatestBaileysVersion: typeof import("@whiskeysockets/baileys").fetchLatestBaileysVersion =
-  baileys.fetchLatestBaileysVersion
-const Browsers: typeof import("@whiskeysockets/baileys").Browsers = baileys.Browsers
+import makeWASocket, {
+  Browsers,
+  DisconnectReason,
+  downloadMediaMessage,
+  makeWASocketAuto,
+  Button,
+  Poll,
+  type WAMessage,
+  type proto,
+} from "@japofc/baileys"
+type WASocket = any
 import bcrypt from "bcryptjs"
 import os from "os"
 import { readFile } from "fs/promises"
@@ -334,17 +319,7 @@ export class BotSession {
 
     // Always pin the current WhatsApp Web protocol version. Using a stale
     // version is the most common cause of "couldn't link because of errors".
-    let version: [number, number, number] | undefined
-    try {
-      const latest = await fetchLatestBaileysVersion()
-      version = latest.version
-      logger.info({ number: this.number, version }, "using WA version")
-    } catch (err) {
-      logger.warn({ err }, "fetchLatestBaileysVersion failed; using bundled default")
-    }
-
-    this.sock = createWASocket({
-      version,
+    this.sock = await makeWASocketAuto({
       auth: state,
       logger: baileysLogger,
       printQRInTerminal: false,
@@ -576,6 +551,39 @@ export class BotSession {
     return this.fetchImage(bannerUrl(category))
   }
 
+  private async sendInteractiveMenu(jid: string, text: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await new Button(this.sock)
+        .setTitle(this.settings.botName)
+        .setBody(text.slice(0, 3500))
+        .setFooter("Choose an action or use text commands")
+        .addReply("Status", "menu_status")
+        .addReply("Ping", "menu_ping")
+        .addReply("Help", "menu_help")
+        .send(jid, { validate: true })
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "interactive menu unavailable; using text fallback")
+      return false
+    }
+  }
+
+  private async sendControlPoll(jid: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await new Poll(this.sock)
+        .setName("Bot controls")
+        .addOptions(["Status view", "Status react", "Chatbot", "View-once mode"])
+        .setSelectable(1)
+        .send(jid)
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "control poll unavailable")
+      return false
+    }
+  }
+
   // Send a branded message with a banner image + caption (falls back to text).
   private async sendBranded(
     jid: string,
@@ -676,7 +684,10 @@ export class BotSession {
     // --- AutoChat: Auto-reply to direct messages with AI ---
     // Baileys can represent direct chats as @s.whatsapp.net or @lid.
     const isDirectChat = remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid")
-    if (this.settings.autoChatEnabled === true && isDirectChat) {
+    const scope = this.settings.chatScope || "dm"
+    const scopeAllowsChat = scope === "all" || (scope === "dm" && isDirectChat) || (scope === "groups" && remoteJid.endsWith("@g.us")) || (scope === "inbox" && isDirectChat)
+    if (this.settings.autoChatEnabled === true && scopeAllowsChat) {
+      logger.info({ number: this.number, remoteJid, scope, aiEnabled: this.settings.aiEnabled }, "autochat accepted")
       // Never hold the message event loop open while an AI provider responds.
       // Commands and later messages remain responsive during slow API calls.
       void this.handleAutoChat(msg, remoteJid).catch((err) => {
@@ -812,7 +823,8 @@ export class BotSession {
         response = this.getSmartResponse(text)
       }
 
-      await this.sock.sendMessage(remoteJid, { text: response }, { quoted: msg })
+      logger.info({ number: this.number, remoteJid, responseLength: response.length }, "autochat sending reply")
+      await this.sock.sendMessage(remoteJid, { text: response || this.getSmartResponse(text) }, { quoted: msg })
     } catch (err) {
       logger.debug({ err }, "autochat response failed")
     }
@@ -844,8 +856,12 @@ export class BotSession {
         })
 
         if (aiResponse.ok) {
-          const data = (await aiResponse.json()) as any
-          const result = data?.result ?? data?.response ?? data?.message ?? data?.text ?? data?.data?.response ?? data?.data?.message
+          const raw = await aiResponse.text()
+          let data: any = raw
+          try { data = JSON.parse(raw) } catch { /* plain-text API response */ }
+          const result = typeof data === "string"
+            ? data
+            : data?.result ?? data?.response ?? data?.message ?? data?.text ?? data?.data?.response ?? data?.data?.message
           if (result) {
             return String(result).slice(0, 500) // Limit response length
           }
@@ -930,6 +946,7 @@ export class BotSession {
       { key, message: inner } as WAMessage,
       "buffer",
       {},
+      undefined,
     )) as Buffer
 
     const caption =
@@ -983,15 +1000,19 @@ export class BotSession {
   }
 
   private extractText(msg: WAMessage): string {
-    const m = msg.message
+    const m: any = msg.message
     if (!m) return ""
-    return (
-      m.conversation ||
-      m.extendedTextMessage?.text ||
-      m.imageMessage?.caption ||
-      m.videoMessage?.caption ||
-      ""
-    )
+    if (m.buttonsResponseMessage?.selectedButtonId) return `${this.settings.prefix}${m.buttonsResponseMessage.selectedButtonId}`
+    if (m.templateButtonReplyMessage?.selectedId) return `${this.settings.prefix}${m.templateButtonReplyMessage.selectedId}`
+    const flow = m.interactiveResponseMessage?.nativeFlowResponseMessage
+    if (flow?.paramsJson) {
+      try {
+        const params = JSON.parse(flow.paramsJson)
+        const action = params.id || params.button_id || params.selected_id
+        if (action) return `${this.settings.prefix}${action}`
+      } catch { /* unsupported flow payload; fall back to text */ }
+    }
+    return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || ""
   }
 
 
@@ -1133,7 +1154,12 @@ export class BotSession {
     const withoutPrefix = text.slice(prefix.length).trim()
     const command = withoutPrefix.split(/\s+/)[0]?.toLowerCase() ?? ""
     const args = withoutPrefix.slice(command.length).trim()
-    const isOwner = msg.key.fromMe === true
+    logger.info({ number: this.number, command, hasArgs: Boolean(args) }, "command received")
+    const senderJid = msg.key.participant || msg.key.remoteJid || ""
+    const normalizeIdentity = (jid: string) => jid.replace(/:\d+(?=@)/, "").replace(/\D/g, "")
+    const normalizedSender = normalizeIdentity(senderJid)
+    const normalizedOwner = normalizeIdentity(this.ownJid() || this.number)
+    const isOwner = msg.key.fromMe === true || (normalizedOwner.length > 0 && normalizedSender.endsWith(normalizedOwner))
   const reply = async (body: string) => {
     // Keep replies immediate. Presence is optional and must never block delivery.
     if ((this.settings as BotSettings & { showTyping?: boolean }).showTyping !== false) void this.sendTyping(remoteJid)
@@ -1146,6 +1172,15 @@ export class BotSession {
 
     try {
       switch (command) {
+        case "menu_status":
+          await this.cmdStatus(remoteJid, msg)
+          break
+        case "menu_ping":
+          await this.cmdPing(remoteJid, msg)
+          break
+        case "menu_help":
+          await reply(`Use ${prefix}menu for controls. Owner controls: ${prefix}statusview on/off, ${prefix}statusreact on/off, ${prefix}chatbot on/off, ${prefix}scope dm/groups/all/inbox.`)
+          break
         case "alive":
           if (this.settings.aliveEnabled) await this.cmdAlive(remoteJid, msg)
           break
@@ -1190,10 +1225,8 @@ export class BotSession {
             }
           }
 
-          // Send menu text
-          await this.sendBranded(
-            remoteJid,
-            menuMessage(this.settings.botName, prefix, {
+          // Prefer native buttons, with the existing text menu as a guaranteed fallback.
+          const menuText = menuMessage(this.settings.botName, prefix, {
               uptime: this.formatUptime(Date.now() - this.startTime),
               ram: this.formatRam(),
               mode: this.settings.publicMode ? "PUBLIC" : "PRIVATE",
@@ -1204,11 +1237,13 @@ export class BotSession {
                 statusView: this.settings.autoStatusView,
                 statusReact: this.settings.autoStatusReact,
                 chatbot: this.settings.autoChatEnabled,
+                chatScope: this.settings.chatScope,
                 viewOnceMode: this.settings.viewOnceMode,
               },
-            }),
-            "menu",
-          )
+            })
+          if (!(await this.sendInteractiveMenu(remoteJid, menuText))) {
+            await this.sendBranded(remoteJid, menuText, "menu")
+          }
           break
         }
         case "pairwhats": {
@@ -1242,6 +1277,14 @@ export class BotSession {
         case "vvmode":
           await this.cmdViewOnceMode(isOwner, args, reply)
           break
+        case "scope":
+        case "chatscope":
+          await this.cmdChatScope(isOwner, args, reply)
+          break
+        case "train":
+        case "persona":
+          await this.cmdTrain(isOwner, args, reply)
+          break
         case "autotype":
         case "autotyping":
           await this.cmdToggle(isOwner, "autoTyping", args, "Auto typing", reply)
@@ -1253,7 +1296,6 @@ export class BotSession {
           await this.cmdSetPublic(isOwner, false, reply)
           break
         case "vv":
-        case "viewonce":
         case "vv2":
           await this.cmdVv(msg, remoteJid, reply)
           break
@@ -1831,6 +1873,24 @@ export class BotSession {
     )
     this.applyPresence()
     await reply(`${label} is now *${next ? "ON" : "OFF"}*.`)
+  }
+
+  private async cmdChatScope(isOwner: boolean, args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!isOwner) return void reply("This command is for the bot owner only.")
+    const scope = args.trim().toLowerCase()
+    if (!["dm", "groups", "all", "inbox"].includes(scope)) return void reply(`Chat scope is *${this.settings.chatScope || "dm"}*. Use dm, groups, all, or inbox.`)
+    this.settings.chatScope = scope as BotSettings["chatScope"]
+    await bots().updateOne({ number: this.number }, { $set: { "settings.chatScope": this.settings.chatScope, updatedAt: new Date() } })
+    await reply(`Chatbot scope is now *${scope}*.`)
+  }
+
+  private async cmdTrain(isOwner: boolean, args: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    if (!isOwner) return void reply("This command is for the bot owner only.")
+    const persona = args.trim()
+    if (!persona) return void reply(`Training is: *${this.settings.aiPersona || "not set"}*. Use ${this.settings.prefix}train <instructions>.`)
+    this.settings.aiPersona = persona.slice(0, 2000)
+    await bots().updateOne({ number: this.number }, { $set: { "settings.aiPersona": this.settings.aiPersona, updatedAt: new Date() } })
+    await reply("Bot training instructions saved and active.")
   }
 
   private async cmdViewOnceMode(
@@ -2931,6 +2991,7 @@ Powered by WhatsBot - World of Technology Team`
             { key: msg.key, message: quoted } as WAMessage,
             "buffer",
             {},
+            undefined,
           )
           if (imageData) {
             await this.sock.updateProfilePicture(remoteJid, imageData)

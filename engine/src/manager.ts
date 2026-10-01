@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, type BotSettings } from "./types.js"
 class SessionManager {
   private sessions = new Map<string, BotSession>()
   private starting = new Map<string, Promise<BotSession>>()
+  private reconnectAttempts = new Map<string, number>()
   get(number: string): BotSession | undefined {
     return this.sessions.get(number)
   }
@@ -45,14 +46,19 @@ class SessionManager {
       session.setTerminalDisconnectHandler(() => {
         if (this.sessions.get(number) === session) {
           this.sessions.delete(number)
+          const attempt = (this.reconnectAttempts.get(number) ?? 0) + 1
+          this.reconnectAttempts.set(number, attempt)
+          const delay = Math.min(5000 * 2 ** (attempt - 1), 120000)
+          logger.warn({ number, attempt, delay }, "scheduling session reconnect")
           setTimeout(() => {
-            this.startSession(number).catch((err) => logger.error({ number, err }, "automatic session restart failed"))
-          }, 2500)
+            this.startSession(number).catch((err) => logger.error({ number, err, attempt }, "automatic session restart failed"))
+          }, delay)
         }
       })
       this.sessions.set(number, session)
       try {
         await session.start()
+        this.reconnectAttempts.delete(number)
         return session
       } catch (err) {
         this.sessions.delete(number)
@@ -73,9 +79,13 @@ class SessionManager {
       session.setTerminalDisconnectHandler(() => {
         if (this.sessions.get(number) === session) {
           this.sessions.delete(number)
+          const attempt = (this.reconnectAttempts.get(number) ?? 0) + 1
+          this.reconnectAttempts.set(number, attempt)
+          const delay = Math.min(5000 * 2 ** (attempt - 1), 120000)
+          logger.warn({ number, attempt, delay }, "scheduling session reconnect")
           setTimeout(() => {
-            this.startSession(number).catch((err) => logger.error({ number, err }, "automatic session restart failed"))
-          }, 2500)
+            this.startSession(number).catch((err) => logger.error({ number, err, attempt }, "automatic session restart failed"))
+          }, delay)
         }
       })
       this.sessions.set(number, session)

@@ -91,14 +91,14 @@ export function menuMessage(
     ram?: string
     mode?: string
     plugins?: Array<{ command: string; name: string; enabled?: boolean; category?: string }>
-    controls?: { statusView: boolean; statusReact: boolean; chatbot: boolean; viewOnceMode: string }
+    controls?: { statusView: boolean; statusReact: boolean; chatbot: boolean; viewOnceMode: string; chatScope?: string }
   },
 ): string {
   const uptime = meta?.uptime || "0s"
   const ram = meta?.ram || "—"
   const mode = meta?.mode || "PUBLIC"
   const plugins = meta?.plugins || []
-  const controls = meta?.controls || { statusView: false, statusReact: false, chatbot: false, viewOnceMode: "dm" }
+  const controls = meta?.controls || { statusView: false, statusReact: false, chatbot: false, viewOnceMode: "dm", chatScope: "dm" }
   const mark = (enabled: boolean) => enabled ? "ON" : "OFF"
 
   const header =
@@ -143,7 +143,8 @@ export function menuMessage(
   const owner = section("👑 EMPEROR COMMANDS", [
     `${prefix}statusview on/off — Auto status view: ${mark(controls.statusView)}`,
     `${prefix}statusreact on/off — Auto status react: ${mark(controls.statusReact)}`,
-    `${prefix}chatbot on/off — DM chatbot: ${mark(controls.chatbot)}`,
+    `${prefix}chatbot on/off — Chatbot: ${mark(controls.chatbot)}`,
+    `${prefix}scope dm/groups/all/inbox — Chat scope: ${controls.chatScope || "dm"}`,
     `${prefix}viewonce same/dm — View-once mode: ${controls.viewOnceMode}`,
     `${prefix}autoreact on/off — Auto applaud battles`,
     `${prefix}online on/off — Show online when active (smart mode)`,
