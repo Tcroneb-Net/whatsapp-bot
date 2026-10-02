@@ -457,16 +457,20 @@ export class BotSession {
       }
     })
 
-  this.sock.ev.on("messages.upsert", ({ messages, type }) => {
-    if (type !== "notify") return
-    for (const msg of messages) {
-      void this.handleMessage(msg).catch((err) => {
-        const message = err instanceof Error ? err.message : String(err)
-        const log = isCryptoNoise(err) ? logger.debug.bind(logger) : logger.warn.bind(logger)
-        log({ number: this.number, message, id: msg.key.id }, "message ignored after handler failure")
-      })
-    }
-  })
+    this.sock.ev.on("group-participants.update", (update) => {
+      logger.info({ number: this.number, groupJid: update.id, action: update.action, count: update.participants?.length ?? 0 }, "group participants updated")
+    })
+
+    this.sock.ev.on("messages.upsert", ({ messages, type }) => {
+      if (type !== "notify") return
+      for (const msg of messages) {
+        void this.handleMessage(msg).catch((err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          const log = isCryptoNoise(err) ? logger.debug.bind(logger) : logger.warn.bind(logger)
+          log({ number: this.number, message, id: msg.key.id }, "message ignored after handler failure")
+        })
+      }
+    })
   }
 
   private async setStatus(status: "pairing" | "connected" | "disconnected"): Promise<void> {
@@ -567,6 +571,40 @@ export class BotSession {
     }
   }
 
+  private async sendInteractiveList(jid: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await this.sock.sendMessage(jid, {
+        text: "Choose a bot section",
+        footer: this.settings.botName,
+        title: "Bot menu",
+        buttonText: "Open menu",
+        sections: [{ title: "Commands", rows: [
+          { title: "Status", rowId: "menu_status", description: "Show connection and settings" },
+          { title: "Ping", rowId: "menu_ping", description: "Check response speed" },
+          { title: "Help", rowId: "menu_help", description: "Show available controls" },
+        ] }],
+      } as any)
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "Baileys mod list unavailable")
+      return false
+    }
+  }
+
+  private async sendControlPoll(jid: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await this.sock.sendMessage(jid, {
+        poll: { name: "Bot controls", values: ["Status view", "Status react", "Chatbot", "View-once mode"], selectableCount: 1 },
+      } as any)
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "Baileys mod poll unavailable")
+      return false
+    }
+  }
+
   // Send a branded message with a banner image + caption (falls back to text).
   private async sendBranded(
     jid: string,
@@ -574,7 +612,7 @@ export class BotSession {
     category: BannerCategory = "welcome",
   ): Promise<void> {
     if (!this.sock) return
-    await this.sendTyping(jid)
+    void this.sendTyping(jid).catch(() => undefined)
     const image = await this.loadBanner(category)
     if (image) {
       await this.sock.sendMessage(jid, { image, caption })
@@ -987,6 +1025,7 @@ export class BotSession {
     if (!m) return ""
     if (m.buttonsResponseMessage?.selectedButtonId) return `${this.settings.prefix}${m.buttonsResponseMessage.selectedButtonId}`
     if (m.templateButtonReplyMessage?.selectedId) return `${this.settings.prefix}${m.templateButtonReplyMessage.selectedId}`
+    if (m.listResponseMessage?.singleSelectReply?.selectedRowId) return `${this.settings.prefix}${m.listResponseMessage.singleSelectReply.selectedRowId}`
     const flow = m.interactiveResponseMessage?.nativeFlowResponseMessage
     if (flow?.paramsJson) {
       try {
@@ -1164,6 +1203,12 @@ export class BotSession {
         case "menu_help":
           await reply(`Use ${prefix}menu for controls. Owner controls: ${prefix}statusview on/off, ${prefix}statusreact on/off, ${prefix}chatbot on/off, ${prefix}scope dm/groups/all/inbox.`)
           break
+        case "list":
+          if (!(await this.sendInteractiveList(remoteJid))) await reply(`Use ${prefix}menu for controls.`)
+          break
+        case "poll":
+          if (!(await this.sendControlPoll(remoteJid))) await reply(`Polls are not supported by this WhatsApp client.`)
+          break
         case "alive":
           if (this.settings.aliveEnabled) await this.cmdAlive(remoteJid, msg)
           break
@@ -1225,7 +1270,9 @@ export class BotSession {
               },
             })
           if (!(await this.sendInteractiveMenu(remoteJid, menuText))) {
-            await this.sendBranded(remoteJid, menuText, "menu")
+            if (!(await this.sendInteractiveList(remoteJid))) {
+              await this.sendBranded(remoteJid, menuText, "menu")
+            }
           }
           break
         }
