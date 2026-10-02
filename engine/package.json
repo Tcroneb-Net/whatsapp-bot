@@ -11,6 +11,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@alexainc/baileys-mod": "github:AlexaInc/baileys-mod",
     "@whiskeysockets/baileys": "6.7.24",
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",

@@ -5,7 +5,7 @@ import makeWASocket, {
   downloadMediaMessage,
   type WAMessage,
   type proto,
-} from "@whiskeysockets/baileys"
+} from "@alexainc/baileys-mod"
 type WASocket = any
 import bcrypt from "bcryptjs"
 import os from "os"
@@ -546,6 +546,25 @@ export class BotSession {
       logger.debug({ category }, "local engine asset not found; using remote fallback")
     }
     return this.fetchImage(bannerUrl(category))
+  }
+
+  private async sendInteractiveMenu(jid: string, text: string): Promise<boolean> {
+    if (!this.sock) return false
+    try {
+      await this.sock.sendMessage(jid, {
+        text: text.slice(0, 4096),
+        footer: "Choose an action or use text commands",
+        buttons: [
+          { buttonId: "menu_status", buttonText: { displayText: "Status" }, type: 1 },
+          { buttonId: "menu_ping", buttonText: { displayText: "Ping" }, type: 1 },
+          { buttonId: "menu_help", buttonText: { displayText: "Help" }, type: 1 },
+        ],
+      } as any)
+      return true
+    } catch (err) {
+      logger.debug({ number: this.number, err }, "Baileys mod buttons unavailable; using text menu")
+      return false
+    }
   }
 
   // Send a branded message with a banner image + caption (falls back to text).
@@ -1205,7 +1224,9 @@ export class BotSession {
                 viewOnceMode: this.settings.viewOnceMode,
               },
             })
-          await this.sendBranded(remoteJid, menuText, "menu")
+          if (!(await this.sendInteractiveMenu(remoteJid, menuText))) {
+            await this.sendBranded(remoteJid, menuText, "menu")
+          }
           break
         }
         case "pairwhats": {
