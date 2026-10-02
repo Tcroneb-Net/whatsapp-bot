@@ -102,7 +102,7 @@ export function menuMessage(
   const mark = (enabled: boolean) => enabled ? "ON" : "OFF"
 
   const header =
-    `╭━〔 *${botName.toUpperCase()} MAXIMUS* 〕━⬣\n` +
+    `╭━〔 *${botName.toUpperCase()}* 〕━⬣\n` +
     `┃ ◆\n` +
     `┃   ◆ STATUS : ${mode}\n` +
     `┃ ◆  Command Prefix : [ ${prefix} ]\n` +
@@ -121,14 +121,15 @@ export function menuMessage(
     `${prefix}menu`, `${prefix}ping`, `${prefix}alive`, `${prefix}pair`, `${prefix}status`,
   ])
   const downloads = section("🏆 DOWNLOADS", [
-    `${prefix}play <song>`, `${prefix}download <url>`, `${prefix}dramadl <dramaId> <episodeId>`, `${prefix}sc <url>`, `${prefix}dub <url>`,
+    `${prefix}play <song>`, `${prefix}download <url>`, `${prefix}drama <dramaId>`, `${prefix}dramadl <dramaId> <episodeId>`, `${prefix}sc <url>`, `${prefix}dub <url>`,
   ])
   const search = section("🔎 SEARCH & CONTENT", [
     `${prefix}lyrics <song>`, `${prefix}pinterest <query>`, `${prefix}yts <query>`,
   ])
   const create = section("✨ CREATE & EDIT", [
     `${prefix}remusic <prompt>`, `${prefix}rm <prompt>`, `${prefix}img <prompt>`,
-    `${prefix}img <prompt> --luminux`, `${prefix}edit <image-url | prompt>`,
+    `${prefix}nano <prompt>`, `${prefix}edit <image-url | prompt>`,
+    `${prefix}upload` + ` — reply to an image`,
   ])
   const translate = section("🌐 TRANSLATE", [`${prefix}translate <lang> <text>`])
   const tools = section("⚒️ WARRIOR TOOLS", [

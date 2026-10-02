@@ -560,9 +560,9 @@ export class BotSession {
         text: text.slice(0, 4096),
         footer: "Choose an action or use text commands",
         buttons: [
-          { buttonId: "menu_status", buttonText: { displayText: "Status" }, type: 1 },
-          { buttonId: "menu_ping", buttonText: { displayText: "Ping" }, type: 1 },
-          { buttonId: "menu_help", buttonText: { displayText: "Help" }, type: 1 },
+          { buttonId: "menu_play", buttonText: { displayText: "Play song" }, type: 1 },
+          { buttonId: "menu_download", buttonText: { displayText: "Download URL" }, type: 1 },
+          { buttonId: "menu_drama", buttonText: { displayText: "Drama" }, type: 1 },
         ],
       } as any)
       return true
@@ -1196,13 +1196,22 @@ export class BotSession {
     try {
       switch (command) {
         case "menu_status":
-          await this.cmdStatus(remoteJid, msg)
+          if (isOwner) await this.cmdStatus(this.ownJid() || remoteJid, msg)
           break
         case "menu_ping":
           await this.cmdPing(remoteJid, msg)
           break
         case "menu_help":
           await reply(`Use ${prefix}menu for controls. Owner controls: ${prefix}statusview on/off, ${prefix}statusreact on/off, ${prefix}chatbot on/off, ${prefix}scope dm/groups/all/inbox.`)
+          break
+        case "menu_play":
+          await reply(`Example: ${prefix}play Calm Down by Rema`)
+          break
+        case "menu_download":
+          await reply(`Example: ${prefix}download https://example.com/video`)
+          break
+        case "menu_drama":
+          await reply(`Example: ${prefix}drama dramaId`)
           break
         case "list":
           if (!(await this.sendInteractiveList(remoteJid))) await reply(`Use ${prefix}menu for controls.`)
@@ -1217,7 +1226,7 @@ export class BotSession {
           if (this.settings.pingEnabled) await this.cmdPing(remoteJid, msg)
           break
         case "status":
-          await this.cmdStatus(remoteJid, msg)
+          if (isOwner) await this.cmdStatus(this.ownJid() || remoteJid, msg)
           break
         case "pair":
           if (this.settings.pairCommandEnabled) {
@@ -1383,6 +1392,8 @@ export class BotSession {
         case "img":
         case "image":
         case "flux":
+        case "nano":
+        case "nanobanana":
           await this.cmdImageGeneration(args, remoteJid, reply)
           break
         case "aivideo":
@@ -2805,7 +2816,7 @@ Powered by WhatsBot - World of Technology Team`
       // Send thumbnail with song info
       const info =
         `🎵 *${title}*\n\n` +
-        `⏱️ *Duration:* ${duration}\n` +
+        `⏱�� *Duration:* ${duration}\n` +
         `👁️ *Views:* ${views}\n` +
         `📅 *Published:* ${result.published || "Unknown"}\n\n` +
         `⏳ Preparing your download...`
