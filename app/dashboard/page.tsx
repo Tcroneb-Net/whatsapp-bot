@@ -4,7 +4,7 @@ import { DashboardClient } from "@/components/dashboard-client"
 
 export const metadata = {
   title: "Spider Mini Dashboard",
-  description: "Professional WhatsApp bot management, group automation, music, and media control",
+  description: "Private SPIDER MINI connection and capacity dashboard.",
 }
 
 export default async function DashboardPage() {

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Spider Mini — WhatsApp Bot Control',
   description:
-    'Pair your number, manage Spider Mini, automate groups, generate music, edit images, and control your WhatsApp assistant.',
+    'Pair your WhatsApp number and manage your private SPIDER MINI connection.',
   generator: 'v0.app',
   icons: {
     icon: [

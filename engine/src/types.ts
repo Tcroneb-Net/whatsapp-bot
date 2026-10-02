@@ -33,6 +33,7 @@ export interface BotSettings {
   autoClearCacheHours: number
   autoChatEnabled: boolean
   autoChatUseAI: boolean
+  autoDownloadLinks: boolean
   chatScope: "dm" | "groups" | "all" | "inbox"
   aiPersona: string
   groupWorkEnabled: boolean
@@ -82,6 +83,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoClearCacheHours: 6,
   autoChatEnabled: false,
   autoChatUseAI: true,
+  autoDownloadLinks: false,
   chatScope: "dm",
   groupWorkEnabled: false,
   groupWorkThreshold: 50,
