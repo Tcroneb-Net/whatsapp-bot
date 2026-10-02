@@ -553,6 +553,33 @@ export class BotSession {
     return this.fetchImage(bannerUrl(category))
   }
 
+  private async sendResultActions(jid: string, includeAi = true): Promise<void> {
+    if (!this.sock) return
+    try {
+      await this.sock.sendMessage(jid, {
+        text: "What next?",
+        footer: "SPIDER MINI",
+        buttons: [
+          { buttonId: "menu", buttonText: { displayText: "Back to menu" }, type: 1 },
+          ...(includeAi ? [{ buttonId: "result_ai", buttonText: { displayText: "Ask AI" }, type: 1 }] : []),
+          { buttonId: "result_channel", buttonText: { displayText: "Join channel" }, type: 1 },
+          { buttonId: "result_report", buttonText: { displayText: "Report error" }, type: 1 },
+        ],
+      } as any)
+    } catch (err) {
+      logger.debug({ err }, "result action buttons unavailable")
+    }
+  }
+
+  private async handleAutoDownload(msg: WAMessage, remoteJid: string): Promise<void> {
+    if (!this.settings.autoDownloadLinks || remoteJid === "status@broadcast") return
+    const text = this.extractText(msg)
+    if (text.trim().startsWith(this.settings.prefix)) return
+    const url = text.match(/https?:\/\/[^\s<>]+/i)?.[0]
+    if (!url || /\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?|$)/i.test(url)) return
+    await this.cmdDownloadSocial(url, remoteJid, async (body) => this.sock?.sendMessage(remoteJid, { text: body }))
+  }
+
   private async sendInteractiveMenu(jid: string, text: string): Promise<boolean> {
     if (!this.sock) return false
     try {
@@ -686,6 +713,8 @@ export class BotSession {
     // Commands take priority. Auxiliary moderation/analytics work runs after
     // dispatch so a slow database or media operation never delays replies.
     await this.handleCommands(msg, remoteJid)
+
+    void this.handleAutoDownload(msg, remoteJid).catch((err) => logger.debug({ err }, "automatic link download failed"))
 
     void (async () => {
       if (this.settings.antiViewOnce) {
@@ -1201,9 +1230,19 @@ export class BotSession {
         case "menu_ping":
           await this.cmdPing(remoteJid, msg)
           break
-        case "menu_help":
-          await reply(`Use ${prefix}menu for controls. Owner controls: ${prefix}statusview on/off, ${prefix}statusreact on/off, ${prefix}chatbot on/off, ${prefix}scope dm/groups/all/inbox.`)
-          break
+  case "menu_help":
+  await reply(`Use ${prefix}menu for controls. Owner controls: ${prefix}statusview on/off, ${prefix}statusreact on/off, ${prefix}chatbot on/off, ${prefix}scope dm/groups/all/inbox.`)
+  break
+  case "result_ai":
+  await this.cmdAi("Help me with my last Spider Mini result", reply)
+  break
+  case "result_channel":
+  await reply("Join the SPIDER MINI channel from the official invite shared by the owner.")
+  break
+  case "result_report":
+  await reply("Report sent. Please describe the error and include the command you used.")
+  try { await this.sock.sendMessage("263788533181@s.whatsapp.net", { text: `SPIDER MINI error report from ${remoteJid}: ${text.slice(0, 500)}` }) } catch (err) { logger.debug({ err }, "error report forwarding failed") }
+  break
         case "menu_play":
           await reply(`Example: ${prefix}play Calm Down by Rema`)
           break
@@ -1703,11 +1742,13 @@ export class BotSession {
       await this.sock.sendMessage(remoteJid, { text: `*${title}*\n\nPrompt: ${prompt}\nStyle: ${data.data.styles || "Female Vocal"}\n\n*Lyrics*\n${lyrics}` })
       if (song.image) await this.sock.sendMessage(remoteJid, { image: { url: song.image }, caption: `Cover art — ${title}` })
       await this.sock.sendMessage(remoteJid, { audio: { url: song.audio }, mimetype: "audio/mpeg", ptt: false })
-      await reply(`Remusic complete: *${title}*\nYour lyrics, cover, and audio are above.`)
-    } catch (err) {
+  await reply(`Remusic complete: *${title}*\nYour lyrics, cover, and audio are above.\n\n_Powered by SPIDER MINI_`)
+  await this.sendResultActions(remoteJid)
+  } catch (err) {
       logger.debug({ err }, "remusic command failed")
-      await reply("Remusic timed out or is temporarily unavailable. Please try again.")
-    } finally {
+  await reply("Remusic timed out or is temporarily unavailable. Please try again.\n\n_Powered by SPIDER MINI_")
+  await this.sendResultActions(remoteJid)
+  } finally {
       clearTimeout(timeout)
     }
   }
@@ -2776,7 +2817,8 @@ Powered by WhatsBot - World of Technology Team`
         caption: `✨ *Image Edited*\n\n*Prompt:* ${prompt}\n\nPowered by WhatsBot - World of Technology Team`,
       })
 
-      await reply("✅ Image editing complete!")
+      await reply("✅ Image editing complete!\n\n_Powered by SPIDER MINI_")
+      await this.sendResultActions(remoteJid)
     } catch (err) {
       logger.debug({ err }, "image editing failed")
       console.log("[v0] Image edit error:", err)

@@ -51,6 +51,8 @@ export interface BotSettings {
   autoChatEnabled: boolean
   // Use AI to generate responses in autochat.
   autoChatUseAI: boolean
+  // Automatically download supported URLs found in messages.
+  autoDownloadLinks: boolean
   // Where the auto-chatbot is allowed to respond.
   chatScope: "dm" | "groups" | "all" | "inbox"
   // Group Work Mode: enable message counting and locking in groups.
@@ -111,6 +113,7 @@ export const DEFAULT_SETTINGS: BotSettings = {
   autoClearCacheHours: 6,
   autoChatEnabled: false,
   autoChatUseAI: true,
+  autoDownloadLinks: false,
   chatScope: "dm",
   groupWorkEnabled: false,
   groupWorkThreshold: 50,
@@ -165,6 +168,7 @@ export const EDITABLE_SETTING_KEYS: (keyof BotSettings)[] = [
   "autoClearCacheHours",
   "autoChatEnabled",
   "autoChatUseAI",
+  "autoDownloadLinks",
   "chatScope",
   "groupWorkEnabled",
   "groupWorkThreshold",

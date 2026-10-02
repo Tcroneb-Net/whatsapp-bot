@@ -92,6 +92,7 @@ export async function PATCH(req: Request) {
       key === "autoLikeStatus" ||
       key === "autoChatEnabled" ||
       key === "autoChatUseAI" ||
+      key === "autoDownloadLinks" ||
       key === "groupWorkEnabled" ||
       key === "antiSpamEnabled"
     ) {
