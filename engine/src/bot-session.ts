@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
-import makeWASocket, {
+import {
+  makeWASocket,
   Browsers,
   DisconnectReason,
   downloadMediaMessage,
