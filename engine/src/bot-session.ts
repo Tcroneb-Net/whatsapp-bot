@@ -3,12 +3,9 @@ import makeWASocket, {
   Browsers,
   DisconnectReason,
   downloadMediaMessage,
-  makeWASocketAuto,
-  Button,
-  Poll,
   type WAMessage,
   type proto,
-} from "@japofc/baileys"
+} from "@whiskeysockets/baileys"
 type WASocket = any
 import bcrypt from "bcryptjs"
 import os from "os"
@@ -319,7 +316,7 @@ export class BotSession {
 
     // Always pin the current WhatsApp Web protocol version. Using a stale
     // version is the most common cause of "couldn't link because of errors".
-    this.sock = await makeWASocketAuto({
+    this.sock = makeWASocket({
       auth: state,
       logger: baileysLogger,
       printQRInTerminal: false,
@@ -549,39 +546,6 @@ export class BotSession {
       logger.debug({ category }, "local engine asset not found; using remote fallback")
     }
     return this.fetchImage(bannerUrl(category))
-  }
-
-  private async sendInteractiveMenu(jid: string, text: string): Promise<boolean> {
-    if (!this.sock) return false
-    try {
-      await new Button(this.sock)
-        .setTitle(this.settings.botName)
-        .setBody(text.slice(0, 3500))
-        .setFooter("Choose an action or use text commands")
-        .addReply("Status", "menu_status")
-        .addReply("Ping", "menu_ping")
-        .addReply("Help", "menu_help")
-        .send(jid, { validate: true })
-      return true
-    } catch (err) {
-      logger.debug({ number: this.number, err }, "interactive menu unavailable; using text fallback")
-      return false
-    }
-  }
-
-  private async sendControlPoll(jid: string): Promise<boolean> {
-    if (!this.sock) return false
-    try {
-      await new Poll(this.sock)
-        .setName("Bot controls")
-        .addOptions(["Status view", "Status react", "Chatbot", "View-once mode"])
-        .setSelectable(1)
-        .send(jid)
-      return true
-    } catch (err) {
-      logger.debug({ number: this.number, err }, "control poll unavailable")
-      return false
-    }
   }
 
   // Send a branded message with a banner image + caption (falls back to text).
@@ -1241,9 +1205,7 @@ export class BotSession {
                 viewOnceMode: this.settings.viewOnceMode,
               },
             })
-          if (!(await this.sendInteractiveMenu(remoteJid, menuText))) {
-            await this.sendBranded(remoteJid, menuText, "menu")
-          }
+          await this.sendBranded(remoteJid, menuText, "menu")
           break
         }
         case "pairwhats": {

@@ -5,10 +5,10 @@ import {
   type AuthenticationCreds,
   type AuthenticationState,
   type SignalDataTypeMap,
-} from "@japofc/baileys"
+} from "@whiskeysockets/baileys"
 import { authState } from "./db.js"
 
-// Keep this module entirely ESM. @japofc/baileys uses top-level await, so a
+// Keep this module entirely ESM. @whiskeysockets/baileys uses top-level await, so a
 // CommonJS require() here makes Node reject the whole dependency graph.
 
 // A MongoDB-backed implementation of Baileys' auth state. Storing credentials in
