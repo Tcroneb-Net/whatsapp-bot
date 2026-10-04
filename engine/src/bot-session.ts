@@ -2837,7 +2837,7 @@ Powered by WhatsBot - World of Technology Team`
     try {
       await reply("🎵 Searching for your song...")
 
-      const apiUrl = `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`
+      const apiUrl = `https://apiziaul.vercel.app/api/downloader/ytplaymp3?query=${encodeURIComponent(args)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
 
       if (!response.ok) {
