@@ -2856,18 +2856,29 @@ Powered by WhatsBot - World of Technology Team`
     try {
       await reply("🎵 Searching for your song...")
 
-      const apiUrl = `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
-
-      if (!response.ok) {
-        console.log("[v0] Play API failed:", response.status, await response.text())
-        return void reply(`API Error: ${response.status}. Please try again.`)
+      const apiUrls = [
+        `https://apiziaul.vercel.app/api/downloader/ytplaymp3?query=${encodeURIComponent(args)}`,
+        `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`,
+      ]
+      let data: any = null
+      let lastStatus = 0
+      for (const apiUrl of apiUrls) {
+        try {
+          const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) })
+          lastStatus = response.status
+          if (!response.ok) continue
+          const candidate = (await response.json()) as any
+          if (candidate?.status === false) continue
+          data = candidate
+          break
+        } catch (error) {
+          logger.debug({ error }, "song provider unavailable")
+        }
       }
 
-      const data = (await response.json()) as any
-  const result = data?.result ?? data?.data ?? data
-  const downloadUrl = result?.download_url ?? result?.downloadUrl ?? result?.audio_url ?? result?.audio ?? result?.url ?? data?.download_url ?? data?.audio_url ?? data?.url
-  if (!result || !downloadUrl) return void reply("No playable song was found. Try a different search.")
+      const result = data?.result ?? data?.data ?? data
+      const downloadUrl = result?.downloadUrl ?? result?.download_url ?? result?.audio_url ?? result?.audio ?? result?.url ?? data?.downloadUrl ?? data?.download_url ?? data?.url
+      if (!result || !downloadUrl) return void reply(lastStatus ? `Song service unavailable (${lastStatus}). Please try again.` : "Song service timed out. Please try again.")
       const title = result.title || "Unknown"
       const duration = result.duration || "Unknown"
       const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
@@ -2877,9 +2888,9 @@ Powered by WhatsBot - World of Technology Team`
       // Send thumbnail with song info
       const info =
         `🎵 *${title}*\n\n` +
-        `⏱�� *Duration:* ${duration}\n` +
-        `👁️ *Views:* ${views}\n` +
-        `📅 *Published:* ${result.published || "Unknown"}\n\n` +
+        `Duration: ${duration}\n` +
+        `Views: ${views}\n` +
+        `Quality: ${result.quality || "MP3"}\n\n` +
         `⏳ Preparing your download...`
 
       const thumbBuf = thumbnail ? await this.fetchImage(thumbnail) : null
@@ -2904,9 +2915,9 @@ Powered by WhatsBot - World of Technology Team`
 
         const successMsg =
           `✅ *${title}* ready!\n\n` +
-          `🎤 ${result.published || ""}\n` +
-          `🎧 Enjoy!\n\n` +
-          `Powered by WhatsBot - World of Technology Team`
+          `Quality: ${result.quality || "MP3"}\n` +
+          `Enjoy your song.\n\n` +
+          `Powered by SPIDER MINI`
 
   await this.sock.sendMessage(remoteJid, { text: successMsg })
   await this.sendResultActions(remoteJid, false)
