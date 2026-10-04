@@ -2464,7 +2464,7 @@ Powered by WhatsBot - World of Technology Team`
     try {
       await reply(`🔎 Searching lyrics for "${args}"...`)
 
-      const apiUrl = `https://omegatech-api.dixonomega.tech/api/tools/lyrics?query=${encodeURIComponent(args)}`
+      const apiUrl = `https://api.hostify.co.zw/api/search/lyrics?q=${encodeURIComponent(args)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
 
       if (!response.ok) {
@@ -2837,7 +2837,7 @@ Powered by WhatsBot - World of Technology Team`
     try {
       await reply("🎵 Searching for your song...")
 
-      const apiUrl = `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(args)}`
+      const apiUrl = `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
 
       if (!response.ok) {
