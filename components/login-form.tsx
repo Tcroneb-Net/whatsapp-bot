@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Loader2, Smartphone, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +12,7 @@ export function LoginForm() {
   const [number, setNumber] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -24,10 +26,7 @@ export function LoginForm() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Login failed")
       toast.success("Welcome back!")
-      // Use window.location for redirect instead of router to avoid initialization issues
-      setTimeout(() => {
-        window.location.href = "/dashboard"
-      }, 500)
+      setTimeout(() => router.push("/dashboard"), 500)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed")
       setLoading(false)

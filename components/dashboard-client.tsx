@@ -1,6 +1,7 @@
 "use client"
 
 import useSWR from "swr"
+import { useRouter } from "next/navigation"
 import { Activity, Bot, CheckCircle2, LogOut, Users, Wifi, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,13 +11,14 @@ import { formatNumber } from "@/lib/phone"
 const fetcher = (url: string) => fetch(url).then(async (res) => { if (!res.ok) throw new Error("Unable to load dashboard") ; return res.json() })
 
 export function DashboardClient({ initialNumber }: { initialNumber: string }) {
+  const router = useRouter()
   const { data, error, isLoading } = useSWR("/api/bot-status", fetcher, { refreshInterval: 10000 })
   const capacity = Math.min(Number(data?.capacity?.used ?? 0), 100)
   const connected = data?.connected === true
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" })
-    window.location.href = "/"
+    router.push("/")
   }
 
   return <main className="min-h-dvh bg-[#090909] text-white">
