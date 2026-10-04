@@ -1282,7 +1282,7 @@ export class BotSession {
             try {
               await this.sock.sendMessage(remoteJid, {
                 image: proMenuImg,
-                caption: `🕷️ *${this.settings.botName} PRO MENU*\n\nPowered by Spider Mini Maximus\n\nType ${this.settings.prefix}alive for status or ${this.settings.prefix}ping for latency.`,
+                caption: `*${this.settings.botName} PRO MENU*\n\nFast commands, media tools, AI, and owner controls.\n\nType ${this.settings.prefix}alive for status or ${this.settings.prefix}ping for latency.`,
               })
             } catch (imgErr) {
               logger.debug({ imgErr }, "failed to send pro menu banner")
@@ -1467,10 +1467,6 @@ export class BotSession {
         case "soundcloud":
           await this.cmdSoundCloudDownload(args, remoteJid, reply)
           break
-        case "ig":
-        case "instagram":
-          await this.cmdInstagramDownload(args, remoteJid, reply)
-          break
         case "fbdl":
         case "fbv":
           await this.cmdFacebookDownload(args, remoteJid, reply)
@@ -1478,11 +1474,9 @@ export class BotSession {
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
           break
-        case "lyrics":
         case "lyric":
           await this.cmdLyrics(args, remoteJid, reply)
           break
-        case "autoreact":
         case "ar":
           await this.cmdAutoReact(args, isOwner, reply)
           break
@@ -1541,9 +1535,6 @@ export class BotSession {
           break
         case "autolike":
           await this.cmdAutoLike(args.split(/\s+/), reply)
-          break
-        case "autochat":
-          await this.cmdAutoChat(args.split(/\s+/), reply)
           break
         case "gwork":
           if (this.settings.groupWorkEnabled) await this.cmdGroupWork(remoteJid, msg, reply)
@@ -3216,7 +3207,7 @@ Powered by WhatsBot - World of Technology Team`
           `System works like this:\n` +
           `1️⃣ First link detected → Warn user\n` +
           `2️⃣ 3rd violation → Final warning\n` +
-          `3️⃣ 5th violation → User gets kicked\n\n` +
+          `3��⃣ 5th violation → User gets kicked\n\n` +
           `Blocked domains:\n` +
           `• WhatsApp, YouTube, Instagram, Facebook, TikTok\n\n` +
           `Admins bypass all restrictions.`,
