@@ -51,8 +51,8 @@ function requiredAny(names: string[], label: string): string {
 
 export const config = {
   instanceName: process.env.ENGINE_INSTANCE || "engine-1",
-  replyBrand: process.env.REPLY_BRAND || "bro",
-  replyFooter: process.env.REPLY_FOOTER || "Powered by Spider Mini Maximus",
+  replyBrand: process.env.REPLY_BRAND || "",
+  replyFooter: process.env.REPLY_FOOTER || "Powered by WORLD OF TECHNOLOGY TEAM",
   port: Number(process.env.PORT || 8080),
   mongoUri: requiredAny(["MONGODB_CONNECTION_STRING", "MONGODB_URI", "MONGO_URI", "DATABASE_URL"], "MONGODB_CONNECTION_STRING or MONGODB_URI"),
   mongoDb: process.env.MONGODB_DB || "whatsapp_bot",
