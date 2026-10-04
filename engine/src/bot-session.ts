@@ -1277,7 +1277,7 @@ export class BotSession {
         case "menu":
         case "help": {
           // Send text immediately; images are optional and must never block the menu.
-          const proMenuImg = null
+          const proMenuImg = await this.loadBanner("menu")
           if (proMenuImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
@@ -1290,7 +1290,7 @@ export class BotSession {
           }
           
           // Only add the rotating fallback banner when no custom image is configured.
-          const randomBannerImg = null
+          const randomBannerImg = proMenuImg ? null : await this.loadBanner("system")
           if (randomBannerImg && this.sock) {
             try {
               await this.sock.sendMessage(remoteJid, {
@@ -2269,8 +2269,18 @@ export class BotSession {
         const data = await response.json().catch(() => null) as any
         const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.url || data?.videoUrl
         if (!response.ok || !streamUrl) return void reply("That episode is not available right now.")
-        await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
-        return
+  await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
+  try {
+    await this.sock.sendMessage(remoteJid, {
+      text: "Episode ready. Choose what next:",
+      footer: "SPIDER MINI DRAMABOX",
+      buttons: [
+        { buttonId: `.dramabox stream ${dramaId} ${Number(chapterId) + 1}`, buttonText: { displayText: "Next episode" }, type: 1 },
+        { buttonId: "menu", buttonText: { displayText: "Back to menu" }, type: 1 },
+      ],
+    } as any)
+  } catch (buttonError) { logger.debug({ buttonError }, "drama next buttons unavailable") }
+  return
       } catch (error) {
         logger.warn({ error, remoteJid, action }, "drama stream failed")
         return void reply("Drama video timed out. Please try again shortly.")
@@ -2285,13 +2295,30 @@ export class BotSession {
       if (!response.ok) return void reply("Drama service is temporarily unavailable. Please try again.")
       const results = data?.results || data?.data?.results || data?.data?.list || data?.data?.dramas || []
       if (["search", "home", "category"].includes(action)) {
-        const list = Array.isArray(results) ? results.slice(0, 8) : []
+        const list = Array.isArray(results) ? results.slice(0, 3) : []
         if (!list.length) return void reply("No dramas found.")
         const text = list.map((item: any, index: number) => {
-          const player = `https://zimbox.top.co.zw/?drama=${encodeURIComponent(item.id)}&episode=${encodeURIComponent(item.chapterId || "latest")}`
-          return `${index + 1}. ${item.title || "Untitled"}\nEpisodes: ${item.episodes || "?"} · ${item.genres?.join(", ") || "Drama"}\n${item.synopsis ? item.synopsis.slice(0, 180) : ""}\nPlayer: ${player}\nStream: .dramabox stream ${item.id} ${item.chapterId || ""}`
+          const dramaId = item.id || item.dramaId || item.bookId
+  const episodeId = item.chapterId || item.episodeId || item.chapter_id || "1"
+  const player = `https://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(episodeId)}`
+          return `${index + 1}. ${item.title || "Untitled"}\nEpisodes: ${item.episodes || "?"} · ${item.genres?.join(", ") || "Drama"}\n${item.synopsis ? item.synopsis.slice(0, 180) : ""}\nGK Stream: ${player}\nDownload: .dramadl ${dramaId} ${episodeId}`
         }).join("\n\n")
-        await this.sock.sendMessage(remoteJid, { text: `DramaBox ${action}\n\n${text}` })
+        await this.sock.sendMessage(remoteJid, { text: `DramaBox ${action} — showing up to 3 results\n\n${text}` })
+        const first = list[0]
+        const firstDramaId = first.id || first.dramaId || first.bookId
+        const firstEpisodeId = first.chapterId || first.episodeId || first.chapter_id || "1"
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            text: "Choose an action for the first result:",
+            footer: "SPIDER MINI DRAMABOX",
+            buttons: [
+              { buttonId: `.dramabox stream ${firstDramaId} ${firstEpisodeId}`, buttonText: { displayText: "GK Stream" }, type: 1 },
+              { buttonId: `.dramadl ${firstDramaId} ${firstEpisodeId}`, buttonText: { displayText: "Download" }, type: 1 },
+            ],
+          } as any)
+        } catch (buttonError) {
+          logger.debug({ buttonError }, "drama buttons unavailable")
+        }
         for (const item of list.slice(0, 3)) {
           if (item.cover) await this.sock.sendMessage(remoteJid, { image: { url: item.cover }, caption: `${item.title}\nhttps://zimbox.top.co.zw/player/${item.id}/${item.chapterId || "latest"}` })
         }
@@ -2533,8 +2560,9 @@ Powered by WhatsBot - World of Technology Team`
         await this.sock.sendMessage(remoteJid, { text: msg })
       }
 
-      await reply("✅ Lyrics sent!")
-    } catch (err) {
+  await reply("✅ Lyrics sent!\n\n_Powered by SPIDER MINI_")
+  await this.sendResultActions(remoteJid, false)
+  } catch (err) {
       logger.debug({ err }, "lyrics command failed")
       console.log("[v0] Lyrics error:", err)
       await reply("Failed to get lyrics. Please try again.")
@@ -2837,7 +2865,7 @@ Powered by WhatsBot - World of Technology Team`
     try {
       await reply("🎵 Searching for your song...")
 
-      const apiUrl = `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(args)}`
+      const apiUrl = `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`
       const response = await fetch(apiUrl, { signal: AbortSignal.timeout(20000) })
 
       if (!response.ok) {
@@ -2846,9 +2874,9 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       const data = (await response.json()) as any
-      const result = data?.result ?? data?.data ?? data
-      const downloadUrl = result?.download_url ?? result?.downloadUrl ?? result?.url ?? result?.audio
-      if (!result || !downloadUrl) return void reply("No playable song was found. Try a different search.")
+  const result = data?.result ?? data?.data ?? data
+  const downloadUrl = result?.download_url ?? result?.downloadUrl ?? result?.audio_url ?? result?.audio ?? result?.url ?? data?.download_url ?? data?.audio_url ?? data?.url
+  if (!result || !downloadUrl) return void reply("No playable song was found. Try a different search.")
       const title = result.title || "Unknown"
       const duration = result.duration || "Unknown"
       const views = result.views ? (result.views > 1000000 ? Math.floor(result.views / 1000000) + "M" : Math.floor(result.views / 1000) + "K") : "N/A"
@@ -2889,8 +2917,9 @@ Powered by WhatsBot - World of Technology Team`
           `🎧 Enjoy!\n\n` +
           `Powered by WhatsBot - World of Technology Team`
 
-        await this.sock.sendMessage(remoteJid, { text: successMsg })
-      } else {
+  await this.sock.sendMessage(remoteJid, { text: successMsg })
+  await this.sendResultActions(remoteJid, false)
+  } else {
         await reply("Could not extract download link. Please try another song.")
       }
     } catch (err) {
@@ -4589,7 +4618,7 @@ Powered by WhatsBot - World of Technology Team`
     const percent = Math.round((count / threshold) * 100)
     
     const bar = "▓".repeat(Math.round(percent / 5)) + "░".repeat(20 - Math.round(percent / 5))
-    await reply(`*Group Message Count*\n\n📊 Progress: ${count}/${threshold} messages\n${bar} ${percent}%\n\n${locked ? '🔒 Status: LOCKED' : '🔓 Status: Open'}`)
+    await reply(`*Group Message Count*\n\n📊 Progress: ${count}/${threshold} messages\n${bar} ${percent}%\n\n${locked ? '��� Status: LOCKED' : '🔓 Status: Open'}`)
   }
 
   private async cmdGroupUnlock(remoteJid: string, reply: (text: string) => Promise<any>): Promise<void> {
