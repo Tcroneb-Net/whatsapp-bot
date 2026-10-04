@@ -114,7 +114,7 @@ export function menuMessage(
 
   const section = (title: string, items: string[]) =>
     `╭━━〔 ${title} 〕━━⬣\n` +
-    items.map((i) => `┃➤ ${i}`).join("\n") +
+    items.map((i) => `├⧉ ➤ ${i}`).join("\n") +
     `\n╰━━━━━━━━━━━━━━━━━━━━⬣`
 
   const general = section("⚙️ SETTINGS", [
