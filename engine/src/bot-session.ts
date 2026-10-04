@@ -2284,7 +2284,7 @@ export class BotSession {
       const response = await fetch(endpoints[action], { signal: AbortSignal.timeout(15000) })
       const data = await response.json().catch(() => null) as any
       if (!response.ok) return void reply("Drama service is temporarily unavailable. Please try again.")
-      const results = data?.results || data?.data?.results || data?.data?.list || data?.data?.dramas || []
+      const results = data?.results || data?.data?.results || data?.data?.list || data?.data?.dramas || (Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [])
       if (["search", "home", "category"].includes(action)) {
         const list = Array.isArray(results) ? results.slice(0, 3) : []
         if (!list.length) return void reply("No dramas found.")
@@ -2311,7 +2311,10 @@ export class BotSession {
           logger.debug({ buttonError }, "drama buttons unavailable")
         }
         for (const item of list.slice(0, 3)) {
-          if (item.cover) await this.sock.sendMessage(remoteJid, { image: { url: item.cover }, caption: `${item.title}\nhttps://zimbox.top.co.zw/player/${item.id}/${item.chapterId || "latest"}` })
+          const cover = item.cover || item.coverUrl || item.thumbnail || item.poster
+          const itemDramaId = item.id || item.dramaId || item.bookId
+          const itemEpisodeId = item.chapterId || item.episodeId || item.chapter_id || "1"
+          if (cover) await this.sock.sendMessage(remoteJid, { image: { url: cover }, caption: `${item.title || "Drama"}\nhttps://zimbox.top.co.zw/?drama=${encodeURIComponent(itemDramaId)}&episode=${encodeURIComponent(itemEpisodeId)}` })
         }
         return
       }
@@ -2482,16 +2485,25 @@ Powered by WhatsBot - World of Technology Team`
     try {
       await reply(`🔎 Searching lyrics for "${args}"...`)
 
-      const apiUrl = `https://omegatech-api.dixonomega.tech/api/tools/lyrics?query=${encodeURIComponent(args)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(15000) })
-
-      if (!response.ok) {
-        console.log("[v0] Lyrics API failed:", response.status)
-        return void reply("Failed to search lyrics. Please try again.")
+      const lyricUrls = [
+        `https://omegatech-api.dixonomega.tech/api/tools/lyrics?query=${encodeURIComponent(args)}`,
+        `https://api.lyrics.ovh/v1/${encodeURIComponent(args.split(/\s+/)[0])}/${encodeURIComponent(args.split(/\s+/).slice(1).join(" ") || args)}`,
+      ]
+      let data: any = null
+      for (const lyricUrl of lyricUrls) {
+        try {
+          const response = await fetch(lyricUrl, { signal: AbortSignal.timeout(15000) })
+          if (!response.ok) continue
+          const candidate = (await response.json()) as any
+          if (candidate?.lyrics || candidate?.result?.lyrics || candidate?.data?.lyrics) {
+            data = candidate
+            break
+          }
+        } catch (error) {
+          logger.debug({ error }, "lyrics provider unavailable")
+        }
       }
-
-      const data = (await response.json()) as any
-      console.log("[v0] Lyrics API response:", JSON.stringify(data).substring(0, 200))
+      if (!data) return void reply("Lyrics service is temporarily unavailable. Please try again.")
 
       // Handle different response formats
       let lyrics: string | null = null
@@ -2522,7 +2534,7 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       // Format lyrics in a professional WhatsApp-friendly way
-      const header = `���� *${title.toUpperCase()}*\n_${artist}_\n\n━━━━━━━━━━━━━━━━━━━━━`
+      const header = `╭━━〔 SPIDER MINI LYRICS 〕━━╮\n┃ *${title.toUpperCase()}*\n┃ _${artist}_\n╰━━━━━━━━━━━━━━━━━━━━╯`
       
       // Split lyrics into manageable chunks (WhatsApp has message limits)
       const lyricsLines = lyrics.split("\n")
@@ -2540,7 +2552,7 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       // Add footer to last message
-      const footer = `\n━━━━━━━━━━━━━━━━━━━━━\n📝 *Lines:* ${lineCount}\n\nPowered by WhatsBot - World of Technology Team`
+      const footer = `\n\n╭━━〔 DETAILS 〕━━╮\n┃ Lines: ${lineCount}\n┃ Source: Lyrics search\n╰━━━━━━━━━━━━━━━━╯\n_Powered by SPIDER MINI_`
       if (currentMessage.length + footer.length < 4000) {
         currentMessage += footer
       }
