@@ -2481,7 +2481,7 @@ Powered by WhatsBot - World of Technology Team`
       await reply(`🔎 Searching lyrics for "${args}"...`)
 
       const lyricUrls = [
-        `https://api.omegatech.app/api/Search/searchthatsong?action=search&query=${encodeURIComponent(args)}`,
+        `https://api.hostify.co.zw/api/search/lyrics?q=${encodeURIComponent(args)}`,
         `https://api.lyrics.ovh/v1/${encodeURIComponent(args.split(/\s+/)[0])}/${encodeURIComponent(args.split(/\s+/).slice(1).join(" ") || args)}`,
       ]
       let data: any = null
