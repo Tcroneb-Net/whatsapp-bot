@@ -1409,12 +1409,14 @@ export class BotSession {
   case "musicfinder":
   await this.cmdLyrics(args, remoteJid, reply)
   break
-        case "drama":
-        case "dramabox":
-        case "dramas":
-        case "dramadl":
-          await this.cmdDrama(args, remoteJid, reply)
-          break
+  case "drama":
+  case "dramabox":
+  case "dramas":
+  await this.cmdDrama(args, remoteJid, reply)
+  break
+  case "dramadl":
+  await this.cmdDrama(`download ${args}`, remoteJid, reply)
+  break
         case "yts":
         case "ytsearch":
           await this.cmdYouTubeSearch(args, reply)
@@ -2236,9 +2238,19 @@ export class BotSession {
       try {
         const response = await fetch(`${base}/stream?id=${encodeURIComponent(dramaId)}&chapter=${encodeURIComponent(chapterId)}`, { signal: AbortSignal.timeout(20000) })
         const data = await response.json().catch(() => null) as any
-        const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.url || data?.videoUrl
-        if (!response.ok || !streamUrl) return void reply("That episode is not available right now.")
-  await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
+        const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.data?.video_url || data?.url || data?.videoUrl || data?.video_url
+        if (!response.ok || !streamUrl) return void reply(this.maintenanceMessage("DramaBox download service"))
+  const playerUrl = `https://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`
+  if (action === "download") {
+    await this.sock.sendMessage(remoteJid, {
+      document: { url: streamUrl },
+      fileName: `spider-mini-drama-${dramaId}-episode-${chapterId}.mp4`,
+      mimetype: "video/mp4",
+      caption: `*SPIDER MINI DOWNLOAD*\n\nEpisode ${chapterId}\n${playerUrl}`,
+    })
+  } else {
+    await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `*SPIDER MINI DRAMABOX*\n\nEpisode ${chapterId}\n${playerUrl}`, mimetype: "video/mp4" })
+  }
   try {
     await this.sock.sendMessage(remoteJid, {
       text: "Episode ready. Choose what next:",
@@ -2252,7 +2264,7 @@ export class BotSession {
   return
       } catch (error) {
         logger.warn({ error, remoteJid, action }, "drama stream failed")
-        return void reply("Drama video timed out. Please try again shortly.")
+        return void reply(this.maintenanceMessage("DramaBox download service"))
       }
     }
     if (!endpoints[action] || (["detail", "category"].includes(action) && !query)) {
@@ -2261,7 +2273,7 @@ export class BotSession {
     try {
       const response = await fetch(endpoints[action], { signal: AbortSignal.timeout(15000) })
       const data = await response.json().catch(() => null) as any
-      if (!response.ok) return void reply("Drama service is temporarily unavailable. Please try again.")
+      if (!response.ok) return void reply(this.maintenanceMessage("DramaBox search service"))
       const results = data?.results || data?.data?.results || data?.data?.list || data?.data?.dramas || (Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [])
       if (["search", "home", "category"].includes(action)) {
         const list = Array.isArray(results) ? results.slice(0, 3) : []
