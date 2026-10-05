@@ -1582,89 +1582,27 @@ export class BotSession {
   }
 
   private async cmdAlive(remoteJid: string, _msg: WAMessage): Promise<void> {
-    // Send random banner image
-    const bannerUrl = getRandomAliveBanner()
-    const bannerImg = await this.fetchImage(bannerUrl)
-    if (bannerImg && this.sock) {
-      try {
-        await this.sock.sendMessage(remoteJid, {
-          image: bannerImg,
-          caption: "✅ *BOT IS ALIVE AND RUNNING*",
-        })
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send alive banner")
-      }
-    }
-
+    if (!this.sock) return
     const uptime = this.formatUptime(Date.now() - this.startTime)
     const caption =
-      `✅ *${this.settings.botName.toUpperCase()} IS ALIVE*\n` +
+      `*${this.settings.botName.toUpperCase()} IS ALIVE*\n` +
       `_Up and running smoothly._\n\n` +
-      `⏱️ Uptime: *${uptime}*\n` +
-      `📶 Status: *Connected*\n` +
-      `🤖 AI & Tools: *${this.settings.aiEnabled ? "ON" : "OFF"}*`
-    
+      `Uptime: *${uptime}*\n` +
+      `Status: *Connected*\n` +
+      `AI & tools: *${this.settings.aiEnabled ? "ON" : "OFF"}*`
     await this.sendBranded(remoteJid, caption, "system")
-
-    // Send a random quote
-    try {
-      const quoteRes = await fetch("https://api.omegatech.app/api/random/quotes", { signal: AbortSignal.timeout(5000) })
-      if (quoteRes.ok) {
-        const quoteData = (await quoteRes.json()) as any
-        if (quoteData?.result) {
-          const quote = quoteData.result.quote || quoteData.result.text || ""
-          const author = quoteData.result.author || quoteData.result.by || "Unknown"
-          const quoteMsg = `\n✨ *Daily Quote:*\n"${quote}"\n— ${author}`
-          await this.sock!.sendMessage(remoteJid, { text: quoteMsg })
-        }
-      }
-    } catch (err) {
-      console.log("[v0] Failed to fetch quote for alive:", err)
-    }
+    await this.sendResultActions(remoteJid, false)
   }
 
   private async cmdPing(remoteJid: string, msg: WAMessage): Promise<void> {
-    const start = Date.now()
-    await this.sendTyping(remoteJid)
-    const sent = await this.sock!.sendMessage(remoteJid, { text: "🏓 Pinging..." }, { quoted: msg })
-    const latency = Date.now() - start
-    
-    // Send ping banner image
-    const bannerUrl = getRandomPingBanner()
-    const bannerImg = await this.fetchImage(bannerUrl)
-    if (bannerImg && this.sock) {
-      try {
-        await this.sock.sendMessage(remoteJid, {
-          image: bannerImg,
-          caption: `🏓 *PING RESPONSE*\nSpeed: *${latency}ms*`,
-        })
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send ping banner")
-      }
-    }
-    
-    if (sent?.key) {
-      await this.sock!.sendMessage(remoteJid, {
-        text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
-        edit: sent.key,
-      })
-    }
-
-    // Send a random quote
-    try {
-      const quoteRes = await fetch("https://api.omegatech.app/api/random/quotes", { signal: AbortSignal.timeout(5000) })
-      if (quoteRes.ok) {
-        const quoteData = (await quoteRes.json()) as any
-        if (quoteData?.result) {
-          const quote = quoteData.result.quote || quoteData.result.text || ""
-          const author = quoteData.result.author || quoteData.result.by || "Unknown"
-          const quoteMsg = `\n✨ *Random Quote:*\n"${quote}"\n— ${author}`
-          await this.sock!.sendMessage(remoteJid, { text: quoteMsg })
-        }
-      }
-    } catch (err) {
-      console.log("[v0] Failed to fetch quote for ping:", err)
-    }
+    if (!this.sock) return
+    const startedAt = Date.now()
+    const sent = await this.sock.sendMessage(remoteJid, { text: "Pinging..." }, { quoted: msg })
+    const latency = Date.now() - startedAt
+    const text = `*SPIDER MINI PONG*\n\nResponse: *${latency}ms*\nStatus: *Online*`
+    if (sent?.key) await this.sock.sendMessage(remoteJid, { text, edit: sent.key })
+    else await this.sock.sendMessage(remoteJid, { text })
+    await this.sendResultActions(remoteJid, false)
   }
 
   private async cmdPlugin(
