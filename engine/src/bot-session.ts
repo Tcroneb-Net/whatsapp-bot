@@ -553,6 +553,10 @@ export class BotSession {
     return this.fetchImage(bannerUrl(category))
   }
 
+  private maintenanceMessage(feature: string): string {
+    return `*${feature} is temporarily under maintenance.*\n\nPlease try again later. Follow the SPIDER MINI channel for service updates.`
+  }
+
   private async sendResultActions(jid: string, includeAi = true): Promise<void> {
     if (!this.sock) return
     try {
@@ -1386,8 +1390,12 @@ export class BotSession {
         case "gpt":
           await this.cmdAi(args, reply)
           break
-  case "suno":
-  case "music":
+        case "veo":
+        case "video":
+          await this.cmdVeo(args, remoteJid, reply)
+          break
+        case "suno":
+        case "music":
   case "remusic":
   case "rm":
   await this.cmdRemusic(args, remoteJid, reply)
@@ -1746,6 +1754,29 @@ export class BotSession {
     }
   }
 
+  private async cmdVeo(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    const prompt = args.trim()
+    if (!prompt) return void reply("Usage: .veo <video prompt>\nExample: .veo car driving through a neon city")
+    if (!this.sock) return
+    try {
+      await reply("Veo is generating your video. This may take a moment...")
+      const endpoint = `https://api.omegatech.app/api/ai/Ai-video?prompt=${encodeURIComponent(prompt)}`
+      const response = await fetch(endpoint, { signal: AbortSignal.timeout(180000) })
+      const data = await response.json().catch(() => null) as any
+      if (!response.ok || !data?.success || !data?.videoUrl) return void reply(this.maintenanceMessage("Veo video generation"))
+      await this.sock.sendMessage(remoteJid, {
+        video: { url: data.videoUrl },
+        caption: `*SPIDER MINI VEO*\n\nPrompt: ${data.prompt || prompt}\n\nDownload before the link expires.`,
+        mimetype: "video/webm",
+      })
+      if (data.frameUrl || data.thumbUrl) await this.sock.sendMessage(remoteJid, { image: { url: data.frameUrl || data.thumbUrl }, caption: "Veo preview" })
+      await this.sendResultActions(remoteJid, false)
+    } catch (error) {
+      logger.debug({ error }, "veo command failed")
+      await reply(this.maintenanceMessage("Veo video generation"))
+    }
+  }
+
   private async cmdSuno(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     try {
       const prompt = args.trim()
@@ -1789,12 +1820,10 @@ export class BotSession {
 
       // Use the configured Omegatech Suno 3-compatible API endpoint.
       // Keep the provider boundary in one place so it can be replaced safely.
-      const sunoUrl = `https://api.omegatech.app/api/ai/suno3`
+      const sunoUrl = `https://api.omegatech.app/api/ai/sonu3`
       const params = new URLSearchParams({
-        action: "generate",
-        prompt: prompt,
-        title: "AI Generated Track",
-        tags: "AI Music, Generated",
+        action: "full",
+        prompt,
       })
 
       const res = await fetch(`${sunoUrl}?${params.toString()}`, {
@@ -1814,14 +1843,23 @@ export class BotSession {
 
       const data = (await res.json()) as any
 
-      if (!data?.success || !data?.data?.tracks || data.data.tracks.length === 0) {
-        console.log("[v0] Suno v4 response:", JSON.stringify(data).substring(0, 300))
-        return void reply("❌ No music was generated. Please try again.")
+      if (!data?.success || !data?.url) {
+        logger.debug({ data }, "Suno response did not contain audio")
+        return void reply(this.maintenanceMessage("Suno music generation"))
       }
 
-      // Send all generated tracks (stream URLs, don't buffer)
-      for (let i = 0; i < data.data.tracks.length; i++) {
-        const track = data.data.tracks[i]
+      const tracks = [{
+        title: data.title || "Generated track",
+        audioUrl: data.url,
+        imageUrl: data.thumbnail,
+        videoUrl: undefined,
+        lyrics: data.lyrics,
+        modelVersion: "OmegaTech sonu3",
+      }]
+
+      // Send the generated track (the API returns one complete track).
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i]
         const trackNum = i + 1
         const totalTracks = data.data.tracks.length
 
@@ -1869,9 +1907,9 @@ export class BotSession {
       // Send completion message
       await reply(
         `✅ *Music generation complete!*\n\n` +
-          `Generated ${data.data.tracks.length} track(s)\n` +
-          `Model: ${data.data.tracks[0].modelVersion}\n` +
-          `Powered by @Omegatech-01`
+          `Generated ${tracks.length} track(s)\n` +
+          `Model: ${tracks[0].modelVersion}\n` +
+          `_Powered by SPIDER MINI_`
       )
     } catch (err) {
       logger.debug({ err }, "suno command failed")
@@ -2877,7 +2915,7 @@ Powered by WhatsBot - World of Technology Team`
 
       const apiUrls = [
         `https://apiziaul.vercel.app/api/downloader/ytplaymp3?query=${encodeURIComponent(args)}`,
-        `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`,
+        `https://api.omegatech.app/api/downloader/ytplaymp3?query=${encodeURIComponent(args)}`,
       ]
       let data: any = null
       let lastStatus = 0
