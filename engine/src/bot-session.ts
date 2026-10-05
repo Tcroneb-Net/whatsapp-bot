@@ -591,9 +591,10 @@ export class BotSession {
         text: text.slice(0, 4096),
         footer: "Choose an action or use text commands",
         buttons: [
+          { buttonId: "menu_ping", buttonText: { displayText: "Ping" }, type: 1 },
           { buttonId: "menu_play", buttonText: { displayText: "Play song" }, type: 1 },
-          { buttonId: "menu_download", buttonText: { displayText: "Download URL" }, type: 1 },
-          { buttonId: "menu_drama", buttonText: { displayText: "Drama" }, type: 1 },
+          { buttonId: "menu_download", buttonText: { displayText: "Download media" }, type: 1 },
+          { buttonId: "menu_drama", buttonText: { displayText: "DramaBox" }, type: 1 },
         ],
       } as any)
       return true
@@ -1390,10 +1391,6 @@ export class BotSession {
         case "gpt":
           await this.cmdAi(args, reply)
           break
-        case "veo":
-        case "video":
-          await this.cmdVeo(args, remoteJid, reply)
-          break
         case "suno":
         case "music":
   case "remusic":
@@ -1450,7 +1447,7 @@ export class BotSession {
         case "aivideo":
         case "veo":
         case "genvideo":
-          await this.cmdAiVideo(args, remoteJid, reply)
+          await this.cmdVeo(args, remoteJid, reply)
           break
         case "ytdl":
           await this.cmdYouTubeDl(args, remoteJid, reply)
@@ -1461,11 +1458,20 @@ export class BotSession {
           break
         case "tiktok":
         case "tk":
+        case "tt":
         case "ttdl":
         case "tts":
         case "instagram":
+        case "insta":
         case "ig":
         case "igdl":
+        case "snap":
+        case "snapchat":
+        case "scdl":
+        case "facebook":
+        case "fb":
+        case "fbdl":
+        case "fbv":
         case "download":
         case "dl":
         case "get":
@@ -1478,10 +1484,6 @@ export class BotSession {
         case "sc":
         case "soundcloud":
           await this.cmdSoundCloudDownload(args, remoteJid, reply)
-          break
-        case "fbdl":
-        case "fbv":
-          await this.cmdFacebookDownload(args, remoteJid, reply)
           break
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
@@ -1526,10 +1528,6 @@ export class BotSession {
           break
         case "gpoll":
           await this.cmdGroupPoll(msg, args, remoteJid, reply)
-          break
-        case "facebook":
-        case "fb":
-          await this.cmdFacebook(args, reply)
           break
         case "prank":
           await this.cmdPrank(msg, args, remoteJid, reply)
@@ -1602,8 +1600,15 @@ export class BotSession {
     const sent = await this.sock.sendMessage(remoteJid, { text: "Pinging..." }, { quoted: msg })
     const latency = Date.now() - startedAt
     const text = `*SPIDER MINI PONG*\n\nResponse: *${latency}ms*\nStatus: *Online*`
-    if (sent?.key) await this.sock.sendMessage(remoteJid, { text, edit: sent.key })
-    else await this.sock.sendMessage(remoteJid, { text })
+    if (sent?.key) {
+      await this.sock.sendMessage(remoteJid, { text, edit: sent.key })
+    } else {
+      await this.sendBranded(remoteJid, text, "system")
+    }
+    const pingImage = await this.loadBanner("system")
+    if (pingImage) {
+      try { await this.sock.sendMessage(remoteJid, { image: pingImage, caption: text }) } catch (error) { logger.debug({ error }, "ping image unavailable") }
+    }
     await this.sendResultActions(remoteJid, false)
   }
 
@@ -3704,14 +3709,14 @@ Powered by WhatsBot - World of Technology Team`
       const url = args.trim()
       if (!url.startsWith("http")) return void reply("Please provide a valid URL")
 
-      await reply("���� Downloading from social media...")
+      await reply("Downloading your media...\nSupported sources include Facebook, TikTok, Instagram, Snapchat, YouTube, X, and more.")
 
       const apiUrl = `https://apis.davidcyril.name.ng/download/aiov2?url=${encodeURIComponent(url)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(45000) })
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) })
 
       if (!response.ok) {
         console.log("[v0] Download API failed:", response.status)
-        return void reply("❌ Download API error. Please check the URL and try again.")
+        return void reply(this.maintenanceMessage("Social download service"))
       }
 
       const data = (await response.json()) as any
@@ -3747,11 +3752,12 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       // Send the video
-      await this.sock.sendMessage(remoteJid, { video: { url: videoUrl }, caption: `✅ ${title.substring(0, 100)}` })
-      await reply("✅ Download complete!")
+      await this.sock.sendMessage(remoteJid, { video: { url: videoUrl }, caption: `*SPIDER MINI DOWNLOAD*\n\n${title.substring(0, 100)}` })
+      await reply("Download complete.")
+      await this.sendResultActions(remoteJid, false)
     } catch (err) {
       logger.debug({ err }, "social download failed")
-      await reply("❌ Download failed. Please try again.")
+      await reply(this.maintenanceMessage("Social download service"))
     }
   }
 
