@@ -78,11 +78,11 @@ export const hostify = {
   },
 
   async lyrics(q: string): Promise<{ title?: string; lyrics: string }> {
-    const data = await getJson(`/api/search/lyrics?q=${encodeURIComponent(q)}`)
-    const r = data?.result ?? data
+    const data = await getJson(`/api/Search/searchthatsong?action=search&query=${encodeURIComponent(q)}`)
+    const r = data?.data ?? data?.result ?? data
     const lyrics =
-      r?.lyrics || r?.lyric || (typeof r === "string" ? r : "") || data?.lyrics || ""
-    const title = r?.title || data?.title
+      r?.lyrics || r?.lyric || r?.relevantChunk || (typeof r === "string" ? r : "") || data?.lyrics || ""
+    const title = r?.song || r?.title || data?.title
     return { title, lyrics: typeof lyrics === "string" ? lyrics : JSON.stringify(lyrics) }
   },
 

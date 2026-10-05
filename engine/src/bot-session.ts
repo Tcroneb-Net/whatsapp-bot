@@ -1396,9 +1396,11 @@ export class BotSession {
         case "tr":
           await this.cmdTranslate(args, reply)
           break
-        case "lyrics":
-          await this.cmdLyrics(args, remoteJid, reply)
-          break
+  case "lyrics":
+  case "findsong":
+  case "musicfinder":
+  await this.cmdLyrics(args, remoteJid, reply)
+  break
         case "drama":
         case "dramabox":
         case "dramas":
@@ -2486,7 +2488,7 @@ Powered by WhatsBot - World of Technology Team`
       await reply(`🔎 Searching lyrics for "${args}"...`)
 
       const lyricUrls = [
-        `https://omegatech-api.dixonomega.tech/api/tools/lyrics?query=${encodeURIComponent(args)}`,
+        `https://api.omegatech.app/api/Search/searchthatsong?action=search&query=${encodeURIComponent(args)}`,
         `https://api.lyrics.ovh/v1/${encodeURIComponent(args.split(/\s+/)[0])}/${encodeURIComponent(args.split(/\s+/).slice(1).join(" ") || args)}`,
       ]
       let data: any = null
@@ -2495,7 +2497,7 @@ Powered by WhatsBot - World of Technology Team`
           const response = await fetch(lyricUrl, { signal: AbortSignal.timeout(15000) })
           if (!response.ok) continue
           const candidate = (await response.json()) as any
-          if (candidate?.lyrics || candidate?.result?.lyrics || candidate?.data?.lyrics) {
+          if (candidate?.lyrics || candidate?.result?.lyrics || candidate?.data?.lyrics || candidate?.data?.relevantChunk || candidate?.data?.song) {
             data = candidate
             break
           }
@@ -2527,6 +2529,11 @@ Powered by WhatsBot - World of Technology Team`
         title = data.data.title || data.data.name || args
         artist = data.data.artist || data.data.author || "Unknown Artist"
         lineCount = data.data.lineCount || data.data.lines || (lyrics ? lyrics.split("\n").length : 0)
+      } else if (data?.data?.relevantChunk || data?.data?.song) {
+        lyrics = data.data.relevantChunk || `Music match found: ${data.data.song}`
+        title = data.data.song || args
+        artist = data.data.artist || "Unknown Artist"
+        lineCount = (lyrics || "").split("\n").length
       }
 
       if (!lyrics || lyrics.trim().length === 0) {
