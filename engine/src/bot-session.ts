@@ -553,6 +553,10 @@ export class BotSession {
     return this.fetchImage(bannerUrl(category))
   }
 
+  private maintenanceMessage(feature: string): string {
+    return `*${feature} is temporarily under maintenance.*\n\nPlease try again later. Follow the SPIDER MINI channel for service updates.`
+  }
+
   private async sendResultActions(jid: string, includeAi = true): Promise<void> {
     if (!this.sock) return
     try {
@@ -587,9 +591,10 @@ export class BotSession {
         text: text.slice(0, 4096),
         footer: "Choose an action or use text commands",
         buttons: [
+          { buttonId: "menu_ping", buttonText: { displayText: "Ping" }, type: 1 },
           { buttonId: "menu_play", buttonText: { displayText: "Play song" }, type: 1 },
-          { buttonId: "menu_download", buttonText: { displayText: "Download URL" }, type: 1 },
-          { buttonId: "menu_drama", buttonText: { displayText: "Drama" }, type: 1 },
+          { buttonId: "menu_download", buttonText: { displayText: "Download media" }, type: 1 },
+          { buttonId: "menu_drama", buttonText: { displayText: "DramaBox" }, type: 1 },
         ],
       } as any)
       return true
@@ -1386,8 +1391,8 @@ export class BotSession {
         case "gpt":
           await this.cmdAi(args, reply)
           break
-  case "suno":
-  case "music":
+        case "suno":
+        case "music":
   case "remusic":
   case "rm":
   await this.cmdRemusic(args, remoteJid, reply)
@@ -1396,15 +1401,19 @@ export class BotSession {
         case "tr":
           await this.cmdTranslate(args, reply)
           break
-        case "lyrics":
-          await this.cmdLyrics(args, remoteJid, reply)
-          break
-        case "drama":
-        case "dramabox":
-        case "dramas":
-        case "dramadl":
-          await this.cmdDrama(args, remoteJid, reply)
-          break
+  case "lyrics":
+  case "findsong":
+  case "musicfinder":
+  await this.cmdLyrics(args, remoteJid, reply)
+  break
+  case "drama":
+  case "dramabox":
+  case "dramas":
+  await this.cmdDrama(args, remoteJid, reply)
+  break
+  case "dramadl":
+  await this.cmdDrama(`download ${args}`, remoteJid, reply)
+  break
         case "yts":
         case "ytsearch":
           await this.cmdYouTubeSearch(args, reply)
@@ -1438,7 +1447,7 @@ export class BotSession {
         case "aivideo":
         case "veo":
         case "genvideo":
-          await this.cmdAiVideo(args, remoteJid, reply)
+          await this.cmdVeo(args, remoteJid, reply)
           break
         case "ytdl":
           await this.cmdYouTubeDl(args, remoteJid, reply)
@@ -1449,11 +1458,20 @@ export class BotSession {
           break
         case "tiktok":
         case "tk":
+        case "tt":
         case "ttdl":
         case "tts":
         case "instagram":
+        case "insta":
         case "ig":
         case "igdl":
+        case "snap":
+        case "snapchat":
+        case "scdl":
+        case "facebook":
+        case "fb":
+        case "fbdl":
+        case "fbv":
         case "download":
         case "dl":
         case "get":
@@ -1466,10 +1484,6 @@ export class BotSession {
         case "sc":
         case "soundcloud":
           await this.cmdSoundCloudDownload(args, remoteJid, reply)
-          break
-        case "fbdl":
-        case "fbv":
-          await this.cmdFacebookDownload(args, remoteJid, reply)
           break
         case "dub":
           await this.cmdDub(args, remoteJid, reply)
@@ -1514,10 +1528,6 @@ export class BotSession {
           break
         case "gpoll":
           await this.cmdGroupPoll(msg, args, remoteJid, reply)
-          break
-        case "facebook":
-        case "fb":
-          await this.cmdFacebook(args, reply)
           break
         case "prank":
           await this.cmdPrank(msg, args, remoteJid, reply)
@@ -1572,89 +1582,34 @@ export class BotSession {
   }
 
   private async cmdAlive(remoteJid: string, _msg: WAMessage): Promise<void> {
-    // Send random banner image
-    const bannerUrl = getRandomAliveBanner()
-    const bannerImg = await this.fetchImage(bannerUrl)
-    if (bannerImg && this.sock) {
-      try {
-        await this.sock.sendMessage(remoteJid, {
-          image: bannerImg,
-          caption: "✅ *BOT IS ALIVE AND RUNNING*",
-        })
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send alive banner")
-      }
-    }
-
+    if (!this.sock) return
     const uptime = this.formatUptime(Date.now() - this.startTime)
     const caption =
-      `✅ *${this.settings.botName.toUpperCase()} IS ALIVE*\n` +
+      `*${this.settings.botName.toUpperCase()} IS ALIVE*\n` +
       `_Up and running smoothly._\n\n` +
-      `⏱️ Uptime: *${uptime}*\n` +
-      `📶 Status: *Connected*\n` +
-      `🤖 AI & Tools: *${this.settings.aiEnabled ? "ON" : "OFF"}*`
-    
+      `Uptime: *${uptime}*\n` +
+      `Status: *Connected*\n` +
+      `AI & tools: *${this.settings.aiEnabled ? "ON" : "OFF"}*`
     await this.sendBranded(remoteJid, caption, "system")
-
-    // Send a random quote
-    try {
-      const quoteRes = await fetch("https://omegatech-api.dixonomega.tech/api/random/quotes", { signal: AbortSignal.timeout(5000) })
-      if (quoteRes.ok) {
-        const quoteData = (await quoteRes.json()) as any
-        if (quoteData?.result) {
-          const quote = quoteData.result.quote || quoteData.result.text || ""
-          const author = quoteData.result.author || quoteData.result.by || "Unknown"
-          const quoteMsg = `\n✨ *Daily Quote:*\n"${quote}"\n— ${author}`
-          await this.sock!.sendMessage(remoteJid, { text: quoteMsg })
-        }
-      }
-    } catch (err) {
-      console.log("[v0] Failed to fetch quote for alive:", err)
-    }
+    await this.sendResultActions(remoteJid, false)
   }
 
   private async cmdPing(remoteJid: string, msg: WAMessage): Promise<void> {
-    const start = Date.now()
-    await this.sendTyping(remoteJid)
-    const sent = await this.sock!.sendMessage(remoteJid, { text: "🏓 Pinging..." }, { quoted: msg })
-    const latency = Date.now() - start
-    
-    // Send ping banner image
-    const bannerUrl = getRandomPingBanner()
-    const bannerImg = await this.fetchImage(bannerUrl)
-    if (bannerImg && this.sock) {
-      try {
-        await this.sock.sendMessage(remoteJid, {
-          image: bannerImg,
-          caption: `🏓 *PING RESPONSE*\nSpeed: *${latency}ms*`,
-        })
-      } catch (imgErr) {
-        logger.debug({ imgErr }, "failed to send ping banner")
-      }
-    }
-    
+    if (!this.sock) return
+    const startedAt = Date.now()
+    const sent = await this.sock.sendMessage(remoteJid, { text: "Pinging..." }, { quoted: msg })
+    const latency = Date.now() - startedAt
+    const text = `*SPIDER MINI PONG*\n\nResponse: *${latency}ms*\nStatus: *Online*`
     if (sent?.key) {
-      await this.sock!.sendMessage(remoteJid, {
-        text: `🏓 *Pong!*\nResponse speed: *${latency}ms*`,
-        edit: sent.key,
-      })
+      await this.sock.sendMessage(remoteJid, { text, edit: sent.key })
+    } else {
+      await this.sendBranded(remoteJid, text, "system")
     }
-
-    // Send a random quote
-    try {
-      const quoteRes = await fetch("https://omegatech-api.dixonomega.tech/api/random/quotes", { signal: AbortSignal.timeout(5000) })
-      if (quoteRes.ok) {
-        const quoteData = (await quoteRes.json()) as any
-        if (quoteData?.result) {
-          const quote = quoteData.result.quote || quoteData.result.text || ""
-          const author = quoteData.result.author || quoteData.result.by || "Unknown"
-          const quoteMsg = `\n✨ *Random Quote:*\n"${quote}"\n— ${author}`
-          await this.sock!.sendMessage(remoteJid, { text: quoteMsg })
-        }
-      }
-    } catch (err) {
-      console.log("[v0] Failed to fetch quote for ping:", err)
+    const pingImage = await this.loadBanner("system")
+    if (pingImage) {
+      try { await this.sock.sendMessage(remoteJid, { image: pingImage, caption: text }) } catch (error) { logger.debug({ error }, "ping image unavailable") }
     }
+    await this.sendResultActions(remoteJid, false)
   }
 
   private async cmdPlugin(
@@ -1744,6 +1699,29 @@ export class BotSession {
     }
   }
 
+  private async cmdVeo(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
+    const prompt = args.trim()
+    if (!prompt) return void reply("Usage: .veo <video prompt>\nExample: .veo car driving through a neon city")
+    if (!this.sock) return
+    try {
+      await reply("Veo is generating your video. This may take a moment...")
+      const endpoint = `https://api.omegatech.app/api/ai/Ai-video?prompt=${encodeURIComponent(prompt)}`
+      const response = await fetch(endpoint, { signal: AbortSignal.timeout(180000) })
+      const data = await response.json().catch(() => null) as any
+      if (!response.ok || !data?.success || !data?.videoUrl) return void reply(this.maintenanceMessage("Veo video generation"))
+      await this.sock.sendMessage(remoteJid, {
+        video: { url: data.videoUrl },
+        caption: `*SPIDER MINI VEO*\n\nPrompt: ${data.prompt || prompt}\n\nDownload before the link expires.`,
+        mimetype: "video/webm",
+      })
+      if (data.frameUrl || data.thumbUrl) await this.sock.sendMessage(remoteJid, { image: { url: data.frameUrl || data.thumbUrl }, caption: "Veo preview" })
+      await this.sendResultActions(remoteJid, false)
+    } catch (error) {
+      logger.debug({ error }, "veo command failed")
+      await reply(this.maintenanceMessage("Veo video generation"))
+    }
+  }
+
   private async cmdSuno(args: string, remoteJid: string, reply: (b: string) => Promise<unknown>): Promise<void> {
     try {
       const prompt = args.trim()
@@ -1787,12 +1765,10 @@ export class BotSession {
 
       // Use the configured Omegatech Suno 3-compatible API endpoint.
       // Keep the provider boundary in one place so it can be replaced safely.
-      const sunoUrl = `https://api.omegatech.app/api/ai/suno3`
+      const sunoUrl = `https://api.omegatech.app/api/ai/sonu3`
       const params = new URLSearchParams({
-        action: "generate",
-        prompt: prompt,
-        title: "AI Generated Track",
-        tags: "AI Music, Generated",
+        action: "full",
+        prompt,
       })
 
       const res = await fetch(`${sunoUrl}?${params.toString()}`, {
@@ -1812,14 +1788,23 @@ export class BotSession {
 
       const data = (await res.json()) as any
 
-      if (!data?.success || !data?.data?.tracks || data.data.tracks.length === 0) {
-        console.log("[v0] Suno v4 response:", JSON.stringify(data).substring(0, 300))
-        return void reply("❌ No music was generated. Please try again.")
+      if (!data?.success || !data?.url) {
+        logger.debug({ data }, "Suno response did not contain audio")
+        return void reply(this.maintenanceMessage("Suno music generation"))
       }
 
-      // Send all generated tracks (stream URLs, don't buffer)
-      for (let i = 0; i < data.data.tracks.length; i++) {
-        const track = data.data.tracks[i]
+      const tracks = [{
+        title: data.title || "Generated track",
+        audioUrl: data.url,
+        imageUrl: data.thumbnail,
+        videoUrl: undefined,
+        lyrics: data.lyrics,
+        modelVersion: "OmegaTech sonu3",
+      }]
+
+      // Send the generated track (the API returns one complete track).
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i]
         const trackNum = i + 1
         const totalTracks = data.data.tracks.length
 
@@ -1867,9 +1852,9 @@ export class BotSession {
       // Send completion message
       await reply(
         `✅ *Music generation complete!*\n\n` +
-          `Generated ${data.data.tracks.length} track(s)\n` +
-          `Model: ${data.data.tracks[0].modelVersion}\n` +
-          `Powered by @Omegatech-01`
+          `Generated ${tracks.length} track(s)\n` +
+          `Model: ${tracks[0].modelVersion}\n` +
+          `_Powered by SPIDER MINI_`
       )
     } catch (err) {
       logger.debug({ err }, "suno command failed")
@@ -2182,7 +2167,7 @@ export class BotSession {
       const blob = new Blob([fileBuffer], { type: "application/octet-stream" })
       formData.append("files", blob, fileName)
 
-      const response = await fetch("https://omegatech-api.dixonomega.tech/api/tools/Top4top-uploader", {
+      const response = await fetch("https://api.omegatech.app/api/tools/Top4top-uploader", {
         method: "POST",
         body: formData,
         signal: AbortSignal.timeout(60000),
@@ -2258,9 +2243,19 @@ export class BotSession {
       try {
         const response = await fetch(`${base}/stream?id=${encodeURIComponent(dramaId)}&chapter=${encodeURIComponent(chapterId)}`, { signal: AbortSignal.timeout(20000) })
         const data = await response.json().catch(() => null) as any
-        const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.url || data?.videoUrl
-        if (!response.ok || !streamUrl) return void reply("That episode is not available right now.")
-  await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `DramaBox episode\nhttps://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`, mimetype: "video/mp4" })
+        const streamUrl = data?.data?.url || data?.data?.videoUrl || data?.data?.video_url || data?.url || data?.videoUrl || data?.video_url
+        if (!response.ok || !streamUrl) return void reply(this.maintenanceMessage("DramaBox download service"))
+  const playerUrl = `https://zimbox.top.co.zw/?drama=${encodeURIComponent(dramaId)}&episode=${encodeURIComponent(chapterId)}`
+  if (action === "download") {
+    await this.sock.sendMessage(remoteJid, {
+      document: { url: streamUrl },
+      fileName: `spider-mini-drama-${dramaId}-episode-${chapterId}.mp4`,
+      mimetype: "video/mp4",
+      caption: `*SPIDER MINI DOWNLOAD*\n\nEpisode ${chapterId}\n${playerUrl}`,
+    })
+  } else {
+    await this.sock.sendMessage(remoteJid, { video: { url: streamUrl }, caption: `*SPIDER MINI DRAMABOX*\n\nEpisode ${chapterId}\n${playerUrl}`, mimetype: "video/mp4" })
+  }
   try {
     await this.sock.sendMessage(remoteJid, {
       text: "Episode ready. Choose what next:",
@@ -2274,7 +2269,7 @@ export class BotSession {
   return
       } catch (error) {
         logger.warn({ error, remoteJid, action }, "drama stream failed")
-        return void reply("Drama video timed out. Please try again shortly.")
+        return void reply(this.maintenanceMessage("DramaBox download service"))
       }
     }
     if (!endpoints[action] || (["detail", "category"].includes(action) && !query)) {
@@ -2283,7 +2278,7 @@ export class BotSession {
     try {
       const response = await fetch(endpoints[action], { signal: AbortSignal.timeout(15000) })
       const data = await response.json().catch(() => null) as any
-      if (!response.ok) return void reply("Drama service is temporarily unavailable. Please try again.")
+      if (!response.ok) return void reply(this.maintenanceMessage("DramaBox search service"))
       const results = data?.results || data?.data?.results || data?.data?.list || data?.data?.dramas || (Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [])
       if (["search", "home", "category"].includes(action)) {
         const list = Array.isArray(results) ? results.slice(0, 3) : []
@@ -2413,7 +2408,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Try primary API
       try {
-        const apiUrl = `https://omegatech-api.dixonomega.tech/api/random/quotes`
+        const apiUrl = `https://api.omegatech.app/api/random/quotes`
         const response = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) })
 
         if (response.ok) {
@@ -2486,7 +2481,7 @@ Powered by WhatsBot - World of Technology Team`
       await reply(`🔎 Searching lyrics for "${args}"...`)
 
       const lyricUrls = [
-        `https://omegatech-api.dixonomega.tech/api/tools/lyrics?query=${encodeURIComponent(args)}`,
+        `https://api.omegatech.app/api/Search/searchthatsong?action=search&query=${encodeURIComponent(args)}`,
         `https://api.lyrics.ovh/v1/${encodeURIComponent(args.split(/\s+/)[0])}/${encodeURIComponent(args.split(/\s+/).slice(1).join(" ") || args)}`,
       ]
       let data: any = null
@@ -2495,7 +2490,7 @@ Powered by WhatsBot - World of Technology Team`
           const response = await fetch(lyricUrl, { signal: AbortSignal.timeout(15000) })
           if (!response.ok) continue
           const candidate = (await response.json()) as any
-          if (candidate?.lyrics || candidate?.result?.lyrics || candidate?.data?.lyrics) {
+          if (candidate?.lyrics || candidate?.result?.lyrics || candidate?.data?.lyrics || candidate?.data?.relevantChunk || candidate?.data?.song) {
             data = candidate
             break
           }
@@ -2527,6 +2522,11 @@ Powered by WhatsBot - World of Technology Team`
         title = data.data.title || data.data.name || args
         artist = data.data.artist || data.data.author || "Unknown Artist"
         lineCount = data.data.lineCount || data.data.lines || (lyrics ? lyrics.split("\n").length : 0)
+      } else if (data?.data?.relevantChunk || data?.data?.song) {
+        lyrics = data.data.relevantChunk || `Music match found: ${data.data.song}`
+        title = data.data.song || args
+        artist = data.data.artist || "Unknown Artist"
+        lineCount = (lyrics || "").split("\n").length
       }
 
       if (!lyrics || lyrics.trim().length === 0) {
@@ -2766,7 +2766,7 @@ Powered by WhatsBot - World of Technology Team`
         const mediaBuffer = Buffer.from(encoded, "base64")
         const form = new FormData()
         form.append("files", new Blob([mediaBuffer], { type: "image/jpeg" }), "edit-image.jpg")
-        const upload = await fetch("https://omegatech-api.dixonomega.tech/api/tools/Top4top-uploader", {
+        const upload = await fetch("https://api.omegatech.app/api/tools/Top4top-uploader", {
           method: "POST",
           body: form,
           signal: AbortSignal.timeout(60000),
@@ -2783,7 +2783,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Step 1: Submit the image URL and prompt to start processing
       const submitUrl =
-        `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
+        `https://api.omegatech.app/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
 
       let submitRes: Response
       try {
@@ -2815,7 +2815,7 @@ Powered by WhatsBot - World of Technology Team`
 
       while (attempts < maxAttempts) {
         attempts++
-        const resultUrl = `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2-result?task_id=${taskId}&fp=${fp}`
+        const resultUrl = `https://api.omegatech.app/api/ai/nano-banana2-result?task_id=${taskId}&fp=${fp}`
         const resultRes = await fetch(resultUrl, { signal: AbortSignal.timeout(10000) })
 
         if (resultRes.ok) {
@@ -2870,7 +2870,7 @@ Powered by WhatsBot - World of Technology Team`
 
       const apiUrls = [
         `https://apiziaul.vercel.app/api/downloader/ytplaymp3?query=${encodeURIComponent(args)}`,
-        `https://api.nexray.eu.cc/downloader/ytplay?q=${encodeURIComponent(args)}`,
+        `https://api.omegatech.app/api/downloader/ytplaymp3?query=${encodeURIComponent(args)}`,
       ]
       let data: any = null
       let lastStatus = 0
@@ -3709,14 +3709,14 @@ Powered by WhatsBot - World of Technology Team`
       const url = args.trim()
       if (!url.startsWith("http")) return void reply("Please provide a valid URL")
 
-      await reply("���� Downloading from social media...")
+      await reply("Downloading your media...\nSupported sources include Facebook, TikTok, Instagram, Snapchat, YouTube, X, and more.")
 
       const apiUrl = `https://apis.davidcyril.name.ng/download/aiov2?url=${encodeURIComponent(url)}`
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(45000) })
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) })
 
       if (!response.ok) {
         console.log("[v0] Download API failed:", response.status)
-        return void reply("❌ Download API error. Please check the URL and try again.")
+        return void reply(this.maintenanceMessage("Social download service"))
       }
 
       const data = (await response.json()) as any
@@ -3752,11 +3752,12 @@ Powered by WhatsBot - World of Technology Team`
       }
 
       // Send the video
-      await this.sock.sendMessage(remoteJid, { video: { url: videoUrl }, caption: `✅ ${title.substring(0, 100)}` })
-      await reply("✅ Download complete!")
+      await this.sock.sendMessage(remoteJid, { video: { url: videoUrl }, caption: `*SPIDER MINI DOWNLOAD*\n\n${title.substring(0, 100)}` })
+      await reply("Download complete.")
+      await this.sendResultActions(remoteJid, false)
     } catch (err) {
       logger.debug({ err }, "social download failed")
-      await reply("❌ Download failed. Please try again.")
+      await reply(this.maintenanceMessage("Social download service"))
     }
   }
 
@@ -3891,7 +3892,7 @@ Powered by WhatsBot - World of Technology Team`
 
       await reply("🎬 Generating your AI video...\n⏳ This can take a minute or two...")
 
-      const apiUrl = `https://omegatech-api.dixonomega.tech/api/ai/veo3?prompt=${encodeURIComponent(prompt)}`
+      const apiUrl = `https://api.omegatech.app/api/ai/veo3?prompt=${encodeURIComponent(prompt)}`
 
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 180000)

@@ -72,7 +72,7 @@ export const config = {
   teamName: process.env.TEAM_NAME || "World of Technology Team",
   sponsor: process.env.SPONSOR || "Hostify Zw Company",
   // Base URL for the Hostify API powering AI / search / download commands.
-  hostifyApi: process.env.HOSTIFY_API || "https://api.hostify.co.zw",
+  hostifyApi: process.env.HOSTIFY_API || "https://api.omegatech.app",
   // Public base URL where the bot images are hosted (your deployed dashboard,
   // e.g. https://your-app.vercel.app). Used to attach banners to messages.
   assetBase: (process.env.ASSET_BASE_URL || "").replace(/\/$/, ""),
