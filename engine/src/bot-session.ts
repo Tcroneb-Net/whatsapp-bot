@@ -1600,7 +1600,7 @@ export class BotSession {
 
     // Send a random quote
     try {
-      const quoteRes = await fetch("https://omegatech-api.dixonomega.tech/api/random/quotes", { signal: AbortSignal.timeout(5000) })
+      const quoteRes = await fetch("https://api.omegatech.app/api/random/quotes", { signal: AbortSignal.timeout(5000) })
       if (quoteRes.ok) {
         const quoteData = (await quoteRes.json()) as any
         if (quoteData?.result) {
@@ -1644,7 +1644,7 @@ export class BotSession {
 
     // Send a random quote
     try {
-      const quoteRes = await fetch("https://omegatech-api.dixonomega.tech/api/random/quotes", { signal: AbortSignal.timeout(5000) })
+      const quoteRes = await fetch("https://api.omegatech.app/api/random/quotes", { signal: AbortSignal.timeout(5000) })
       if (quoteRes.ok) {
         const quoteData = (await quoteRes.json()) as any
         if (quoteData?.result) {
@@ -2184,7 +2184,7 @@ export class BotSession {
       const blob = new Blob([fileBuffer], { type: "application/octet-stream" })
       formData.append("files", blob, fileName)
 
-      const response = await fetch("https://omegatech-api.dixonomega.tech/api/tools/Top4top-uploader", {
+      const response = await fetch("https://api.omegatech.app/api/tools/Top4top-uploader", {
         method: "POST",
         body: formData,
         signal: AbortSignal.timeout(60000),
@@ -2415,7 +2415,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Try primary API
       try {
-        const apiUrl = `https://omegatech-api.dixonomega.tech/api/random/quotes`
+        const apiUrl = `https://api.omegatech.app/api/random/quotes`
         const response = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) })
 
         if (response.ok) {
@@ -2773,7 +2773,7 @@ Powered by WhatsBot - World of Technology Team`
         const mediaBuffer = Buffer.from(encoded, "base64")
         const form = new FormData()
         form.append("files", new Blob([mediaBuffer], { type: "image/jpeg" }), "edit-image.jpg")
-        const upload = await fetch("https://omegatech-api.dixonomega.tech/api/tools/Top4top-uploader", {
+        const upload = await fetch("https://api.omegatech.app/api/tools/Top4top-uploader", {
           method: "POST",
           body: form,
           signal: AbortSignal.timeout(60000),
@@ -2790,7 +2790,7 @@ Powered by WhatsBot - World of Technology Team`
 
       // Step 1: Submit the image URL and prompt to start processing
       const submitUrl =
-        `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
+        `https://api.omegatech.app/api/ai/nano-banana2?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`
 
       let submitRes: Response
       try {
@@ -2822,7 +2822,7 @@ Powered by WhatsBot - World of Technology Team`
 
       while (attempts < maxAttempts) {
         attempts++
-        const resultUrl = `https://omegatech-api.dixonomega.tech/api/ai/nano-banana2-result?task_id=${taskId}&fp=${fp}`
+        const resultUrl = `https://api.omegatech.app/api/ai/nano-banana2-result?task_id=${taskId}&fp=${fp}`
         const resultRes = await fetch(resultUrl, { signal: AbortSignal.timeout(10000) })
 
         if (resultRes.ok) {
@@ -3898,7 +3898,7 @@ Powered by WhatsBot - World of Technology Team`
 
       await reply("🎬 Generating your AI video...\n⏳ This can take a minute or two...")
 
-      const apiUrl = `https://omegatech-api.dixonomega.tech/api/ai/veo3?prompt=${encodeURIComponent(prompt)}`
+      const apiUrl = `https://api.omegatech.app/api/ai/veo3?prompt=${encodeURIComponent(prompt)}`
 
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 180000)
