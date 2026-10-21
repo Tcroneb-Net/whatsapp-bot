@@ -14,7 +14,7 @@ This repo has **two deployable parts** that share one MongoDB database:
 
 | Part | Folder | Runtime | Where it runs |
 | --- | --- | --- | --- |
-| **Dashboard** | `/` (Next.js app) | Serverless | Vercel / v0 |
+| **Dashboard** | `/` (Next.js app) | Serverless | Vercel / hostify |
 | **Bot engine** | `/engine` | Long-running Node process | Railway / Render / Fly |
 
 The dashboard **cannot** run the bot itself — WhatsApp needs a persistent
@@ -44,7 +44,7 @@ Browser ──> Next.js dashboard (Vercel) ──> MongoDB Atlas <── Bot eng
 
 ## Environment variables
 
-### Dashboard (set in Vercel / v0 Project Settings → Vars)
+### Dashboard (set in Vercel Project Settings → Vars)
 
 | Var | Description |
 | --- | --- |
@@ -88,4 +88,3 @@ service's public URL into the dashboard's `ENGINE_URL`.
 
 ---
 
-Built with [v0](https://v0.app). [Continue on v0 →](https://v0.app/chat/projects/prj_XTbYlD6eOcqRmGGtNGHGi40FVCBD)
